@@ -19,16 +19,18 @@ object embed {
           layout.viewport,
           layout.metaCsp(basicCsp(config.req)),
           st.headTitle("lishogi.org shogi TV"),
-          layout.pieceSprite(lila.pref.PieceSet.default),
+          if (pov.game.variant.chushogi) layout.chuPieceSprite(config.chuPieceSet)
+          else if (pov.game.variant.kyotoshogi) layout.kyoPieceSprite(config.kyoPieceSet)
+          else layout.pieceSprite(config.pieceSet),
           cssTagWithTheme("tv.embed", config.bg)
         ),
         body(
-          cls := s"base ${config.board}",
-          dataStreamUrl := routes.Tv.feed()
+          cls           := s"base ${config.board}",
+          dataStreamUrl := routes.Tv.feed
         )(
           div(id := "featured-game", cls := "embedded", title := "lishogi.org TV")(
-            gameFenNoCtx(pov, tv = true, blank = true),
-            views.html.game.bits.vstext(pov)(none)
+            gameSfenNoCtx(pov, tv = true, blank = true),
+            views.html.game.bits.vstext(pov)(config.lang)
           ),
           jQueryTag,
           jsAt("javascripts/vendor/shogiground.min.js", false),

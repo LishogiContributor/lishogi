@@ -8,6 +8,11 @@ import lila.rating.{ Glicko, Perf, PerfType }
 
 case class Perfs(
     standard: Perf,
+    minishogi: Perf,
+    chushogi: Perf,
+    annanshogi: Perf,
+    kyotoshogi: Perf,
+    checkshogi: Perf,
     ultraBullet: Perf,
     bullet: Perf,
     blitz: Perf,
@@ -15,12 +20,18 @@ case class Perfs(
     classical: Perf,
     correspondence: Perf,
     puzzle: Perf,
-    storm: Perf.Storm
+    storm: Perf.Storm,
+    aiLevels: Perf.AiLevels
 ) {
 
   def perfs =
     List(
       "standard"       -> standard,
+      "minishogi"      -> minishogi,
+      "chushogi"       -> chushogi,
+      "annanshogi"     -> annanshogi,
+      "kyotoshogi"     -> kyotoshogi,
+      "checkshogi"     -> checkshogi,
       "ultraBullet"    -> ultraBullet,
       "bullet"         -> bullet,
       "blitz"          -> blitz,
@@ -88,6 +99,11 @@ case class Perfs(
     }
 
   lazy val perfsMap: Map[String, Perf] = Map(
+    "minishogi"      -> minishogi,
+    "chushogi"       -> chushogi,
+    "annanshogi"     -> annanshogi,
+    "kyotoshogi"     -> kyotoshogi,
+    "checkshogi"     -> checkshogi,
     "ultraBullet"    -> ultraBullet,
     "bullet"         -> bullet,
     "blitz"          -> blitz,
@@ -106,6 +122,11 @@ case class Perfs(
   def apply(perfType: PerfType): Perf =
     perfType match {
       case PerfType.Standard       => standard
+      case PerfType.Minishogi      => minishogi
+      case PerfType.Chushogi       => chushogi
+      case PerfType.Annanshogi     => annanshogi
+      case PerfType.Kyotoshogi     => kyotoshogi
+      case PerfType.Checkshogi     => checkshogi
       case PerfType.UltraBullet    => ultraBullet
       case PerfType.Bullet         => bullet
       case PerfType.Blitz          => blitz
@@ -153,7 +174,7 @@ case object Perfs {
 
   val default = {
     val p = Perf.default
-    Perfs(p, p, p, p, p, p, p, p, Perf.Storm.default)
+    Perfs(p, p, p, p, p, p, p, p, p, p, p, p, p, Perf.Storm.default, Perf.AiLevels.default)
   }
 
   val defaultManaged = {
@@ -172,8 +193,13 @@ case object Perfs {
 
   def variantLens(variant: shogi.variant.Variant): Option[Perfs => Perf] =
     variant match {
-      case shogi.variant.Standard => Some(_.standard) // todo variant
-      case _                      => none
+      case shogi.variant.Standard   => Some(_.standard)
+      case shogi.variant.Minishogi  => Some(_.minishogi)
+      case shogi.variant.Chushogi   => Some(_.chushogi)
+      case shogi.variant.Annanshogi => Some(_.annanshogi)
+      case shogi.variant.Kyotoshogi => Some(_.kyotoshogi)
+      case shogi.variant.Checkshogi => Some(_.checkshogi)
+      case _                        => none
     }
 
   def speedLens(speed: Speed): Perfs => Perf =
@@ -194,6 +220,11 @@ case object Perfs {
       @inline def perf(key: String) = r.getO[Perf](key) getOrElse Perf.default
       Perfs(
         standard = perf("standard"),
+        minishogi = perf("minishogi"),
+        chushogi = perf("chushogi"),
+        annanshogi = perf("annanshogi"),
+        kyotoshogi = perf("kyotoshogi"),
+        checkshogi = perf("checkshogi"),
         ultraBullet = perf("ultraBullet"),
         bullet = perf("bullet"),
         blitz = perf("blitz"),
@@ -201,7 +232,8 @@ case object Perfs {
         classical = perf("classical"),
         correspondence = perf("correspondence"),
         puzzle = perf("puzzle"),
-        storm = r.getO[Perf.Storm]("storm") getOrElse Perf.Storm.default
+        storm = r.getO[Perf.Storm]("storm") getOrElse Perf.Storm.default,
+        aiLevels = r.getO[Perf.AiLevels]("ai") getOrElse Perf.AiLevels.default
       )
     }
 
@@ -210,6 +242,11 @@ case object Perfs {
     def writes(w: BSON.Writer, o: Perfs) =
       reactivemongo.api.bson.BSONDocument(
         "standard"       -> notNew(o.standard),
+        "minishogi"      -> notNew(o.minishogi),
+        "chushogi"       -> notNew(o.chushogi),
+        "annanshogi"     -> notNew(o.annanshogi),
+        "kyotoshogi"     -> notNew(o.kyotoshogi),
+        "checkshogi"     -> notNew(o.checkshogi),
         "ultraBullet"    -> notNew(o.ultraBullet),
         "bullet"         -> notNew(o.bullet),
         "blitz"          -> notNew(o.blitz),
@@ -217,7 +254,8 @@ case object Perfs {
         "classical"      -> notNew(o.classical),
         "correspondence" -> notNew(o.correspondence),
         "puzzle"         -> notNew(o.puzzle),
-        "storm"          -> (o.storm.nonEmpty option o.storm)
+        "storm"          -> (o.storm.nonEmpty option o.storm),
+        "ai"             -> (o.aiLevels.nonEmpty option o.aiLevels)
       )
   }
 
@@ -227,8 +265,13 @@ case object Perfs {
       blitz: List[User.LightPerf],
       rapid: List[User.LightPerf],
       classical: List[User.LightPerf],
-      correspondence: List[User.LightPerf]
+      correspondence: List[User.LightPerf],
+      minishogi: List[User.LightPerf],
+      chushogi: List[User.LightPerf],
+      annanshogi: List[User.LightPerf],
+      kyotoshogi: List[User.LightPerf],
+      checkshogi: List[User.LightPerf]
   )
 
-  val emptyLeaderboards = Leaderboards(Nil, Nil, Nil, Nil, Nil, Nil)
+  val emptyLeaderboards = Leaderboards(Nil, Nil, Nil, Nil, Nil, Nil, Nil, Nil, Nil, Nil, Nil)
 }

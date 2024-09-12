@@ -1,5 +1,7 @@
 package lila.evaluation
 
+import cats.implicits._
+
 import shogi.Color
 import lila.user.User
 import org.joda.time.DateTime
@@ -25,7 +27,7 @@ case class PlayerAssessment(
     tcFactor: Option[Double]
 ) {
 
-  val color = Color(sente)
+  val color = Color.fromSente(sente)
 }
 
 case class PlayerAggregateAssessment(
@@ -56,7 +58,7 @@ case class PlayerAggregateAssessment(
     val bannable: Boolean = false
 
     def sigDif(dif: Int)(a: Option[(Int, Int, Int)], b: Option[(Int, Int, Int)]): Option[Boolean] =
-      (a |@| b) apply { case (a, b) => b._1 - a._1 > dif }
+      (a, b) mapN { (a, b) => b._1 - a._1 > dif }
 
     val difs = List(
       (sfAvgBlurs, sfAvgNoBlurs),

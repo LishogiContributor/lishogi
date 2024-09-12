@@ -1,7 +1,8 @@
 package controllers
 
-import play.api.mvc._
 import play.api.i18n.Lang
+import play.api.mvc._
+import scala.concurrent.duration._
 import scala.util.chaining._
 
 import lila.app._
@@ -12,6 +13,8 @@ import lila.user.{ User => UserModel }
 final class PlayApi(
     env: Env,
     apiC: => Api
+)(implicit
+    mat: akka.stream.Materializer
 ) extends LilaController(env) {
 
   implicit private def autoReqLang(implicit req: RequestHeader) = reqLang(req)
@@ -23,9 +26,9 @@ final class PlayApi(
       WithPovAsBot(id, me) { impl.gameStream(me, _) }
     }
 
-  def botMove(id: String, uci: String, offeringDraw: Option[Boolean]) =
+  def botMove(id: String, usi: String, offeringDraw: Option[Boolean]) =
     Scoped(_.Bot.Play) { _ => me =>
-      WithPovAsBot(id, me) { impl.move(me, _, uci, offeringDraw) }
+      WithPovAsBot(id, me) { impl.move(me, _, usi, offeringDraw) }
     }
 
   def botCommand(cmd: String) =
@@ -53,10 +56,10 @@ final class PlayApi(
       WithPovAsBoard(id, me) { impl.gameStream(me, _) }
     }
 
-  def boardMove(id: String, uci: String, offeringDraw: Option[Boolean]) =
+  def boardMove(id: String, usi: String, offeringDraw: Option[Boolean]) =
     Scoped(_.Board.Play) { _ => me =>
       WithPovAsBoard(id, me) {
-        impl.move(me, _, uci, offeringDraw)
+        impl.move(me, _, usi, offeringDraw)
       }
     }
 
@@ -69,12 +72,10 @@ final class PlayApi(
   private object impl {
 
     def gameStream(me: UserModel, pov: Pov)(implicit lang: Lang) =
-      env.game.gameRepo.withInitialFen(pov.game) map { wf =>
-        apiC.sourceToNdJsonOption(env.bot.gameStateStream(wf, pov.color, me))
-      }
+      apiC.sourceToNdJsonOption(env.bot.gameStateStream(pov.game, pov.color, me)).fuccess
 
-    def move(me: UserModel, pov: Pov, uci: String, offeringDraw: Option[Boolean]) =
-      env.bot.player(pov, me, uci, offeringDraw) pipe toResult
+    def move(me: UserModel, pov: Pov, usi: String, offeringDraw: Option[Boolean]) =
+      env.bot.player(pov, me, usi, offeringDraw) pipe toResult
 
     def command(me: UserModel, cmd: String)(
         as: (String, UserModel) => (Pov => Fu[Result]) => Fu[Result]
@@ -105,6 +106,27 @@ final class PlayApi(
       }
   }
 
+  def boardCommandGet(cmd: String) =
+    ScopedBody(_.Board.Play) { _ => me =>
+      cmd.split('/') match {
+        case Array("game", id, "chat") => WithPovAsBoard(id, me)(getChat)
+        case _                         => notFoundJson("No such command")
+      }
+    }
+
+  def botCommandGet(cmd: String) =
+    ScopedBody(_.Bot.Play) { _ => me =>
+      cmd.split('/') match {
+        case Array("game", id, "chat") => WithPovAsBot(id, me)(getChat)
+        case _                         => notFoundJson("No such command")
+      }
+    }
+
+  private def getChat(pov: Pov) =
+    env.chat.api.userChat.find(lila.chat.Chat.Id(pov.game.id)) map lila.chat.JsonView.boardApi map {
+      JsonOk(_)
+    }
+
   // utils
 
   private def toResult(f: Funit): Fu[Result] = catchClientError(f inject jsonOkResult)
@@ -118,7 +140,7 @@ final class PlayApi(
       if (me.noBot)
         BadRequest(
           jsonError(
-            "This endpoint can only be used with a Bot account. See https://lichess.org/api#operation/botAccountUpgrade"
+            "This endpoint can only be used with a Bot account. See https://lishogi.org/api#operation/botAccountUpgrade"
           )
         ).fuccess
       else if (!lila.game.Game.isBotCompatible(pov.game))
@@ -148,6 +170,17 @@ final class PlayApi(
     Open { implicit ctx =>
       env.user.repo.botsByIds(env.bot.onlineApiUsers.get) map { users =>
         Ok(views.html.user.bots(users))
+      }
+    }
+
+  def botOnlineApi =
+    Action { implicit req =>
+      apiC.jsonStream {
+        env.user.repo
+          .botsByIdsCursor(env.bot.onlineApiUsers.get)
+          .documentSource(getInt("nb", req) | Int.MaxValue)
+          .throttle(20, 1 second)
+          .map { env.user.jsonView(_) }
       }
     }
 }

@@ -27,9 +27,10 @@ object index {
       title = lishogiCoaches.txt(),
       moreCss = cssTag("coach"),
       moreJs = infiniteScrollTag
+      // maybe someday - withHrefLangs = lila.i18n.LangList.All.some
     ) {
       val langSelections = ("all", "All languages") :: lila.i18n.I18nLangPicker
-        .sortFor(LangList.popularNoRegion.filter(l => langCodes(l.code)), ctx.req)
+        .sortFor(LangList.popular.filter(l => langCodes(l.code)), ctx.req)
         .map { l =>
           l.code -> LangList.name(l)
         }
@@ -52,7 +53,7 @@ object index {
                   .map { case (code, name) =>
                     a(
                       href := routes.Coach.search(code, order.key),
-                      cls := (code == lang.fold("all")(_.code)).option("current")
+                      cls  := (code == lang.fold("all")(_.code)).option("current")
                     )(name)
                   }
               ),
@@ -62,7 +63,7 @@ object index {
                 lila.coach.CoachPager.Order.all map { o =>
                   a(
                     href := routes.Coach.search(lang.fold("all")(_.code), o.key),
-                    cls := (order == o).option("current")
+                    cls  := (order == o).option("current")
                   )(
                     o.name
                   )

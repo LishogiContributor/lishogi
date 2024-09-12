@@ -65,8 +65,17 @@ final class StudyRepo(private[study] val coll: AsyncColl)(implicit ec: scala.con
       $doc("ownerId" $ne userId) ++
       $doc(s"members.$userId.role" -> "w")
   private[study] def selectTopic(topic: StudyTopic) = $doc(F.topics -> topic)
+  private[study] def postGameStudy(exists: Boolean) = $doc("postGameStudy" $exists exists)
 
   def countByOwner(ownerId: User.ID) = coll(_.countSel(selectOwnerId(ownerId)))
+
+  def postGameStudyWithOpponent(gameId: lila.game.Game.ID): Fu[Option[Study]] =
+    coll(
+      _.find(
+        $doc("postGameStudy.withOpponent" -> true) ++ $doc("postGameStudy.gameId" -> gameId),
+        projection.some
+      ).one[Study]
+    )
 
   def insert(s: Study): Funit =
     coll {
@@ -125,7 +134,7 @@ final class StudyRepo(private[study] val coll: AsyncColl)(implicit ec: scala.con
 
   def incViews(study: Study) = coll.map(_.incFieldUnchecked($id(study.id), F.views))
 
-  def updateNow(s: Study) =
+  def updateNow(s: Study): Funit =
     coll.map(_.updateFieldUnchecked($id(s.id), "updatedAt", DateTime.now))
 
   def addMember(study: Study, member: StudyMember): Funit =
@@ -183,6 +192,22 @@ final class StudyRepo(private[study] val coll: AsyncColl)(implicit ec: scala.con
         .list(nb)
     }
 
+  private val miniStudyProjection = $doc(
+    "name"      -> true,
+    "ownerId"   -> true,
+    "likes"     -> true,
+    "createdAt" -> true
+  )
+  def hot(nb: Int) =
+    coll {
+      _.find(selectPublic ++ postGameStudy(false), miniStudyProjection.some)
+        .sort($sort desc "rank")
+        .cursor[Study.MiniStudy](readPref)
+        .list(nb) map {
+        _.filter(_.likes.value > 1)
+      }
+    }
+
   def isContributor(studyId: Study.Id, userId: User.ID) =
     coll(_.exists($id(studyId) ++ $doc(s"members.$userId.role" -> "w")))
 
@@ -190,21 +215,21 @@ final class StudyRepo(private[study] val coll: AsyncColl)(implicit ec: scala.con
     coll(_.exists($id(studyId) ++ (s"members.$userId" $exists true)))
 
   def like(studyId: Study.Id, userId: User.ID, v: Boolean): Fu[Study.Likes] =
-    countLikes(studyId).flatMap {
-      case None => fuccess(Study.Likes(0))
-      case Some((prevLikes, createdAt)) =>
-        val likes = Study.Likes(prevLikes.value + (if (v) 1 else -1))
-        coll {
-          _.update.one(
-            $id(studyId),
-            $set(
-              F.likes -> likes,
-              F.rank  -> Study.Rank.compute(likes, createdAt)
-            ) ++ {
-              if (v) $addToSet(F.likers -> userId) else $pull(F.likers -> userId)
-            }
-          ) inject likes
+    coll { c =>
+      c.update.one($id(studyId), if (v) $addToSet(F.likers -> userId) else $pull(F.likers -> userId)) >> {
+        countLikes(studyId).flatMap {
+          case None                     => fuccess(Study.Likes(0))
+          case Some((likes, createdAt)) =>
+            // Multiple updates may race to set denormalized likes and rank,
+            // but values should be approximately correct, match a real like
+            // count (though perhaps not the latest one), and any uncontended
+            // query will set the precisely correct value.
+            c.update.one(
+              $id(studyId),
+              $set(F.likes -> likes, F.rank -> Study.Rank.compute(likes, createdAt))
+            ) inject likes
         }
+      }
     }
 
   def liked(study: Study, user: User): Fu[Boolean] =

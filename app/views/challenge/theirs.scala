@@ -27,9 +27,9 @@ object theirs {
           case Status.Created | Status.Offline =>
             frag(
               h1(
-                if (c.isOpen) "Open Challenge"
+                if (c.isOpen) trans.openChallenge.txt()
                 else
-                  user.fold[Frag]("Anonymous")(u =>
+                  user.fold[Frag](trans.anonymous.txt())(u =>
                     frag(
                       userLink(u),
                       " (",
@@ -38,9 +38,12 @@ object theirs {
                     )
                   )
               ),
-              bits.details(c),
-              c.notableInitialFen.map { fen =>
-                div(cls := "board-preview", views.html.game.bits.miniBoard(fen, color = !c.finalColor))
+              bits.details(c, false),
+              c.initialSfen.map { sfen =>
+                div(
+                  cls := "board-preview",
+                  views.html.game.bits.miniBoard(sfen, color = !c.finalColor, variant = c.variant)
+                )
               },
               if (color.map(Challenge.ColorChoice.apply).has(c.colorChoice))
                 badTag(
@@ -63,8 +66,8 @@ object theirs {
                     p(
                       "You must ",
                       a(
-                        cls := "button",
-                        href := s"${routes.Auth.login()}?referrer=${routes.Round.watcher(c.id, "sente")}"
+                        cls  := "button",
+                        href := s"${routes.Auth.login}?referrer=${routes.Round.watcher(c.id, "sente")}"
                       )(trans.signIn()),
                       " to join it."
                     )
@@ -73,27 +76,27 @@ object theirs {
             )
           case Status.Declined =>
             div(cls := "follow-up")(
-              h1("Challenge declined"),
-              bits.details(c),
-              a(cls := "button button-fat", href := routes.Lobby.home())(trans.newOpponent())
+              h1(trans.challengeDeclined()),
+              bits.details(c, false),
+              a(cls := "button button-fat", href := routes.Lobby.home)(trans.newOpponent())
             )
           case Status.Accepted =>
             div(cls := "follow-up")(
-              h1("Challenge accepted!"),
-              bits.details(c),
+              h1(trans.challengeAccepted()),
+              bits.details(c, false),
               a(
-                id := "challenge-redirect",
+                id   := "challenge-redirect",
                 href := routes.Round.watcher(c.id, "sente"),
-                cls := "button button-fat"
+                cls  := "button button-fat"
               )(
                 trans.joinTheGame()
               )
             )
           case Status.Canceled =>
             div(cls := "follow-up")(
-              h1("Challenge canceled."),
-              bits.details(c),
-              a(cls := "button button-fat", href := routes.Lobby.home())(trans.newOpponent())
+              h1(trans.challengeCanceled()),
+              bits.details(c, false),
+              a(cls := "button button-fat", href := routes.Lobby.home)(trans.newOpponent())
             )
         }
       )

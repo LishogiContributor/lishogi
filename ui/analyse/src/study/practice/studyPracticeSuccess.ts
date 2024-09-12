@@ -1,6 +1,6 @@
 import AnalyseCtrl from '../../ctrl';
-import { Goal } from './interfaces';
 import { Comment } from '../../practice/practiceCtrl';
+import { Goal } from './interfaces';
 
 // returns null if not deep enough to know
 function isDrawish(node: Tree.Node): boolean | null {
@@ -32,7 +32,7 @@ function hasBlundered(comment: Comment | null) {
 // returns null = ongoing, true = win, false = fail
 export default function (root: AnalyseCtrl, goal: Goal, nbMoves: number): boolean | null {
   const node = root.node;
-  if (!node.uci) return null;
+  if (!node.usi) return null;
   const outcome = root.outcome();
   if (outcome && outcome.winner && outcome.winner !== root.bottomColor()) return false;
   if (outcome && outcome.winner && outcome.winner === root.bottomColor()) return true;
@@ -40,7 +40,7 @@ export default function (root: AnalyseCtrl, goal: Goal, nbMoves: number): boolea
   switch (goal.result) {
     case 'drawIn':
     case 'equalIn':
-      if (node.threefold) return true;
+      if (node.fourfold) return true;
       if (isDrawish(node) === false) return false;
       if (nbMoves > goal.moves!) return false;
       if (outcome && !outcome.winner) return true;
@@ -55,8 +55,8 @@ export default function (root: AnalyseCtrl, goal: Goal, nbMoves: number): boolea
       if (mateIn === null) return null;
       if (!mateIn || (mateIn as number) + nbMoves > goal.moves!) return false;
       break;
-    case 'promotion':
-      if (!node.uci[4]) return null;
+    case 'promotion': // todo ?
+      if (!node.usi[4]) return null;
       return isWinning(node, goal.cp!, root.bottomColor());
     case 'mate':
   }

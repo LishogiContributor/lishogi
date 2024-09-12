@@ -8,7 +8,7 @@ import lila.game.{ Game, Player, Pov }
 
 object widgets {
 
-  private val separator = " • "
+  private val separator = " - "
 
   def apply(
       games: Seq[Game],
@@ -19,9 +19,9 @@ object widgets {
       val fromPlayer  = user flatMap g.player
       val firstPlayer = fromPlayer | g.firstPlayer
       st.article(cls := "game-row paginated")(
-        a(cls := "game-row__overlay", href := gameLink(g, firstPlayer.color, ownerLink)),
+        a(cls        := "game-row__overlay", href := gameLink(g, firstPlayer.color, ownerLink)),
         div(cls := "game-row__board")(
-          gameFen(Pov(g, firstPlayer), withLink = false, withTitle = false)
+          gameSfen(Pov(g, firstPlayer), withLink = false, withTitle = false)
         ),
         div(cls := "game-row__infos")(
           div(cls := "header", dataIcon := bits.gameIcon(g))(
@@ -30,31 +30,27 @@ object widgets {
                 if (g.imported)
                   frag(
                     span("IMPORT"),
-                    g.pgnImport.flatMap(_.user).map { user =>
+                    g.notationImport.flatMap(_.user).map { user =>
                       frag(" ", trans.by(userIdLink(user.some, None, false)))
                     },
                     separator,
-                    if (g.variant.exotic) bits.variantLink(g.variant, g.variant.name.toUpperCase)
-                    else g.variant.name.toUpperCase
+                    bits.variantLink(g.variant)
                   )
                 else
                   frag(
                     showClock(g),
                     separator,
-                    g.perfType.fold(shogi.variant.FromPosition.name)(_.trans),
+                    g.perfType.fold("SFEN")(_.trans),
                     separator,
                     if (g.rated) trans.rated.txt() else trans.casual.txt()
                   )
               ),
-              g.pgnImport.flatMap(_.date).fold(momentFromNow(g.createdAt))(frag(_)),
+              g.notationImport.flatMap(_.date).fold(momentFromNow(g.createdAt))(frag(_)),
               g.tournamentId.map { tourId =>
                 frag(separator, tournamentLink(tourId))
               } orElse
                 g.simulId.map { simulId =>
                   frag(separator, views.html.simul.bits.link(simulId))
-                } orElse
-                g.swissId.map { swissId =>
-                  frag(separator, views.html.swiss.bits.link(lila.swiss.Swiss.Id(swissId)))
                 }
             )
           ),
@@ -65,6 +61,7 @@ object widgets {
           ),
           div(cls := "result")(
             if (g.isBeingPlayed) trans.playingRightNow()
+            else if (g.paused) trans.gameAdjourned()
             else {
               if (g.finishedOrAborted)
                 span(cls := g.winner.flatMap(w => fromPlayer.map(p => if (p == w) "win" else "loss")))(
@@ -72,33 +69,25 @@ object widgets {
                   g.winner.map { winner =>
                     frag(
                       ", ",
-                      winner.color.fold(trans.blackIsVictorious(), trans.whiteIsVictorious())
+                      transWithColorName(trans.xIsVictorious, winner.color, g.isHandicap)
                     )
                   }
                 )
-              else g.turnColor.fold(trans.blackPlays(), trans.whitePlays())
+              else transWithColorName(trans.xPlays, g.turnColor, g.isHandicap)
             }
           ),
-          // if (g.turns > 0) {
-          //   val pgnMoves = g.pgnMoves take 20
-          //   div(cls := "opening")(
-          //     (!g.fromPosition ?? g.opening) map { opening =>
-          //       strong(opening.opening.ecoName)
-          //     },
-          //     div(cls := "pgn")(
-          //       pgnMoves.take(6).zipWithIndex map {
-          //         case (w, i) => s"${i + 1}. ${w}"
-          //         case _                 => ""
-          //       } mkString " ",
-          //       g.turns > 6 option s" ... ${1 + (g.turns - 1) / 2} moves "
-          //     )
-          //   )
-          // } else
-          frag(br, br),
+          if (g.playedPlies > 0)
+            div(cls := "moves-count")(
+              span(trans.nbMoves.pluralSame(g.playedPlies))
+            )
+          else frag(br, br),
           g.metadata.analysed option
             div(cls := "metadata text", dataIcon := "")(trans.computerAnalysisAvailable()),
-          g.pgnImport.flatMap(_.user).map { user =>
-            div(cls := "metadata")("PGN import by ", userIdLink(user.some))
+          g.notationImport.flatMap(_.user).map { user =>
+            div(cls := "metadata")(
+              s"${if (g.isKifImport) "KIF" else "CSA"} import by ",
+              userIdLink(user.some)
+            )
           }
         )
       )
@@ -136,11 +125,11 @@ object widgets {
           }
         )
       } getOrElse {
-        player.aiLevel map { level =>
+        player.engineConfig map { ec =>
           frag(
-            span(aiName(level, false)),
+            span(engineName(ec)),
             br,
-            aiRating(level)
+            engineLevel(ec)
           )
         } getOrElse {
           (player.nameSplit.fold[Frag](anonSpan) { case (name, rating) =>

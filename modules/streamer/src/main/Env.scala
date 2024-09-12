@@ -4,7 +4,6 @@ import akka.actor._
 import com.softwaremill.macwire._
 import io.methvin.play.autoconfig._
 import play.api.Configuration
-import scala.concurrent.duration._
 
 import lila.common.config._
 
@@ -13,7 +12,14 @@ private class StreamerConfig(
     @ConfigName("collection.streamer") val streamerColl: CollName,
     @ConfigName("paginator.max_per_page") val paginatorMaxPerPage: MaxPerPage,
     @ConfigName("streaming.keyword") val keyword: Stream.Keyword,
-    @ConfigName("streaming.google.api_key") val googleApiKey: Secret
+    @ConfigName("streaming.google.api_key") val googleApiKey: Secret,
+    @ConfigName("streaming.twitch") val twitchConfig: TwitchConfig
+)
+private class TwitchConfig(
+    @ConfigName("client_id") val clientId: String,
+    val secret: Secret,
+    @ConfigName("game_id") val gameId: String,
+    @ConfigName("game_id2") val gameId2: String
 )
 
 @Module
@@ -33,6 +39,7 @@ final class Env(
     system: ActorSystem
 ) {
 
+  implicit private val twitchLoader  = AutoConfig.loader[TwitchConfig]
   implicit private val keywordLoader = strLoader(Stream.Keyword.apply)
   private val config                 = appConfig.get[StreamerConfig]("streamer")(AutoConfig.loader)
 
@@ -51,13 +58,6 @@ final class Env(
     )
   }
 
-  lazy val twitchCredentialsSetting =
-    settingStore[String](
-      "twitchCredentials",
-      default = "",
-      text = "Twitch API client ID and secret, separated by a space".some
-    )
-
   lazy val homepageMaxSetting =
     settingStore[Int](
       "streamerHomepageMax",
@@ -69,6 +69,8 @@ final class Env(
 
   lazy val pager = wire[StreamerPager]
 
+  private lazy val twitchApi: TwitchApi = wire[TwitchApi]
+
   private val streamingActor = system.actorOf(
     Props(
       new Streaming(
@@ -79,11 +81,7 @@ final class Env(
         keyword = config.keyword,
         alwaysFeatured = alwaysFeaturedSetting.get _,
         googleApiKey = config.googleApiKey,
-        twitchCredentials = () =>
-          twitchCredentialsSetting.get().split(' ') match {
-            case Array(client, secret) => (client, secret)
-            case _                     => ("", "")
-          }
+        twitchApi = twitchApi
       )
     )
   )
@@ -91,7 +89,7 @@ final class Env(
   lazy val liveStreamApi = wire[LiveStreamApi]
 
   lila.common.Bus.subscribeFun("adjustCheater") { case lila.hub.actorApi.mod.MarkCheater(userId, true) =>
-    api demote userId
+    api.demote(userId).unit
   }
 
 }

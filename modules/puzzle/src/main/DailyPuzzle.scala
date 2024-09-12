@@ -18,23 +18,23 @@ final private[puzzle] class DailyPuzzle(
   import BsonHandlers._
 
   private val cache =
-    cacheApi.unit[Option[DailyPuzzle.Html]] {
+    cacheApi.unit[Option[DailyPuzzle.WithHtml]] {
       _.refreshAfterWrite(5 minutes)
         .buildAsyncFuture(_ => find)
     }
 
-  def get: Fu[Option[DailyPuzzle.Html]] = cache.getUnit
+  def get: Fu[Option[DailyPuzzle.WithHtml]] = cache.getUnit
 
-  private def find: Fu[Option[DailyPuzzle.Html]] =
+  private def find: Fu[Option[DailyPuzzle.WithHtml]] =
     (findCurrent orElse findNew) recover { case e: Exception =>
       logger.error("find daily", e)
       none
     } flatMap { _ ?? makeDaily }
 
-  private def makeDaily(puzzle: Puzzle): Fu[Option[DailyPuzzle.Html]] = {
+  private def makeDaily(puzzle: Puzzle): Fu[Option[DailyPuzzle.WithHtml]] = {
     import makeTimeout.short
-    renderer.actor ? DailyPuzzle.Render(puzzle, puzzle.fenAfterInitialMove, puzzle.lastMove) map {
-      case html: String => DailyPuzzle.Html(html, puzzle.color, puzzle.id).some
+    renderer.actor ? DailyPuzzle.Render(puzzle, puzzle.sfenAfterInitialMove, puzzle.lastUsi) map {
+      case html: String => DailyPuzzle.WithHtml(puzzle, html).some
     }
   } recover { case e: Exception =>
     logger.warn("make daily", e)
@@ -89,7 +89,7 @@ final private[puzzle] class DailyPuzzle(
         }
       }
       .flatMap { docOpt =>
-        docOpt.flatMap(PuzzleBSONReader.readOpt) ?? { puzzle =>
+        docOpt.flatMap(PuzzleBSONHandler.readOpt) ?? { puzzle =>
           colls.puzzle {
             _.update.one($id(puzzle.id), $set(F.day -> DateTime.now))
           } inject puzzle.some
@@ -98,9 +98,9 @@ final private[puzzle] class DailyPuzzle(
 }
 
 object DailyPuzzle {
-  type Try = () => Fu[Option[DailyPuzzle.Html]]
+  type Try = () => Fu[Option[DailyPuzzle.WithHtml]]
 
-  case class Html(html: String, color: shogi.Color, id: Puzzle.Id)
+  case class WithHtml(puzzle: Puzzle, html: String)
 
-  case class Render(puzzle: Puzzle, fen: shogi.format.FEN, lastMove: String)
+  case class Render(puzzle: Puzzle, sfen: shogi.format.forsyth.Sfen, lastUsi: String)
 }

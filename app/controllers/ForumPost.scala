@@ -13,8 +13,12 @@ final class ForumPost(env: Env) extends LilaController(env) with ForumController
   def search(text: String, page: Int) =
     OpenBody { implicit ctx =>
       NotForKids {
-        if (text.trim.isEmpty) Redirect(routes.ForumCateg.index()).fuccess
-        else env.forumSearch(text, page, ctx.troll) map { html.forum.search(text, _) }
+        if (text.trim.isEmpty) Redirect(routes.ForumCateg.index).fuccess
+        else
+          for {
+            teamIds <- ctx.userId ?? env.team.cached.teamIdsSet
+            posts   <- env.forumSearch(text, page, ctx.troll)
+          } yield html.forum.search(text, posts, teamIds)
       }
     }
 

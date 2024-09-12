@@ -8,7 +8,6 @@ import play.api.libs.ws.WSClient
 import scala.concurrent.duration._
 
 import lila.common.config._
-import lila.common.LightUser
 import lila.db.dsl.Coll
 
 private class UserConfig(
@@ -42,7 +41,6 @@ final class Env(
   val lightUserApi: LightUserApi = wire[LightUserApi]
   val lightUser                  = lightUserApi.async
   val lightUserSync              = lightUserApi.sync
-  val isBotSync                  = new LightUser.IsBotSync(id => lightUserApi.sync(id).exists(_.isBot))
 
   lazy val botIds = new GetBotIds(() => cached.botIds.get {})
 
@@ -73,19 +71,23 @@ final class Env(
   lazy val forms = wire[DataForm]
 
   lila.common.Bus.subscribeFuns(
+    "disableUser" -> { case lila.hub.actorApi.mod.DisableUser(userId) =>
+      repo.disable(userId, true).unit
+    },
     "adjustCheater" -> { case lila.hub.actorApi.mod.MarkCheater(userId, true) =>
       rankingApi remove userId
-      repo.setRoles(userId, Nil)
+      repo.setRoles(userId, Nil).unit
     },
     "adjustBooster" -> { case lila.hub.actorApi.mod.MarkBooster(userId) =>
-      rankingApi remove userId
+      rankingApi.remove(userId).unit
     },
     "kickFromRankings" -> { case lila.hub.actorApi.mod.KickFromRankings(userId) =>
-      rankingApi remove userId
+      rankingApi.remove(userId).unit
     },
     "gdprErase" -> { case User.GDPRErase(user) =>
       repo erase user
       noteApi erase user
+      ()
     }
   )
 }

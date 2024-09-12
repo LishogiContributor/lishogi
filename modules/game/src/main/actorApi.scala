@@ -13,6 +13,8 @@ case class FinishGame(
   def isVsSelf = sente.isDefined && sente == gote
 }
 
+case class PauseGame(game: Game)
+
 case class InsertGame(game: Game)
 
 case class AbortedBy(pov: Pov)
@@ -23,7 +25,7 @@ private[game] case object NewCaptcha
 
 case class MoveGameEvent(
     game: Game,
-    fen: String,
+    sfen: String,
     move: String
 )
 object MoveGameEvent {

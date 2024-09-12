@@ -1,10 +1,9 @@
-import { h, thunk } from 'snabbdom';
-import { VNode, VNodeData } from 'snabbdom/vnode';
-import { Ctrl, Line } from './interfaces';
-import * as spam from './spam';
+import { VNode, VNodeData, h, thunk } from 'snabbdom';
 import * as enhance from './enhance';
-import { presetView } from './preset';
+import { Ctrl, Line } from './interfaces';
 import { lineAction as modLineAction } from './moderation';
+import { presetView } from './preset';
+import * as spam from './spam';
 import { userLink } from './util';
 import { flag } from './xhr';
 
@@ -30,7 +29,7 @@ export default function (ctrl: Ctrl): Array<VNode | undefined> {
         attrs: {
           role: 'log',
           'aria-live': 'polite',
-          'aria-atomic': false,
+          'aria-atomic': 'false',
         },
         hook: {
           insert(vnode) {
@@ -124,7 +123,7 @@ const setupHooks = (ctrl: Ctrl, chatEl: HTMLInputElement) => {
   window.Mousetrap(chatEl).bind('esc', () => chatEl.blur());
 
   // Ensure clicks remove chat focus.
-  // See ornicar/shogiground#109
+  // See lichess-org/chessground#109
 
   const mouchEvents = ['touchstart', 'mousedown'];
 
@@ -167,17 +166,30 @@ function selectLines(ctrl: Ctrl): Array<Line> {
   return ls;
 }
 
-function updateText(parseMoves: boolean) {
+function updateText(parseMoves: boolean, system: boolean) {
   return (oldVnode: VNode, vnode: VNode) => {
     if ((vnode.data as VNodeData).lishogiChat !== (oldVnode.data as VNodeData).lishogiChat) {
-      (vnode.elm as HTMLElement).innerHTML = enhance.enhance((vnode.data as VNodeData).lishogiChat, parseMoves);
+      const elm = vnode.elm as HTMLElement,
+        fullText = (vnode.data as VNodeData).lishogiChat,
+        parsed = system ? separateTitleAndText(fullText) : ['', fullText];
+
+      if (parsed[0]) elm.setAttribute('title', parsed[0]);
+      elm.innerHTML = enhance.enhance(parsed[1], parseMoves);
     }
   };
 }
 
-function renderText(t: string, parseMoves: boolean) {
-  if (enhance.isMoreThanText(t)) {
-    const hook = updateText(parseMoves);
+function separateTitleAndText(text: string): [string, string] {
+  if (enhance.possibleTitlePattern.test(text)) {
+    const match = /^\[(.*?)\](.*)/.exec(text)!;
+
+    return [match[1], match[2]];
+  } else return ['', text];
+}
+
+function renderText(t: string, parseMoves: boolean, system: boolean) {
+  if (enhance.isMoreThanText(t, system)) {
+    const hook = updateText(parseMoves, system);
     return h('t', {
       lishogiChat: t,
       hook: {
@@ -196,9 +208,10 @@ function report(ctrl: Ctrl, line: HTMLElement) {
 }
 
 function renderLine(ctrl: Ctrl, line: Line) {
-  const textNode = renderText(line.t, ctrl.opts.parseMoves);
+  const system = line.u === 'lishogi',
+    textNode = renderText(line.t, ctrl.opts.parseMoves, system);
 
-  if (line.u === 'lishogi') return h('li.system', textNode);
+  if (system) return h('li.system', textNode);
 
   if (line.c) return h('li', [h('span.color', '[' + line.c + ']'), textNode]);
 

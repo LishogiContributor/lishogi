@@ -1,6 +1,4 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-
+import { VNode, h } from 'snabbdom';
 import { Notification, Renderers } from './interfaces';
 
 // function generic(n: Notification, url: string | undefined, icon: string, content: VNode[]): VNode {
@@ -94,6 +92,14 @@ export const renderers: Renderers = {
       return result + ' vs ' + userFullName(n.content.opponent);
     },
   },
+  pausedGame: {
+    html: n =>
+      generic(n, '/' + n.content.id, 'G', [
+        h('span', [h('strong', 'Do not forget!'), drawTime(n)]),
+        h('span', 'Adjourned game with ' + userFullName(n.content.opponent)),
+      ]),
+    text: n => 'Adjourned game with ' + userFullName(n.content.opponent),
+  },
   planStart: {
     html: n =>
       generic(n, '/patron', '', [
@@ -110,14 +116,6 @@ export const renderers: Renderers = {
       ]),
     text: _ => 'Patron account expired',
   },
-  coachReview: {
-    html: n =>
-      generic(n, '/coach/edit', ':', [
-        h('span', [h('strong', 'New pending review'), drawTime(n)]),
-        h('span', 'Someone reviewed your coach profile.'),
-      ]),
-    text: _ => 'New pending review',
-  },
   ratingRefund: {
     html: n =>
       generic(n, '/player/myself', '', [
@@ -133,14 +131,6 @@ export const renderers: Renderers = {
         h('span', 'Game vs ' + n.content.op),
       ]),
     text: _ => 'Time is almost up!',
-  },
-  irwinDone: {
-    html: n =>
-      generic(n, '/@/' + n.content.user.name + '?mod', '', [
-        h('span', [h('strong', userFullName(n.content.user)), drawTime(n)]),
-        h('span', 'Irwin job complete!'),
-      ]),
-    text: n => n.content.user.name + ': Irwin job complete!',
   },
 };
 

@@ -1,27 +1,20 @@
-import { EditorConfig } from './interfaces';
-import EditorCtrl from './ctrl';
-import view from './view';
-
-import { init } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import klass from 'snabbdom/modules/class';
-import attributes from 'snabbdom/modules/attributes';
-import props from 'snabbdom/modules/props';
-import eventlisteners from 'snabbdom/modules/eventlisteners';
-
-import { menuHover } from 'common/menuHover';
+import menuHover from 'common/menuHover';
 import { Shogiground } from 'shogiground';
+import { VNode, attributesModule, classModule, eventListenersModule, init, propsModule } from 'snabbdom';
+import EditorCtrl from './ctrl';
+import { EditorData } from './interfaces';
+import view from './view/view';
 
-const patch = init([klass, attributes, props, eventlisteners]);
+const patch = init([classModule, attributesModule, propsModule, eventListenersModule]);
 
-export default function LishogiEditor(element: HTMLElement, config: EditorConfig) {
+export default function LishogiEditor(element: HTMLElement, data: EditorData) {
   let vnode: VNode, ctrl: EditorCtrl;
 
   const redraw = () => {
     vnode = patch(vnode, view(ctrl));
   };
-
-  ctrl = new EditorCtrl(config, redraw);
+  data.options = data.options || {};
+  ctrl = new EditorCtrl(data, redraw);
   element.innerHTML = '';
   const inner = document.createElement('div');
   element.appendChild(inner);
@@ -30,7 +23,7 @@ export default function LishogiEditor(element: HTMLElement, config: EditorConfig
   menuHover();
 
   return {
-    getFen: ctrl.getFen.bind(ctrl),
+    getSfen: ctrl.getSfen.bind(ctrl),
     setOrientation: ctrl.setOrientation.bind(ctrl),
   };
 }

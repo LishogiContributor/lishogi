@@ -1,13 +1,9 @@
-import { winningChances } from 'ceval';
-import { Eval } from 'ceval';
+import { Eval, winningChances } from 'ceval';
+import { Prop, prop } from 'common/common';
 import { path as treePath } from 'tree';
-import { detectThreefold } from '../nodeFinder';
-import { tablebaseGuaranteed } from '../explorer/explorerCtrl';
 import AnalyseCtrl from '../ctrl';
 import { Redraw } from '../interfaces';
-import { defined, prop, Prop } from 'common';
-import { makeSan } from 'shogiops/san';
-import { parseLishogiUci } from 'shogiops/compat';
+import { detectFourfold } from '../nodeFinder';
 
 declare type Verdict = 'goodMove' | 'inaccuracy' | 'mistake' | 'blunder';
 
@@ -17,14 +13,13 @@ export interface Comment {
   path: Tree.Path;
   verdict: Verdict;
   best?: {
-    uci: Uci;
-    san: San;
+    usi: Usi;
   };
 }
 
 interface Hinting {
   mode: 'move' | 'piece';
-  uci: Uci;
+  usi: Usi;
 }
 
 export interface PracticeCtrl {
@@ -50,8 +45,7 @@ export interface PracticeCtrl {
 }
 
 export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCtrl {
-  const variant = root.data.game.variant.key,
-    running = prop(true),
+  const running = prop(true),
     comment = prop<Comment | null>(null),
     hovering = prop<any>(null),
     hinting = prop<Hinting | null>(null),
@@ -66,7 +60,7 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
   function commentable(node: Tree.Node, bonus: number = 0): boolean {
     if (node.tbhit || root.outcome(node)) return true;
     const ceval = node.ceval;
-    return ceval ? ceval.depth + bonus >= 15 || (ceval.depth >= 13 && ceval.millis > 3000) : false;
+    return ceval ? ceval.depth + bonus >= 15 || (ceval.depth >= 13 && !ceval.cloud && ceval.millis > 3000) : false;
   }
 
   function playable(node: Tree.Node): boolean {
@@ -87,8 +81,9 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
         : { cp: 0 })
     );
   }
-  function nodeBestUci(node: Tree.Node): Uci | undefined {
-    return (node.tbhit && node.tbhit.best) || (node.ceval && node.ceval.pvs[0].moves[0]);
+  function nodeBestUsi(node: Tree.Node): Usi | undefined {
+    const usi = (node.tbhit && node.tbhit.best) || (node.ceval && node.ceval.pvs[0].moves[0]);
+    return usi;
   }
 
   function makeComment(prev: Tree.Node, node: Tree.Node, path: Tree.Path): Comment {
@@ -98,12 +93,12 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
     if (outcome && outcome.winner) verdict = 'goodMove';
     else {
       const nodeEval: Eval =
-        tbhitToEval(node.tbhit) || (node.threefold || (outcome && !outcome.winner) ? { cp: 0 } : (node.ceval as Eval));
+        tbhitToEval(node.tbhit) || (node.fourfold || (outcome && !outcome.winner) ? { cp: 0 } : (node.ceval as Eval));
       const prevEval: Eval = tbhitToEval(prev.tbhit) || prev.ceval!;
       const shift = -winningChances.povDiff(root.bottomColor(), nodeEval, prevEval);
 
-      best = nodeBestUci(prev)!;
-      if (best === node.uci) best = null;
+      best = nodeBestUsi(prev)!;
+      if (best === node.usi) best = null;
 
       if (!best) verdict = 'goodMove';
       else if (shift < 0.025) verdict = 'goodMove';
@@ -111,7 +106,6 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
       else if (shift < 0.14) verdict = 'mistake';
       else verdict = 'blunder';
     }
-
     return {
       prev,
       node,
@@ -119,11 +113,7 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
       verdict,
       best: best
         ? {
-            uci: best,
-            san: root.position(prev).unwrap(
-              pos => makeSan(pos, parseLishogiUci(best)!),
-              _ => '--'
-            ),
+            usi: best,
           }
         : undefined,
     };
@@ -139,17 +129,16 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
       comment(null);
       return root.redraw();
     }
-    if (tablebaseGuaranteed(variant, node.fen) && !defined(node.tbhit)) return;
     ensureCevalRunning();
     if (isMyTurn()) {
       const h = hinting();
       if (h) {
-        h.uci = nodeBestUci(node) || h.uci;
+        h.usi = nodeBestUsi(node) || h.usi;
         root.setAutoShapes();
       }
     } else {
       comment(null);
-      if (node.san && commentable(node)) {
+      if (node.usi && commentable(node)) {
         const parentNode = root.tree.parentNode(root.path);
         if (commentable(parentNode, +1)) comment(makeComment(parentNode, node, root.path));
         else {
@@ -165,41 +154,26 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
         }
       }
       if (!played() && playable(node)) {
-        root.playUci(nodeBestUci(node)!);
+        root.playUsi(nodeBestUsi(node)!);
         played(true);
       } else root.redraw();
     }
   }
 
-  function checkCevalOrTablebase() {
-    if (tablebaseGuaranteed(variant, root.node.fen))
-      root.explorer.fetchTablebaseHit(root.node.fen).then(
-        hit => {
-          if (hit && root.node.fen === hit.fen) root.node.tbhit = hit;
-          checkCeval();
-        },
-        () => {
-          if (!defined(root.node.tbhit)) root.node.tbhit = null;
-          checkCeval();
-        }
-      );
-    else checkCeval();
-  }
-
   function resume() {
     running(true);
-    checkCevalOrTablebase();
+    checkCeval();
   }
 
-  window.lishogi.requestIdleCallback(checkCevalOrTablebase);
+  window.lishogi.requestIdleCallback(checkCeval);
 
   return {
     onCeval: checkCeval,
     onJump() {
       played(false);
       hinting(null);
-      detectThreefold(root.nodeList, root.node);
-      checkCevalOrTablebase();
+      detectFourfold(root.nodeList, root.node);
+      checkCeval();
     },
     isMyTurn,
     comment,
@@ -228,14 +202,14 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
       const c = comment();
       if (!c) return;
       root.jump(treePath.init(c.path));
-      if (c.best) root.playUci(c.best.uci);
+      if (c.best) root.playUsi(c.best.usi);
     },
     commentShape(enable: boolean) {
       const c = comment();
       if (!enable || !c || !c.best) hovering(null);
       else
         hovering({
-          uci: c.best.uci,
+          usi: c.best.usi,
         });
       root.setAutoShapes();
     },
@@ -246,7 +220,7 @@ export function make(root: AnalyseCtrl, playableDepth: () => number): PracticeCt
       else
         hinting({
           mode: prev ? 'move' : 'piece',
-          uci: best,
+          usi: best,
         });
       root.setAutoShapes();
     },

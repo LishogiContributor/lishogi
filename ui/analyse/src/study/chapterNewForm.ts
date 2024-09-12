@@ -1,17 +1,19 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { defined, prop, Prop } from 'common';
-import { storedProp, StoredProp } from 'common/storage';
-import { bind, bindSubmit, spinner, option, onInsert } from '../util';
-import { variants as xhrVariants, importPgn } from './studyXhr';
-import * as modal from '../modal';
-import { chapter as chapterTour } from './studyTour';
-import { StudyChapterMeta } from './interfaces';
-import { Redraw } from '../interfaces';
+import { standardColorName } from 'common/colorName';
+import { Prop, defined, prop } from 'common/common';
+import * as modal from 'common/modal';
+import { bind, bindSubmit, onInsert } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import { StoredProp, storedProp } from 'common/storage';
+import * as xhr from 'common/xhr';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
-import { toBlackWhite } from 'shogiops/util';
+import { Redraw } from '../interfaces';
+import { option } from '../util';
+import { StudyChapterMeta } from './interfaces';
+import { chapter as chapterTour } from './studyTour';
+import { importNotation, variants as xhrVariants } from './studyXhr';
 
-export const modeChoices = [
+export const modeChoices: [string, I18nKey][] = [
   ['normal', 'normalAnalysis'],
   ['practice', 'practiceWithComputer'],
   ['conceal', 'hideNextMoves'],
@@ -29,7 +31,9 @@ export interface StudyChapterNewFormCtrl {
     initial: Prop<boolean>;
     tab: StoredProp<string>;
     editor: any;
-    editorFen: Prop<Fen | null>;
+    editorSfen: Prop<Sfen | null>;
+    editorVariant: Prop<VariantKey | null>;
+    editorOrientation: Prop<Color | null>;
   };
   open(): void;
   openInitial(): void;
@@ -38,7 +42,6 @@ export interface StudyChapterNewFormCtrl {
   submit(d: any): void;
   chapters: Prop<StudyChapterMeta[]>;
   startTour(): void;
-  multiPgnMax: number;
   redraw: Redraw;
 }
 
@@ -48,15 +51,15 @@ export function ctrl(
   setTab: () => void,
   root: AnalyseCtrl
 ): StudyChapterNewFormCtrl {
-  const multiPgnMax = 20;
-
   const vm = {
     variants: [],
     open: false,
     initial: prop(false),
     tab: storedProp('study.form.tab', 'init'),
     editor: null,
-    editorFen: prop(null),
+    editorSfen: prop(null),
+    editorVariant: prop(null),
+    editorOrientation: prop(null),
   };
 
   function loadVariants() {
@@ -93,8 +96,8 @@ export function ctrl(
       const study = root.study!;
       d.initial = vm.initial();
       d.sticky = study.vm.mode.sticky;
-      if (!d.pgn) send('addChapter', d);
-      else importPgn(study.data.id, d);
+      if (!d.notation) send('addChapter', d);
+      else importNotation(study.data.id, d);
       close();
       setTab();
     },
@@ -104,7 +107,6 @@ export function ctrl(
         vm.tab(tab);
         root.redraw();
       }),
-    multiPgnMax,
     redraw: root.redraw,
   };
 }
@@ -123,20 +125,21 @@ export function view(ctrl: StudyChapterNewFormCtrl): VNode {
       name
     );
   };
-  //const gameOrPgn = activeTab === "game" || activeTab === "pgn";
   const currentChapter = ctrl.root.study!.data.chapter;
+  const notVariantTab = activeTab === 'game' || activeTab === 'notation' || activeTab === 'edit';
+  const notOrientationTab = activeTab === 'edit';
   const mode = currentChapter.practice
     ? 'practice'
     : defined(currentChapter.conceal)
-    ? 'conceal'
-    : currentChapter.gamebook
-    ? 'gamebook'
-    : 'normal';
+      ? 'conceal'
+      : currentChapter.gamebook
+        ? 'gamebook'
+        : 'normal';
   const noarg = trans.noarg;
   let isDefaultName = true;
 
   return modal.modal({
-    class: 'chapter-new',
+    class: 'study__modal.chapter-new',
     onClose() {
       ctrl.close();
       ctrl.redraw();
@@ -156,10 +159,12 @@ export function view(ctrl: StudyChapterNewFormCtrl): VNode {
         {
           hook: bindSubmit(e => {
             const o: any = {
-              fen: fieldValue(e, 'fen') || (ctrl.vm.tab() === 'edit' ? ctrl.vm.editorFen() : null),
+              sfen: fieldValue(e, 'sfen') || (ctrl.vm.tab() === 'edit' ? ctrl.vm.editorSfen() : null),
+              variant: (ctrl.vm.tab() === 'edit' && ctrl.vm.editorVariant()) || fieldValue(e, 'variant'),
+              orientation: (ctrl.vm.tab() === 'edit' && ctrl.vm.editorOrientation()) || fieldValue(e, 'orientation'),
               isDefaultName: isDefaultName,
             };
-            'name game variant pgn orientation mode'.split(' ').forEach(field => {
+            'name game notation mode'.split(' ').forEach(field => {
               o[field] = fieldValue(e, field);
             });
             ctrl.submit(o);
@@ -195,31 +200,36 @@ export function view(ctrl: StudyChapterNewFormCtrl): VNode {
             makeTab('init', noarg('empty'), noarg('startFromInitialPosition')),
             makeTab('edit', noarg('editor'), noarg('startFromCustomPosition')),
             makeTab('game', 'URL', noarg('loadAGameByUrl')),
-            makeTab('fen', 'SFEN', noarg('loadAPositionFromFen')),
-            //makeTab("pgn", "PGN", noarg("loadAGameFromPgn")),
+            makeTab('sfen', 'SFEN', noarg('loadAPositionFromSfen')),
+            makeTab('notation', 'KIF/CSA', 'KIF/CSA'),
           ]),
           activeTab === 'edit'
             ? h(
                 'div.board-editor-wrap',
                 {
                   hook: {
-                    insert: vnode => {
-                      $.when(
+                    insert(vnode) {
+                      Promise.all([
                         window.lishogi.loadScript(
                           'compiled/lishogi.editor' + ($('body').data('dev') ? '' : '.min') + '.js'
                         ),
-                        $.get('/editor.json', {
-                          fen: ctrl.root.node.fen,
-                        })
-                      ).then(function (_, b) {
-                        const data = b[0];
+                        xhr.json(
+                          xhr.url('/editor.json', {
+                            sfen: ctrl.root.node.sfen,
+                          })
+                        ),
+                      ]).then(([_, data]) => {
                         data.embed = true;
                         data.options = {
-                          inlineCastling: true,
-                          onChange: ctrl.vm.editorFen,
+                          orientation: currentChapter.setup.orientation,
+                          onChange: (sfen, variant, orientation) => {
+                            ctrl.vm.editorSfen(sfen);
+                            ctrl.vm.editorVariant(variant);
+                            ctrl.vm.editorOrientation(orientation);
+                          },
                         };
                         ctrl.vm.editor = window['LishogiEditor'](vnode.elm as HTMLElement, data);
-                        ctrl.vm.editorFen(ctrl.vm.editor.getFen());
+                        ctrl.vm.editorSfen(ctrl.vm.editor.getSfen());
                       });
                     },
                     destroy: _ => {
@@ -237,70 +247,101 @@ export function view(ctrl: StudyChapterNewFormCtrl): VNode {
                   {
                     attrs: { for: 'chapter-game' },
                   },
-                  trans('loadAGameFromXOrY', 'lishogi.org')
+                  trans('loadAGameFromX', 'lishogi.org')
                 ),
                 h('textarea#chapter-game.form-control', {
                   attrs: { placeholder: noarg('urlOfTheGame') },
                 }),
               ])
             : null,
-          activeTab === 'fen'
+          activeTab === 'sfen'
             ? h('div.form-group', [
-                h('input#chapter-fen.form-control', {
+                h('input#chapter-sfen.form-control', {
                   attrs: {
-                    value: ctrl.root.node.fen,
-                    placeholder: noarg('loadAPositionFromFen'),
+                    value: ctrl.root.node.sfen,
+                    placeholder: noarg('loadAPositionFromSfen'),
                   },
                 }),
               ])
             : null,
-          activeTab === 'pgn'
+          activeTab === 'notation'
             ? h('div.form-groupabel', [
-                h('textarea#chapter-pgn.form-control', {
+                h('textarea#chapter-notation.form-control', {
                   attrs: {
-                    placeholder: trans.plural('pasteYourPgnTextHereUpToNbGames', ctrl.multiPgnMax),
+                    placeholder: trans.noarg('pasteTheKifCsaStringHere'),
                   },
                 }),
                 window.FileReader
-                  ? h('input#chapter-pgn-file.form-control', {
+                  ? h('input#chapter-notation-file.form-control', {
                       attrs: {
                         type: 'file',
-                        accept: '.pgn',
+                        accept: '.kif, .kifu, .csa',
                       },
                       hook: bind('change', e => {
+                        function readFile(file: File, encoding: string) {
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = function () {
+                            const res = reader.result as string;
+                            if (encoding === 'UTF-8' && res.match(/�/)) {
+                              console.log(
+                                "UTF-8 didn't work, trying shift-jis, if you still have problems with your import, try converting the file to a different encoding"
+                              );
+                              readFile(file, 'shift-jis');
+                            } else {
+                              (document.getElementById('chapter-notation') as HTMLTextAreaElement).value = res;
+                            }
+                          };
+                          reader.readAsText(file, encoding);
+                        }
                         const file = (e.target as HTMLInputElement).files![0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = function () {
-                          (document.getElementById(
-                            'chapter-pgn'
-                          ) as HTMLTextAreaElement).value = reader.result as string;
-                        };
-                        reader.readAsText(file);
+                        readFile(file, 'UTF-8');
                       }),
                     })
                   : null,
               ])
             : null,
-          h('div.form-group', [
-            h(
-              'label.form-label',
-              {
-                attrs: { for: 'chapter-orientation' },
-              },
-              noarg('orientation')
-            ),
-            h(
-              'select#chapter-orientation.form-control',
-              {
-                hook: bind('change', e => {
-                  ctrl.vm.editor && ctrl.vm.editor.setOrientation((e.target as HTMLInputElement).value);
-                }),
-              },
-              ['sente', 'gote'].map(function (color) {
-                return option(color, currentChapter.setup.orientation, noarg(toBlackWhite(color)));
-              })
-            ),
+          h('div.form-split', [
+            h('div.form-group.form-half', [
+              h(
+                'label.form-label',
+                {
+                  attrs: { for: 'chapter-variant' },
+                },
+                noarg('variant')
+              ),
+              h(
+                'select#chapter-variant.form-control',
+                {
+                  attrs: { disabled: notVariantTab },
+                },
+                notVariantTab
+                  ? [h('option', noarg('automatic'))]
+                  : ctrl.vm.variants.map(v =>
+                      option(v.key, currentChapter.setup.variant.key, ctrl.root.trans.noarg(v.key))
+                    )
+              ),
+            ]),
+            h('div.form-group.form-half', [
+              h(
+                'label.form-label',
+                {
+                  attrs: { for: 'chapter-orientation' },
+                },
+                noarg('orientation')
+              ),
+              h(
+                'select#chapter-orientation.form-control',
+                {
+                  attrs: { disabled: notOrientationTab },
+                },
+                notOrientationTab
+                  ? [h('option', noarg('automatic'))]
+                  : ['sente', 'gote'].map(function (color: Color) {
+                      return option(color, currentChapter.setup.orientation, standardColorName(noarg, color));
+                    })
+              ),
+            ]),
           ]),
           h('div.form-group', [
             h(

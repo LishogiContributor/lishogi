@@ -34,7 +34,7 @@ object list {
           h1(myTeams()),
           standardFlash(),
           table(cls := "slist slist-pad")(
-            if (teams.size > 0) tbody(teams.map(bits.teamTr(_)))
+            if (teams.nonEmpty) tbody(teams.map(bits.teamTr(_)))
             else noTeam()
           )
         )
@@ -49,7 +49,7 @@ object list {
           h1(teamsIlead()),
           standardFlash(),
           table(cls := "slist slist-pad")(
-            if (teams.size > 0) tbody(teams.map(bits.teamTr(_)))
+            if (teams.nonEmpty) tbody(teams.map(bits.teamTr(_)))
             else noTeam()
           )
         )
@@ -72,15 +72,15 @@ object list {
       nextPageUrl: Int => String,
       search: String = ""
   )(implicit ctx: Context) =
-    bits.layout(title = "%s - page %d".format(name, teams.currentPage)) {
+    bits.layout(title = s"$name - ${trans.page.txt().toLowerCase} ${teams.currentPage}") {
       main(cls := "team-list page-menu")(
         bits.menu("all".some),
         div(cls := "page-menu__content box")(
           div(cls := "box__top")(
             h1(name),
             div(cls := "box__top__actions")(
-              st.form(cls := "search", action := routes.Team.search())(
-                input(st.name := "text", value := search, placeholder := trans.search.search.txt())
+              st.form(cls     := "search", action := routes.Team.search())(
+                input(st.name := "text", value    := search, placeholder := trans.search.search.txt())
               )
             )
           ),

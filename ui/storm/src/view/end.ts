@@ -1,13 +1,16 @@
 import * as miniBoard from 'common/mini-board';
-import StormCtrl from '../ctrl';
-import { getNow, onInsert } from 'puz/util';
-import { h } from 'snabbdom';
 import { numberSpread } from 'common/number';
-import { VNode } from 'snabbdom/vnode';
+import { onInsert } from 'common/snabbdom';
+import { getNow } from 'puz/util';
+import { toColor } from 'shogiops/util';
+import { VNode, h } from 'snabbdom';
+import StormCtrl from '../ctrl';
 
 const renderEnd = (ctrl: StormCtrl): VNode[] => [...renderSummary(ctrl), renderHistory(ctrl)];
 
-const newHighI18n = {
+const newHighI18n: {
+  [key: string]: I18nKey;
+} = {
   day: 'newDailyHighscore',
   week: 'newWeeklyHighscore',
   month: 'newMonthlyHighscore',
@@ -110,14 +113,13 @@ const renderHistory = (ctrl: StormCtrl): VNode => {
               key: round.puzzle.id,
             },
             [
-              h('a.storm--end__history__round__puzzle.mini-board.cg-wrap.is2d', {
+              h('a.storm--end__history__round__puzzle.mini-board', {
                 attrs: {
                   href: `/training/${round.puzzle.id}`,
                   target: '_blank',
                 },
                 hook: onInsert(e => {
-                  // tsume starts always from sente side
-                  miniBoard.initWith(e, round.puzzle.fen, 'sente');
+                  miniBoard.initWith(e, round.puzzle.sfen, toColor(round.puzzle.sfen.split(' ')[1]));
                 }),
               }),
               h('span.storm--end__history__round__meta', [

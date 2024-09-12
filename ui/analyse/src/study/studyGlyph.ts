@@ -1,10 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import * as xhr from './studyXhr';
-import { prop, Prop } from 'common';
+import { Prop, prop } from 'common/common';
+import { bind } from 'common/snabbdom';
+import spinner from 'common/spinner';
 import throttle from 'common/throttle';
-import { bind, spinner } from '../util';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
+import * as xhr from './studyXhr';
 
 interface AllGlyphs {
   move: Tree.Glyph[];
@@ -23,17 +23,10 @@ export interface GlyphCtrl {
 function renderGlyph(ctrl: GlyphCtrl, node: Tree.Node) {
   return function (glyph: Tree.Glyph) {
     return h(
-      'a',
+      'button',
       {
-        hook: bind(
-          'click',
-          _ => {
-            ctrl.toggleGlyph(glyph.id);
-            return false;
-          },
-          ctrl.redraw
-        ),
-        attrs: { 'data-symbol': glyph.symbol },
+        hook: bind('click', _ => ctrl.toggleGlyph(glyph.id), ctrl.redraw),
+        attrs: { 'data-symbol': glyph.symbol, type: 'button' },
         class: {
           active: !!node.glyphs && !!node.glyphs.find(g => g.id === glyph.id),
         },

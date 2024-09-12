@@ -255,7 +255,6 @@ lishogi.StrongSocket = function (url, version, settings) {
   };
 
   connect();
-  window.addEventListener('unload', destroy);
 
   return {
     disconnect: disconnect,
@@ -275,9 +274,9 @@ lishogi.StrongSocket = function (url, version, settings) {
 
 lishogi.StrongSocket.defaults = {
   events: {
-    fen: function (e) {
+    sfen: function (e) {
       $('.mini-board-' + e.id).each(function () {
-        lishogi.parseFen($(this).data('fen', e.fen).data('lastmove', e.lm).data('pocket', e.pocket));
+        lishogi.parseSfen($(this).data('sfen', e.sfen).data('lastmove', e.lm));
       });
     },
     challenges: function (d) {

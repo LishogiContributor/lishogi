@@ -1,7 +1,8 @@
 package lila.simul
 
 import shogi.variant.Variant
-import shogi.{ Speed, StartingPosition }
+import shogi.format.forsyth.Sfen
+import shogi.Speed
 import lila.rating.PerfType
 import lila.user.User
 import org.joda.time.DateTime
@@ -14,8 +15,9 @@ case class Simul(
     applicants: List[SimulApplicant],
     pairings: List[SimulPairing],
     variants: List[Variant],
-    position: Option[StartingPosition],
+    position: Option[Sfen],
     createdAt: DateTime,
+    estimatedStartAt: Option[DateTime] = None,
     hostId: String,
     hostRating: Int,
     hostGameId: Option[String], // game the host is focusing on
@@ -46,7 +48,11 @@ case class Simul(
 
   def addApplicant(applicant: SimulApplicant) =
     Created {
-      if (!hasApplicant(applicant.player.user) && variants.has(applicant.player.variant))
+      if (
+        !hasApplicant(applicant.player.user) && !isHost(applicant.player.user) && variants.has(
+          applicant.player.variant
+        )
+      )
         copy(applicants = applicants :+ applicant)
       else this
     }
@@ -70,6 +76,10 @@ case class Simul(
   def nbAccepted = applicants.count(_.accepted)
 
   def startable = isCreated && nbAccepted > 1
+
+  def popular = nbAccepted >= 3
+
+  def veryPopular = nbAccepted >= 8
 
   def start =
     startable option copy(
@@ -115,14 +125,15 @@ case class Simul(
 
   def applicantRatio = s"${applicants.count(_.accepted)}/${applicants.size}"
 
-  def variantRich = variants.size > 3
+  def variantRich = variants.sizeIs > 3
 
   def isHost(userOption: Option[User]): Boolean = userOption ?? isHost
   def isHost(user: User): Boolean               = user.id == hostId
+  def isHost(userId: User.ID): Boolean          = userId == hostId
 
   def playingPairings = pairings filterNot (_.finished)
 
-  def hostColor = (color flatMap shogi.Color.apply) | shogi.Color(scala.util.Random.nextBoolean())
+  def hostColor: Option[shogi.Color] = color flatMap shogi.Color.fromName
 
   def setPairingHostColor(gameId: String, hostColor: shogi.Color) =
     updatePairing(gameId, _.copy(hostColor = hostColor))
@@ -146,9 +157,10 @@ object Simul {
       name: String,
       clock: SimulClock,
       variants: List[Variant],
-      position: Option[StartingPosition],
+      position: Option[Sfen],
       color: String,
       text: String,
+      estimatedStartAt: Option[DateTime],
       team: Option[String]
   ): Simul =
     Simul(
@@ -168,7 +180,8 @@ object Simul {
       },
       hostGameId = none,
       createdAt = DateTime.now,
-      variants = if (position.isDefined) List(shogi.variant.Standard) else variants,
+      estimatedStartAt = estimatedStartAt,
+      variants = if (position.isDefined) variants.take(1) else variants,
       position = position,
       applicants = Nil,
       pairings = Nil,
@@ -180,7 +193,4 @@ object Simul {
       team = team
     )
 
-  private[simul] lazy val fenIndex: Map[String, StartingPosition] = StartingPosition.all.view.map { p =>
-    p.fen -> p
-  }.toMap
 }

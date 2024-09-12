@@ -9,24 +9,28 @@
     "play",
     "replay"
   ],
-  "author": "Thibault Duplessis",
+  "author": "Thibault Duplessis, WandererXII",
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
     "@build/rollupProject": "2.0.0",
-    "@types/lishogi": "2.0.0"
+    "@types/lishogi": "2.0.0",
+    "rollup": "^2",
+    "typescript": "^5"
   },
   "dependencies": {
+    "@badrap/result": "^0.2",
     "chat": "2.0.0",
     "common": "2.0.0",
     "game": "2.0.0",
+    "keyboardMove": "1.0.0",
     "nvui": "2.0.0",
-    "snabbdom": "^0.7.4",
-    "shogiground": "7.8.1",
-    "chess": "2.0.0",
-    "shogiops": "^0.2.2"
+    "shogiground": "^0.8.6",
+    "shogiops": "^0.16.3",
+    "snabbdom": "^3.5.1"
   },
   "scripts": {
     "dev": "rollup --config",
-    "prod": "rollup --config --config-prod && rollup --config --config-prod --config-plugin nvui && rollup --config --config-prod --config-plugin keyboardMove"
+    "nvui": "rollup --config --config-plugin nvui",
+    "prod": "rollup --config --config-prod && rollup --config --config-prod --config-plugin nvui"
   }
 }

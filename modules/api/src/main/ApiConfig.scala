@@ -10,9 +10,6 @@ final class ApiConfig(
     val influxEventEnv: String,
     val isStage: Boolean,
     val prismicApiUrl: String,
-    val editorAnimationDuration: FiniteDuration,
-    val explorerEndpoint: String,
-    val tablebaseEndpoint: String,
     val accessibility: ApiConfig.Accessibility
 )
 
@@ -36,9 +33,6 @@ object ApiConfig {
       c.get[String]("api.influx_event.env"),
       c.get[Boolean]("app.stage"),
       c.get[String]("prismic.api_url"),
-      c.get[FiniteDuration]("editor.animation.duration"),
-      c.get[String]("explorer.endpoint"),
-      c.get[String]("explorer.tablebase.endpoint"),
       new Accessibility(
         c.get[String]("accessibility.blind.cookie.name"),
         c.get[FiniteDuration]("accessibility.blind.cookie.max_age"),

@@ -7,7 +7,8 @@ import lila.game.{ Game, Query }
 import lila.user.User
 
 import play.api.mvc.Request
-import scalaz.{ IList, NonEmptyList }
+import cats.data.NonEmptyList
+import play.api.data.FormBinding
 
 sealed abstract class GameFilter(val name: String)
 
@@ -19,6 +20,7 @@ object GameFilter {
   case object Loss     extends GameFilter("loss")
   case object Draw     extends GameFilter("draw")
   case object Playing  extends GameFilter("playing")
+  case object Paused   extends GameFilter("paused")
   case object Bookmark extends GameFilter("bookmark")
   case object Imported extends GameFilter("import")
   case object Search   extends GameFilter("search")
@@ -37,19 +39,20 @@ object GameFilterMenu {
   import GameFilter._
 
   val all: NonEmptyList[GameFilter] =
-    NonEmptyList.nel(All, IList(Me, Rated, Win, Loss, Draw, Playing, Bookmark, Imported, Search))
+    NonEmptyList.of(All, Me, Rated, Win, Loss, Draw, Playing, Paused, Bookmark, Imported, Search)
 
   def apply(user: User, nbs: UserInfo.NbGames, currentName: String): GameFilterMenu = {
 
-    val filters: NonEmptyList[GameFilter] = NonEmptyList.nel(
+    val filters: NonEmptyList[GameFilter] = NonEmptyList(
       All,
-      IList fromList List(
+      List(
         (~nbs.withMe > 0) option Me,
         (user.count.rated > 0) option Rated,
         (user.count.win > 0) option Win,
         (user.count.loss > 0) option Loss,
         (user.count.draw > 0) option Draw,
         (nbs.playing > 0) option Playing,
+        (nbs.paused > 0) option Paused,
         (nbs.bookmark > 0) option Bookmark,
         (nbs.imported > 0) option Imported,
         (user.count.game > 0) option Search
@@ -62,7 +65,7 @@ object GameFilterMenu {
   }
 
   def currentOf(filters: NonEmptyList[GameFilter], name: String) =
-    (filters.list find (_.name == name)) | filters.head
+    filters.find(_.name == name) | filters.head
 
   private def cachedNbOf(
       user: User,
@@ -80,6 +83,7 @@ object GameFilterMenu {
       case Draw     => user.count.draw.some
       case Search   => user.count.game.some
       case Playing  => nbs.map(_.playing)
+      case Paused   => nbs.map(_.paused)
       case _        => None
     }
 
@@ -97,7 +101,7 @@ object GameFilterMenu {
         filter: GameFilter,
         me: Option[User],
         page: Int
-    )(implicit req: Request[_]): Fu[Paginator[Game]] = {
+    )(implicit req: Request[_], formBinding: FormBinding): Fu[Paginator[Game]] = {
       val nb               = cachedNbOf(user, nbs, filter)
       def std(query: Bdoc) = pagBuilder.recentlyCreated(query, nb)(page)
       filter match {
@@ -129,6 +133,7 @@ object GameFilterMenu {
             .addEffect { p =>
               p.currentPageResults.filter(_.finishedOrAborted) foreach gameRepo.unsetPlayingUids
             }
+        case Paused => std(Query paused user.id)
         case Search => userGameSearch(user, page)
       }
     }
@@ -137,7 +142,7 @@ object GameFilterMenu {
   def searchForm(
       userGameSearch: lila.gameSearch.UserGameSearch,
       filter: GameFilter
-  )(implicit req: Request[_]): play.api.data.Form[_] =
+  )(implicit req: Request[_], formBinding: FormBinding): play.api.data.Form[_] =
     filter match {
       case Search => userGameSearch.requestForm
       case _      => userGameSearch.defaultForm

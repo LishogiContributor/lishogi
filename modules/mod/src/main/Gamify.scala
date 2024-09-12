@@ -1,6 +1,5 @@
 package lila.mod
 
-import lila.db.BSON.BSONJodaDateTimeHandler
 import org.joda.time.DateTime
 import reactivemongo.api._
 import reactivemongo.api.bson._
@@ -113,12 +112,14 @@ final class Gamify(
           )
         ) -> List(
           GroupField("mod")("nb" -> SumAll),
-          Sort(Descending("nb"))
+          Sort(Descending("nb")),
+          Limit(100)
         )
       }
       .map {
         _.flatMap { obj =>
-          obj.string("_id") |@| obj.int("nb") apply ModCount.apply
+          import cats.implicits._
+          (obj.string("_id"), obj.int("nb")) mapN ModCount.apply
         }
       }
 
@@ -148,7 +149,8 @@ final class Gamify(
       }
       .map {
         _.flatMap { obj =>
-          obj.string("_id") |@| obj.int("nb") apply ModCount.apply
+          import cats.implicits._
+          (obj.string("_id"), obj.int("nb")) mapN ModCount.apply
         }
       }
 }

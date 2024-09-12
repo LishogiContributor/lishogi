@@ -2,7 +2,6 @@ package lila.game
 
 import lila.common.ThreadLocalRandom
 
-import shogi.format.{ FEN, Forsyth }
 import shogi.{ Color, Status }
 import org.joda.time.DateTime
 import reactivemongo.akkastream.{ cursorProducer, AkkaStreamCursor }
@@ -10,7 +9,6 @@ import reactivemongo.api.commands.WriteResult
 import reactivemongo.api.ReadPreference
 import reactivemongo.api.WriteConcern
 
-import lila.db.BSON.BSONJodaDateTimeHandler
 import lila.db.dsl._
 import lila.db.isDuplicateKey
 import lila.user.User
@@ -18,7 +16,7 @@ import lila.user.User
 final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionContext) {
 
   import BSONHandlers._
-  import Game.{ ID, BSONFields => F }
+  import Game.{ BSONFields => F, ID }
   import Player.holdAlertBSONHandler
 
   def game(gameId: ID): Fu[Option[Game]] = coll.byId[Game](gameId)
@@ -73,7 +71,7 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
     }
 
   def pov(gameId: ID, color: String): Fu[Option[Pov]] =
-    Color(color) ?? (pov(gameId, _))
+    Color.fromName(color) ?? (pov(gameId, _))
 
   def pov(playerRef: PlayerRef): Fu[Option[Pov]] =
     game(playerRef.gameId) dmap { _ flatMap { _ playerIdPov playerRef.playerId } }
@@ -108,22 +106,8 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
           ++ Query.rated
           ++ Query.user(userId)
           ++ Query.analysed(true)
-          ++ Query.turnsGt(20)
+          ++ Query.pliesGt(20)
           ++ Query.clockHistory(true)
-      )
-      .sort($sort asc F.createdAt)
-      .cursor[Game](ReadPreference.secondaryPreferred)
-      .list(nb)
-
-  def extraGamesForIrwin(userId: String, nb: Int): Fu[List[Game]] =
-    coll.ext
-      .find(
-        Query.finished
-          ++ Query.rated
-          ++ Query.user(userId)
-          ++ Query.turnsGt(22)
-          ++ Query.variantStandard
-          ++ Query.clock(true)
       )
       .sort($sort asc F.createdAt)
       .cursor[Game](ReadPreference.secondaryPreferred)
@@ -199,6 +183,20 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       ReadPreference.secondaryPreferred
     )
 
+  def playingCorresOpponentsOfVariant(userId: User.ID, variant: shogi.variant.Variant): Fu[List[User.ID]] =
+    coll
+      .find(
+        Query.nowPlaying(userId) ++ Query.variant(variant) ++ Query.clock(false) ++ Query.noAi,
+        $doc(F.playingUids -> true)
+      )
+      .cursor[Bdoc]()
+      .list(200)
+      .map {
+        _.foldLeft[List[String]](List.empty) { case (acc, doc) =>
+          doc.getAsOpt[List[String]](F.playingUids).getOrElse(Nil).find(_ != userId).fold(acc)(_ :: acc)
+        }
+      }
+
   def lastPlayedPlayingId(userId: User.ID): Fu[Option[Game.ID]] =
     coll
       .find(Query recentlyPlaying userId, $id(true).some)
@@ -234,7 +232,7 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
         Query.user(user.id) ++
           Query.rated ++
           Query.finished ++
-          Query.turnsGt(2) ++
+          Query.pliesGt(2) ++
           Query.notFromPosition
       )
       .sort(Query.sortAntiChronological)
@@ -244,6 +242,9 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
 
   def setAnalysed(id: ID): Unit   = coll.updateFieldUnchecked($id(id), F.analysed, true)
   def setUnanalysed(id: ID): Unit = coll.updateFieldUnchecked($id(id), F.analysed, false)
+
+  def setPostGameStudy(id: ID, studyId: String): Unit =
+    coll.updateFieldUnchecked($id(id), F.postGameStudy, studyId)
 
   def isAnalysed(id: ID): Fu[Boolean] =
     coll.exists($id(id) ++ Query.analysed(true))
@@ -301,13 +302,52 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
 
   private def holdAlertField(color: Color) = s"p${color.fold(0, 1)}.${Player.BSONFields.holdAlert}"
 
+  def pause(id: ID, sealedUsi: shogi.format.usi.Usi) =
+    coll.update.one(
+      $id(id),
+      nonEmptyMod(
+        "$set",
+        $doc(
+          F.status    -> Status.Paused.id,
+          F.sealedUsi -> sealedUsi.usi,
+          F.checkAt   -> DateTime.now.plusDays(14)
+        )
+      ) ++ $doc(
+        "$unset" -> $doc(
+          F.playingUids -> true
+        )
+      )
+    )
+
+  def resume(id: ID, pausedSeconds: Option[Int], userIds: List[User.ID]) =
+    coll.update.one(
+      $id(id),
+      nonEmptyMod(
+        "$set",
+        $doc(
+          F.status        -> Status.Started.id,
+          F.checkAt       -> DateTime.now.plusHours(1),
+          F.playingUids   -> (userIds.nonEmpty).option(userIds),
+          F.pausedSeconds -> pausedSeconds
+        )
+      ) ++ $doc(
+        "$unset" -> $doc(
+          F.sealedUsi -> true
+        )
+      )
+    )
+
   private val finishUnsets = $doc(
     F.positionHashes                              -> true,
     F.playingUids                                 -> true,
+    F.consecutiveAttacks                          -> true,
+    F.lastLionCapture                             -> true,
     ("p0." + Player.BSONFields.lastDrawOffer)     -> true,
     ("p1." + Player.BSONFields.lastDrawOffer)     -> true,
     ("p0." + Player.BSONFields.isOfferingDraw)    -> true,
     ("p1." + Player.BSONFields.isOfferingDraw)    -> true,
+    ("p0." + Player.BSONFields.isOfferingPause)   -> true,
+    ("p1." + Player.BSONFields.isOfferingPause)   -> true,
     ("p0." + Player.BSONFields.proposeTakebackAt) -> true,
     ("p1." + Player.BSONFields.proposeTakebackAt) -> true
   )
@@ -339,35 +379,35 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
   def findRandomStandardCheckmate(distribution: Int): Fu[Option[Game]] =
     coll.ext
       .find(
-        Query.mate ++ Query.variantStandard ++ Query.lastMoveNotDrop
+        Query.mate ++ Query.variantStandard ++ Query.notFromPosition
       )
       .sort(Query.sortCreated)
       .skip(ThreadLocalRandom nextInt distribution)
       .one[Game]
 
-  def insertDenormalized(g: Game, initialFen: Option[shogi.format.FEN] = None): Funit = {
+  def insertDenormalized(g: Game): Funit = {
     val g2 =
-      if (g.rated && (g.userIds.distinct.size != 2 || !Game.allowRated(g.variant, g.clock.map(_.config))))
+      if (
+        g.rated && (g.userIds.distinct.sizeIs != 2 || !Game.allowRated(
+          g.initialSfen,
+          g.clock.map(_.config),
+          g.variant
+        ))
+      )
         g.copy(mode = shogi.Mode.Casual)
       else g
     val userIds = g2.userIds.distinct
-    val fen = initialFen.map(_.value) orElse {
-      (!g2.variant.standardInitialPosition)
-        .option(Forsyth >> g2.shogi)
-        .filter(Forsyth.initial !=)
-    }
     val checkInHours =
-      if (g2.isPgnImport) none
+      if (g2.isNotationImport) none
       else if (g2.hasClock) 1.some
       else if (g2.hasAi) (Game.aiAbandonedHours + 1).some
       else (24 * 10).some
     val bson = (gameBSONHandler write g2) ++ $doc(
-      F.initialFen  -> fen,
       F.checkAt     -> checkInHours.map(DateTime.now.plusHours),
       F.playingUids -> (g2.started && userIds.nonEmpty).option(userIds)
     )
     coll.insert.one(bson) addFailureEffect {
-      case wr: WriteResult if isDuplicateKey(wr) => lila.mon.game.idCollision.increment()
+      case wr: WriteResult if isDuplicateKey(wr) => lila.mon.game.idCollision.increment().unit
     } void
   }
 
@@ -384,37 +424,11 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
     coll.update.one($id(id), $unset(F.checkAt)).void
 
   def unsetPlayingUids(g: Game): Unit =
-    coll.update(false, WriteConcern.Unacknowledged).one($id(g.id), $unset(F.playingUids))
+    coll.update(false, WriteConcern.Unacknowledged).one($id(g.id), $unset(F.playingUids)).unit
 
   // used to make a compound sparse index
   def setImportCreatedAt(g: Game) =
     coll.update.one($id(g.id), $set("pgni.ca" -> g.createdAt)).void
-
-  def initialFen(gameId: ID): Fu[Option[FEN]] =
-    coll.primitiveOne[FEN]($id(gameId), F.initialFen)
-
-  def initialFen(game: Game): Fu[Option[FEN]] =
-    if (game.imported || !game.variant.standardInitialPosition) initialFen(game.id) dmap {
-      case fen                                            => fen
-    }
-    else fuccess(none)
-
-  def gameWithInitialFen(gameId: ID): Fu[Option[(Game, Option[FEN])]] =
-    game(gameId) flatMap {
-      _ ?? { game =>
-        initialFen(game) dmap { fen =>
-          Option(game -> fen)
-        }
-      }
-    }
-
-  def withInitialFen(game: Game): Fu[Game.WithInitialFen] =
-    initialFen(game) dmap { Game.WithInitialFen(game, _) }
-
-  def withInitialFens(games: List[Game]): Fu[List[(Game, Option[FEN])]] =
-    games.map { game =>
-      initialFen(game) dmap { game -> _ }
-    }.sequenceFu
 
   def count(query: Query.type => Bdoc): Fu[Int] = coll countSel query(Query)
 
@@ -453,19 +467,19 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       })
   }
 
-  def random: Fu[Option[Game]] =
+  def randomStandard: Fu[Option[Game]] =
     coll.ext
-      .find($empty)
+      .find(Query.variantStandard)
       .sort(Query.sortCreated)
       .skip(ThreadLocalRandom nextInt 1000)
       .one[Game]
 
-  def findPgnImport(pgn: String): Fu[Option[Game]] =
+  def findNotationImport(notation: String): Fu[Option[Game]] =
     coll.one[Game](
-      $doc(s"${F.pgnImport}.h" -> PgnImport.hash(pgn))
+      $doc(s"${F.notationImport}.h" -> NotationImport.hash(notation))
     )
 
-  def getOptionPgn(id: ID): Fu[Option[PgnMoves]] = game(id) dmap2 { _.pgnMoves }
+  def getOptionUsis(id: ID): Fu[Option[Usis]] = game(id) dmap2 { _.usis }
 
   def lastGameBetween(u1: String, u2: String, since: DateTime): Fu[Option[Game]] =
     coll.one[Game](
@@ -498,7 +512,7 @@ final class GameRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
         Query.finished
           ++ Query.rated
           ++ Query.user(userId)
-          ++ Query.turnsGt(20)
+          ++ Query.pliesGt(20)
       )
       .sort(Query.sortCreated)
       .cursor[Game](ReadPreference.secondaryPreferred)

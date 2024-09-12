@@ -51,22 +51,22 @@ object player {
         roundTag,
         embedJsUnsafe(s"""lishogi=window.lishogi||{};customWS=true;onload=function(){
 LishogiRound.boot(${safeJsonValue(
-          Json
-            .obj(
-              "data"   -> data,
-              "i18n"   -> jsI18n(pov.game),
-              "userId" -> ctx.userId,
-              "chat"   -> chatJson
-            )
-        )})}""")
+            Json
+              .obj(
+                "data"   -> data,
+                "i18n"   -> jsI18n(pov.game),
+                "userId" -> ctx.userId,
+                "chat"   -> chatJson
+              )
+          )})}""")
       ),
       openGraph = povOpenGraph(pov).some,
       shogiground = false,
       playing = true
     )(
-      main(cls := "round")(
+      main(cls := s"round ${mainVariantClass(pov.game.variant)}")(
         st.aside(cls := "round__side")(
-          bits.side(pov, data, tour.map(_.tourAndTeamVs), simul, bookmarked = bookmarked),
+          bits.side(pov, tour.map(_.tourAndTeamVs), simul, bookmarked = bookmarked),
           chatOption.map(_ => chat.frag)
         ),
         bits.roundAppPreload(pov, true),

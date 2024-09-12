@@ -2,12 +2,10 @@ package lila.game
 
 import akka.actor._
 import akka.pattern.pipe
-import shogi.format.pgn.{ Sans, Tags }
-import shogi.format.{ pgn, Forsyth }
+import shogi.format.{ Reader, Tags }
 import shogi.{ Game => ShogiGame }
 import scala.util.Success
-import scalaz.Validation.FlatMap._
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 import lila.common.Captcha
 import lila.hub.actorApi.captcha._
@@ -19,12 +17,12 @@ final private class Captcher(gameRepo: GameRepo)(implicit ec: scala.concurrent.E
 
     case AnyCaptcha => sender() ! Impl.current
 
-    case GetCaptcha(id: String) => Impl get id pipeTo sender()
+    case GetCaptcha(id: String) => Impl.get(id).pipeTo(sender()).unit
 
-    case actorApi.NewCaptcha => Impl.refresh
+    case actorApi.NewCaptcha => Impl.refresh.unit
 
     case ValidCaptcha(id: String, solution: String) =>
-      Impl get id map (_ valid solution) pipeTo sender()
+      Impl.get(id).map(_ valid solution).pipeTo(sender()).unit
   }
 
   private object Impl {
@@ -44,17 +42,17 @@ final private class Captcher(gameRepo: GameRepo)(implicit ec: scala.concurrent.E
 
     // Private stuff
 
-    private val capacity                          = 256
-    private var challenges: NonEmptyList[Captcha] = NonEmptyList(Captcha.default)
+    private val capacity   = 256
+    private var challenges = NonEmptyList.one(Captcha.default)
 
     private def add(c: Captcha): Unit = {
       find(c.gameId) ifNone {
-        challenges = NonEmptyList.nel(c, challenges.list take capacity)
+        challenges = NonEmptyList(c, challenges.toList take capacity)
       }
     }
 
     private def find(id: String): Option[Captcha] =
-      challenges.list.find(_.gameId == id)
+      challenges.find(_.gameId == id)
 
     private def createFromDb: Fu[Option[Captcha]] =
       findCheckmateInDb(10) flatMap {
@@ -70,46 +68,46 @@ final private class Captcher(gameRepo: GameRepo)(implicit ec: scala.concurrent.E
       gameRepo game id flatMap { _ ?? fromGame }
 
     private def fromGame(game: Game): Fu[Option[Captcha]] =
-      gameRepo getOptionPgn game.id map {
+      gameRepo getOptionUsis game.id map {
         _ flatMap { makeCaptcha(game, _) }
       }
 
-    private def makeCaptcha(game: Game, moves: PgnMoves): Option[Captcha] =
+    private def makeCaptcha(game: Game, usis: Usis): Option[Captcha] =
       for {
-        rewinded  <- rewind(moves)
+        rewinded  <- rewind(usis)
         solutions <- solve(rewinded)
-        moves = rewinded.situation.destinations map { case (from, dests) =>
+        moves = rewinded.situation.moveDestinations map { case (from, dests) =>
           from.key -> dests.mkString
         }
-      } yield Captcha(game.id, fen(rewinded), rewinded.player.sente, solutions, moves = moves)
+      } yield Captcha(game.id, sfen(rewinded), rewinded.color.sente, solutions, moves = moves)
 
+    // Not looking for drop checkmates or checking promotions
     private def solve(game: ShogiGame): Option[Captcha.Solutions] =
-      game.situation.moves.view
-        .flatMap { case (_, moves) =>
-          moves filter { move =>
-            (move.after situationOf !game.player).checkMate
+      game.situation
+        .moveActorsOf(game.situation.color)
+        .view
+        .flatMap { case moveActor =>
+          moveActor.toUsis filter { usi =>
+            game.situation(usi).toOption.fold(false)(_.checkmate)
           }
         }
-        .to(List) map { move =>
-        s"${move.orig} ${move.dest}"
+        .to(List) map { usi =>
+        s"${usi.orig} ${usi.dest}"
       } toNel
 
-    private def rewind(moves: PgnMoves): Option[ShogiGame] =
-      pgn.Reader
-        .movesWithSans(
-          moves,
-          sans => Sans(safeInit(sans.value)),
-          tags = Tags.empty
+    private def rewind(moves: Usis): Option[ShogiGame] =
+      Reader
+        .fromUsi(
+          moves.dropRight(1),
+          none,
+          shogi.variant.Standard,
+          Tags.empty
         )
-        .flatMap(_.valid) map (_.state) toOption
+        .valid
+        .map(_.state)
+        .toOption
 
-    private def safeInit[A](list: List[A]): List[A] =
-      list match {
-        case _ :: Nil => Nil
-        case x :: xs  => x :: safeInit(xs)
-        case _        => Nil
-      }
-
-    private def fen(game: ShogiGame): String = Forsyth >> game takeWhile (_ != ' ')
+    // only board
+    private def sfen(game: ShogiGame): String = game.situation.toSfen.value.split(' ').take(1).mkString(" ")
   }
 }

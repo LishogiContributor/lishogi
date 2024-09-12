@@ -7,11 +7,7 @@ body {
     --site-header-height: #{$site-header-tall-height};
   }
 
-  --site-header-margin: 12px;
-  &.header-margin {
-    --site-header-margin: 1em;
-  }
-
+  --site-header-margin: 16px;
   --main-margin: 0;
   @include breakpoint($mq-main-margin) {
     --main-margin: 1vw;
@@ -61,9 +57,6 @@ body {
     content: 'COL 1';
     @include breakpoint($mq-col2-uniboard) {
       content: 'COL 2';
-    }
-    @include breakpoint($mq-col2-uniboard-squeeze) {
-      content: 'COL 2 squeezed';
     }
     @include breakpoint($mq-col3-uniboard) {
       content: 'COL 3';

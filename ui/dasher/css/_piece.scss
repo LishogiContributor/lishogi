@@ -1,41 +1,48 @@
 #dasher_app {
   .piece {
-    piece {
-      position: absolute;
-      width: calc(100% / 9);
-      height: calc(100% / 9);
-      top: 0;
-      left: 0;
-      background-size: cover;
-      z-index: 2; /* no less than 2 */
-      pointer-events: none;
-    }
     .list {
       @extend %flex-wrap;
-      background: url(../images/board/darksquares.jpg);
-      box-shadow: inset 0 7px 20px 3px #777;
-    }
-    .no-square {
-      width: 75px;
-      height: 75px;
-      position: relative;
-    }
-    .no-square:hover {
-      background: rgba(250, 250, 250, 0.15);
-    }
-    .no-square.active {
-      background: fade-out($c-dasher, 0.3);
-    }
-    piece {
-      width: 200%;
-      height: 200%;
-      margin: -50%;
-    }
-    &.d3 piece {
-      left: 0;
-      top: 0;
       background-size: cover;
-      background-position: 0 67%;
+      background-position: center;
+      .no-square {
+        width: 56.25px;
+        height: calc(56.25px / 11 * 12);
+        position: relative;
+        &:hover {
+          background: rgba(20, 85, 30, 0.3);
+        }
+        &.active {
+          background: rgba(20, 85, 30, 0.5);
+        }
+        &[data-value='pixel'] piece {
+          image-rendering: pixelated;
+        }
+        piece {
+          width: 200%;
+          height: 200%;
+          margin: calc(-50% / 11 * 12) -50%;
+          background-repeat: no-repeat;
+        }
+      }
+    }
+    .piece-tabs {
+      display: flex;
+      justify-content: space-around;
+      border-top: 2px solid $c-dasher;
+      div {
+        flex: 1;
+        opacity: 0.65;
+        padding: 5px 0;
+        text-align: center;
+        font-size: 0.9rem;
+        &:hover {
+          opacity: 0.9;
+        }
+        &.active {
+          opacity: 1;
+          font-weight: bold;
+        }
+      }
     }
   }
 }

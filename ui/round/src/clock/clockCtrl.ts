@@ -1,6 +1,6 @@
-import { updateElements } from './clockView';
-import { RoundData } from '../interfaces';
 import * as game from 'game';
+import { Redraw, RoundData } from '../interfaces';
+import { updateElements } from './clockView';
 
 export type Seconds = number;
 export type Centis = number;
@@ -8,6 +8,7 @@ export type Millis = number;
 
 interface ClockOpts {
   onFlag(): void;
+  redraw: Redraw;
   soundColor?: Color;
   nvui: boolean;
 }
@@ -25,7 +26,6 @@ export interface ClockData {
   emerg: Seconds;
   showTenths: TenthsPref;
   clockCountdown: Seconds;
-  showBar: boolean;
   moretime: number;
   sPeriods: number;
   gPeriods: number;
@@ -43,8 +43,6 @@ type ColorMap<T> = { [C in Color]: T };
 export interface ClockElements {
   time?: HTMLElement;
   clock?: HTMLElement;
-  bar?: HTMLElement;
-  barAnim?: Animation;
 }
 
 interface EmergSound {
@@ -72,12 +70,9 @@ export class ClockController {
     },
   };
 
-  showTenths: (millis: Millis) => boolean;
-  showBar = {} as ColorMap<boolean>;
+  showTenths: (millis: Millis, color: Color) => boolean;
   times: Times;
 
-  barTime: number;
-  timeRatioDivisor: number;
   emergMs: Millis;
   byoEmergeS: Seconds;
 
@@ -89,31 +84,34 @@ export class ClockController {
   byoyomi: number;
   initial: number;
 
-  startPeriod: number;
+  totalPeriods: number;
   curPeriods = {} as ColorMap<number>;
+  goneBerserk = {} as ColorMap<boolean>;
 
   private tickCallback?: number;
 
-  constructor(d: RoundData, readonly opts: ClockOpts) {
+  constructor(
+    d: RoundData,
+    readonly opts: ClockOpts
+  ) {
     const cdata = d.clock!;
 
     if (cdata.showTenths === 0) this.showTenths = () => false;
     else {
       const cutoff = cdata.showTenths === 1 ? 10000 : 3600000;
-      this.showTenths = time => time < cutoff;
+      this.showTenths = (time, color) =>
+        time < cutoff && (this.byoyomi === 0 || time <= 1000 || this.isUsingByo(color) || cdata.showTenths === 2);
     }
 
     this.byoyomi = cdata.byoyomi;
     this.initial = cdata.initial;
 
-    this.startPeriod = cdata.periods;
+    this.totalPeriods = cdata.periods;
     this.curPeriods['sente'] = cdata.sPeriods ?? 0;
     this.curPeriods['gote'] = cdata.gPeriods ?? 0;
 
-    this.showBar['sente'] = cdata.showBar && !this.opts.nvui && this.curPeriods['sente'] === 0;
-    this.showBar['gote'] = cdata.showBar && !this.opts.nvui && this.curPeriods['gote'] === 0;
-    this.barTime = 1000 * (Math.max(cdata.initial, 2) + 5 * cdata.increment);
-    this.timeRatioDivisor = 1 / this.barTime;
+    this.goneBerserk[d.player.color] = !!d.player.berserk;
+    this.goneBerserk[d.opponent.color] = !!d.opponent.berserk;
 
     this.emergMs = 1000 * Math.min(60, Math.max(10, cdata.initial * 0.125));
     this.byoEmergeS = cdata.clockCountdown ?? 3;
@@ -123,10 +121,8 @@ export class ClockController {
 
   isUsingByo = (color: Color): boolean => this.byoyomi > 0 && (this.curPeriods[color] > 0 || this.initial === 0);
 
-  timeRatio = (millis: number): number => Math.min(1, millis * this.timeRatioDivisor);
-
   setClock = (d: RoundData, sente: Seconds, gote: Seconds, sPer: number, gPer: number, delay: Centis = 0) => {
-    const isClockRunning = game.playable(d) && (game.playedTurns(d) > 1 || d.clock!.running),
+    const isClockRunning = game.playable(d) && (game.playedPlies(d) > 1 || d.clock!.running),
       delayMs = delay * 10;
 
     this.times = {
@@ -138,18 +134,21 @@ export class ClockController {
     this.curPeriods['sente'] = sPer;
     this.curPeriods['gote'] = gPer;
 
-    if (isClockRunning) this.scheduleTick(this.times[d.game.player], delayMs);
+    if (isClockRunning) this.scheduleTick(this.times[d.game.player], d.game.player, delayMs);
   };
 
   addTime = (color: Color, time: Centis): void => {
     this.times[color] += time * 10;
   };
 
+  setBerserk = (color: Color): void => {
+    this.goneBerserk[color] = true;
+  };
+
   nextPeriod = (color: Color): void => {
     this.curPeriods[color] += 1;
     this.times[color] += this.byoyomi * 1000;
     if (this.opts.soundColor === color) this.emergSound.nextPeriod();
-    this.showBar[color] = false; // let's just not show the bar for byoyomi
     this.emergSound.byoTicks = undefined;
   };
 
@@ -166,13 +165,13 @@ export class ClockController {
 
   hardStopClock = (): void => (this.times.activeColor = undefined);
 
-  private scheduleTick = (time: Millis, extraDelay: Millis) => {
+  private scheduleTick = (time: Millis, color: Color, extraDelay: Millis) => {
     if (this.tickCallback !== undefined) clearTimeout(this.tickCallback);
     this.tickCallback = setTimeout(
       this.tick,
       // changing the value of active node confuses the chromevox screen reader
       // so update the clock less often
-      this.opts.nvui ? 1000 : (time % (this.showTenths(time) ? 100 : 500)) + 1 + extraDelay
+      this.opts.nvui ? 1000 : (time % (this.showTenths(time, color) ? 100 : 500)) + 1 + extraDelay
     );
   };
 
@@ -183,16 +182,20 @@ export class ClockController {
     const color = this.times.activeColor;
     if (color === undefined) return;
 
-    const now = performance.now();
-    const millis = Math.max(0, this.times[color] - this.elapsed(now));
+    const now = performance.now(),
+      millis = Math.max(0, this.times[color] - this.elapsed(now)),
+      curPeriod = this.curPeriods[color];
 
-    this.scheduleTick(millis, 0);
-    if (millis === 0) this.opts.onFlag();
-    else updateElements(this, this.elements[color], millis);
+    this.scheduleTick(millis, color, 0);
+    if (millis === 0 && !this.goneBerserk[color] && this.byoyomi > 0 && curPeriod < this.totalPeriods) {
+      this.nextPeriod(color);
+      this.opts.redraw();
+    } else if (millis === 0) this.opts.onFlag();
+    else updateElements(this, this.elements[color], millis, color);
 
     if (this.opts.soundColor === color) {
       if (this.emergSound.playable[color]) {
-        if (millis < this.emergMs && !(now < this.emergSound.next!) && this.curPeriods[color] === 0) {
+        if (millis < this.emergMs && !(now < this.emergSound.next!) && curPeriod === 0) {
           this.emergSound.lowtime();
           this.emergSound.next = now + this.emergSound.delay;
           this.emergSound.playable[color] = false;

@@ -1,9 +1,9 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-
+import { bind, dataIcon } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import { VNode, h } from 'snabbdom';
 import TournamentController from '../ctrl';
-import { bind, numberRow, spinner, dataIcon, player as renderPlayer } from './util';
 import { teamName } from './battle';
+import { numberRow, player as renderPlayer } from './util';
 
 export default function (ctrl: TournamentController): VNode | undefined {
   const battle = ctrl.data.teamBattle,
@@ -41,7 +41,10 @@ export default function (ctrl: TournamentController): VNode | undefined {
             ? [
                 numberRow(noarg('averageElo'), data.rating, 'raw'),
                 ...(data.perf
-                  ? [numberRow('Average performance', data.perf, 'raw'), numberRow('Average score', data.score, 'raw')]
+                  ? [
+                      numberRow(noarg('averagePerformance'), data.perf, 'raw'),
+                      numberRow(noarg('averageScore'), data.score, 'raw'),
+                    ]
                   : []),
               ]
             : []),
@@ -54,7 +57,7 @@ export default function (ctrl: TournamentController): VNode | undefined {
                 {
                   attrs: { href: '/team/' + data.id },
                 },
-                'Team page'
+                noarg('teamPage')
               )
             )
           ),
@@ -63,17 +66,12 @@ export default function (ctrl: TournamentController): VNode | undefined {
       h('div', [
         h(
           'table.players.sublist',
-          {
-            hook: bind('click', e => {
-              const username = ((e.target as HTMLElement).parentNode as HTMLElement).getAttribute('data-name');
-              if (username) ctrl.jumpToPageOf(username);
-            }),
-          },
           data.topPlayers.map((p, i) =>
             h(
               'tr',
               {
                 key: p.name,
+                hook: bind('click', () => ctrl.jumpToPageOf(p.name)),
               },
               [
                 h('th', '' + (i + 1)),

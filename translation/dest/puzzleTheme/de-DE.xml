@@ -65,7 +65,7 @@
   <string name="joiningPawn">Joining pawn</string>
   <string name="joiningPawnDescription">A tactic in which a pawn is sacrificially dropped in front of opponent\'s piece.</string>
   <string name="dancingPawns">Dancing pawns</string>
-  <string name="dancingPawnsDescription">A tactic to capture opponent\'s gold with sacrificing a pawn.</string>
+  <string name="dancingPawnsDescription">Eine Taktik, um den Goldgeneral deines Gegners zu schlagen, ist, einen Bauern zu opfern.</string>
   <string name="edgeAttack">Randangriff</string>
   <string name="edgeAttackDescription">A tactic involving attacking opponent\'s first or ninth file.</string>
   <string name="veryLong">Sehr lange Aufgabe</string>
@@ -73,5 +73,5 @@
   <string name="lishogiGames">Von lishogi-Spielen</string>
   <string name="lishogiGamesDescription">Aufgaben generiert aus Spielen auf lishogi.</string>
   <string name="otherSources">Von anderen Quellen</string>
-  <string name="otherSourcesDescription">Many thanks to everyone who submitted or allowed lishogi to use these puzzles!</string>
+  <string name="otherSourcesDescription">Vielen Dank an alle, die Puzzles eingereicht, oder lishogi erlaubt haben, diese zu nutzen!</string>
 </resources>

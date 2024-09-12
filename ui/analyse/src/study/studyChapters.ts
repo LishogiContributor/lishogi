@@ -1,11 +1,11 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { prop, Prop } from 'common';
-import { bind, dataIcon, iconTag, scrollTo } from '../util';
-import { ctrl as chapterNewForm, StudyChapterNewFormCtrl } from './chapterNewForm';
-import { ctrl as chapterEditForm } from './chapterEditForm';
+import { Prop, prop } from 'common/common';
+import { bind, dataIcon } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
-import { StudyCtrl, StudyChapterMeta, LocalPaths, StudyChapter, TagArray } from './interfaces';
+import { iconTag, scrollTo } from '../util';
+import { ctrl as chapterEditForm } from './chapterEditForm';
+import { StudyChapterNewFormCtrl, ctrl as chapterNewForm } from './chapterNewForm';
+import { LocalPaths, StudyChapter, StudyChapterMeta, StudyCtrl, TagArray } from './interfaces';
 
 export interface StudyChaptersCtrl {
   newForm: StudyChapterNewFormCtrl;
@@ -67,19 +67,6 @@ export function findTag(tags: TagArray[], name: string): string | undefined {
   return t && t[1];
 }
 
-export function resultOf(tags: TagArray[], isSente: boolean): string | undefined {
-  switch (findTag(tags, 'result')) {
-    case '1-0':
-      return isSente ? '1' : '0';
-    case '0-1':
-      return isSente ? '0' : '1';
-    case '1/2-1/2':
-      return '1/2';
-    default:
-      return;
-  }
-}
-
 export function view(ctrl: StudyCtrl): VNode {
   const canContribute = ctrl.members.canContribute(),
     current = ctrl.currentChapter();
@@ -112,8 +99,6 @@ export function view(ctrl: StudyCtrl): VNode {
     }
   }
 
-  const introActive = ctrl.relay && ctrl.relay.intro.active;
-
   return h(
     'div.study__chapters',
     {
@@ -145,7 +130,7 @@ export function view(ctrl: StudyCtrl): VNode {
       .map((chapter, i) => {
         const editing = ctrl.chapters.editForm.isEditing(chapter.id),
           loading = ctrl.vm.loading && chapter.id === ctrl.vm.nextChapterId,
-          active = !ctrl.vm.loading && current && !introActive && current.id === chapter.id;
+          active = !ctrl.vm.loading && current && current.id === chapter.id;
         return h(
           'div',
           {

@@ -1,26 +1,20 @@
 package lila.simul
 
-import akka.actor._
-import akka.pattern.ask
 import play.api.libs.json.Json
 import scala.concurrent.duration._
 
 import shogi.variant.Variant
-import lila.common.{ Bus, Debouncer }
+import lila.common.Bus
 import lila.game.{ Game, GameRepo, PerfPicker }
-import lila.hub.actorApi.lobby.ReloadSimuls
 import lila.hub.actorApi.timeline.{ Propagate, SimulCreate, SimulJoin }
 import lila.memo.CacheApi._
-import lila.socket.Socket.SendToFlag
 import lila.user.{ User, UserRepo }
-import makeTimeout.short
 
 final class SimulApi(
     userRepo: UserRepo,
     gameRepo: GameRepo,
     onGameStart: lila.round.OnStart,
     socket: SimulSocket,
-    renderer: lila.hub.actors.Renderer,
     timeline: lila.hub.actors.Timeline,
     repo: SimulRepo,
     cacheApi: lila.memo.CacheApi
@@ -53,25 +47,32 @@ final class SimulApi(
   def create(setup: SimulForm.Setup, me: User): Fu[Simul] = {
     val simul = Simul.make(
       name = setup.name,
-      clock = SimulClock(
-        config =
-          shogi.Clock.Config(setup.clockTime * 60, setup.clockIncrement, setup.clockByoyomi, setup.periods),
-        hostExtraTime = setup.clockExtra * 60
-      ),
-      variants = setup.variants.flatMap { shogi.variant.Variant(_) },
-      position = setup.position
-        .map {
-          SimulForm.startingPosition(_, shogi.variant.Standard)
-        }
-        .filterNot(_.initial),
+      clock = setup.clock,
+      variants = setup.actualVariants,
+      position = setup.position,
       host = me,
       color = setup.color,
       text = setup.text,
+      estimatedStartAt = setup.estimatedStartAt,
       team = setup.team
     )
-    repo.create(simul, me.hasGames) >>- publish() >>- {
+    repo.create(simul, me.hasGames) >>- {
       timeline ! (Propagate(SimulCreate(me.id, simul.id, simul.fullName)) toFollowersOf me.id)
     } inject simul
+  }
+
+  def update(prev: Simul, setup: SimulForm.Setup): Fu[Simul] = {
+    val simul = prev.copy(
+      name = setup.name,
+      clock = setup.clock,
+      variants = setup.actualVariants,
+      position = setup.position,
+      color = setup.color.some,
+      text = setup.text,
+      estimatedStartAt = setup.estimatedStartAt,
+      team = setup.team
+    )
+    repo.update(simul) inject simul
   }
 
   def addApplicant(simulId: Simul.ID, user: User, variantKey: String): Funit =
@@ -111,7 +112,7 @@ final class SimulApi(
         _ ?? { simul =>
           simul.start ?? { started =>
             userRepo byId started.hostId orFail s"No such host: ${simul.hostId}" flatMap { host =>
-              started.pairings.map(makeGame(started, host)).sequenceFu map { games =>
+              started.pairings.zipWithIndex.map(makeGame(started, host)).sequenceFu map { games =>
                 games.headOption foreach { case (game, _) =>
                   socket.startSimul(simul, game)
                 }
@@ -138,7 +139,7 @@ final class SimulApi(
     workQueue(simulId) {
       repo.findCreated(simulId) flatMap {
         _ ?? { simul =>
-          (repo remove simul) >>- socket.aborted(simul.id) >>- publish()
+          (repo remove simul) >>- socket.aborted(simul.id)
         }
       }
     }
@@ -204,43 +205,47 @@ final class SimulApi(
   def idToName(id: Simul.ID): Fu[Option[String]] =
     repo find id dmap2 { _.fullName }
 
-  private def makeGame(simul: Simul, host: User)(pairing: SimulPairing): Fu[(Game, shogi.Color)] =
-    for {
-      user <- userRepo byId pairing.player.user orFail s"No user with id ${pairing.player.user}"
-      hostColor  = simul.hostColor
-      senteUser  = hostColor.fold(host, user)
-      goteUser   = hostColor.fold(user, host)
-      clock      = simul.clock.chessClockOf(hostColor)
-      perfPicker = lila.game.PerfPicker.mainOrDefault(shogi.Speed(clock.config), pairing.player.variant, none)
-      game1 = Game.make(
-        shogi = shogi
-          .Game(
-            variantOption = Some {
-              if (simul.position.isEmpty) pairing.player.variant
-              else shogi.variant.FromPosition
-            },
-            fen = simul.position.map(_.fen)
+  private def makeGame(simul: Simul, host: User)(
+      pairingAndNumber: (SimulPairing, Int)
+  ): Fu[(Game, shogi.Color)] =
+    pairingAndNumber match {
+      case (pairing, number) =>
+        for {
+          user <- userRepo byId pairing.player.user orFail s"No user with id ${pairing.player.user}"
+          hostColor = simul.hostColor | shogi.Color.fromSente(number % 2 == 0)
+          senteUser = hostColor.fold(host, user)
+          goteUser  = hostColor.fold(user, host)
+          clock     = simul.clock.shogiClockOf(hostColor)
+          perfPicker =
+            lila.game.PerfPicker.mainOrDefault(shogi.Speed(clock.config), pairing.player.variant, none)
+          game1 = Game.make(
+            shogi = shogi
+              .Game(
+                simul.position,
+                pairing.player.variant
+              )
+              .copy(clock = clock.start.some),
+            initialSfen = simul.position,
+            sentePlayer = lila.game.Player.make(shogi.Sente, senteUser.some, perfPicker),
+            gotePlayer = lila.game.Player.make(shogi.Gote, goteUser.some, perfPicker),
+            mode = shogi.Mode.Casual,
+            source = lila.game.Source.Simul,
+            notationImport = None
           )
-          .copy(clock = clock.start.some),
-        sentePlayer = lila.game.Player.make(shogi.Sente, senteUser.some, perfPicker),
-        gotePlayer = lila.game.Player.make(shogi.Gote, goteUser.some, perfPicker),
-        mode = shogi.Mode.Casual,
-        source = lila.game.Source.Simul,
-        pgnImport = None
-      )
-      game2 =
-        game1
-          .withId(pairing.gameId)
-          .withSimulId(simul.id)
-          .start
-      _ <-
-        (gameRepo insertDenormalized game2) >>-
-          onGameStart(game2.id) >>-
-          socket.startGame(simul, game2)
-    } yield game2 -> hostColor
+          game2 =
+            game1
+              .withId(pairing.gameId)
+              .withSimulId(simul.id)
+              .start
+          _ <-
+            (gameRepo insertDenormalized game2) >>-
+              onGameStart(game2.id) >>-
+              socket.startGame(simul, game2)
+        } yield game2 -> hostColor
+    }
 
   private def update(simul: Simul) =
-    repo.update(simul) >>- socket.reload(simul.id) >>- publish()
+    repo.update(simul) >>- socket.reload(simul.id)
 
   private def WithSimul(
       finding: Simul.ID => Fu[Option[Simul]],
@@ -253,25 +258,5 @@ final class SimulApi(
         }
       }
     }
-  }
-
-  private object publish {
-    private val siteMessage = SendToFlag("simul", Json.obj("t" -> "reload"))
-    private val debouncer = system.actorOf(
-      Props(
-        new Debouncer(
-          5 seconds,
-          { (_: Debouncer.Nothing) =>
-            Bus.publish(siteMessage, "sendToFlag")
-            repo.allCreatedFeaturable foreach { simuls =>
-              renderer.actor ? actorApi.SimulTable(simuls) map { case view: String =>
-                Bus.publish(ReloadSimuls(view), "lobbySocket")
-              }
-            }
-          }
-        )
-      )
-    )
-    def apply(): Unit = { debouncer ! Debouncer.Nothing }
   }
 }

@@ -21,7 +21,6 @@ final class PlaybanApi(
     messenger: MsgApi
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
-  import lila.db.BSON.BSONJodaDateTimeHandler
   import reactivemongo.api.bson.Macros
   implicit private val OutcomeBSONHandler = tryHandler[Outcome](
     { case BSONInteger(v) => Outcome(v) toTry s"No such playban outcome: $v" },
@@ -33,7 +32,7 @@ final class PlaybanApi(
 
   private case class Blame(player: Player, outcome: Outcome)
 
-  private val blameableSources: Set[Source] = Set(Source.Lobby, Source.Pool, Source.Tournament)
+  private val blameableSources: Set[Source] = Set(Source.Lobby, Source.Tournament)
 
   private def blameable(game: Game): Fu[Boolean] =
     (game.source.exists(blameableSources.contains) && game.hasClock) ?? {
@@ -82,7 +81,7 @@ final class PlaybanApi(
         seconds = nowSeconds - game.movedAt.getSeconds
         if unreasonableTime.exists(seconds >= _)
       } yield save(Outcome.Sitting, userId, RageSit.imbalanceInc(game, flaggerColor)) >>-
-        feedback.sitting(Pov(game, flaggerColor)) >>-
+        feedback.sitting(Pov(game, flaggerColor)) >>
         propagateSitting(game, userId)
 
     // flagged after waiting a short time;
@@ -91,13 +90,13 @@ final class PlaybanApi(
     def sitMoving: Option[Funit] =
       game.player(flaggerColor).userId.ifTrue {
         ~(for {
-          movetimes    <- game moveTimes flaggerColor
-          lastMovetime <- movetimes.lastOption
-          limit        <- unreasonableTime
-        } yield lastMovetime.toSeconds >= limit)
+          movetimes   <- game moveTimes flaggerColor
+          lastUsiTime <- movetimes.lastOption
+          limit       <- unreasonableTime
+        } yield lastUsiTime.toSeconds >= limit)
       } map { userId =>
         save(Outcome.SitMoving, userId, RageSit.imbalanceInc(game, flaggerColor)) >>-
-          feedback.sitting(Pov(game, flaggerColor)) >>-
+          feedback.sitting(Pov(game, flaggerColor)) >>
           propagateSitting(game, userId)
       }
 
@@ -129,18 +128,20 @@ final class PlaybanApi(
             save(Outcome.NoPlay, loserId, RageSit.Reset) >>- feedback.noStart(Pov(game, !w))
           else
             game.clock
-              .filter {
-                _.remainingTime(loser.color) < Centis(1000) &&
+              .filter { c =>
+                val cc = c.currentClockFor(loser.color)
+                cc.time < Centis(1000) &&
+                cc.periods == c.periodsTotal &&
                 game.turnOf(loser) &&
                 Status.Resign.is(status)
               }
               .map { c =>
-                (c.estimateTotalSeconds / 10) atLeast 15 atMost (3 * 60)
+                (c.estimateTotalSeconds / 10) atLeast 30 atMost (3 * 60)
               }
               .exists(_ < nowSeconds - game.movedAt.getSeconds)
               .option {
                 save(Outcome.SitResign, loserId, RageSit.imbalanceInc(game, loser.color)) >>-
-                  feedback.sitting(Pov(game, loser.color)) >>-
+                  feedback.sitting(Pov(game, loser.color)) >>
                   propagateSitting(game, loserId)
               }
               .getOrElse {
@@ -185,8 +186,8 @@ final class PlaybanApi(
         case Outcome.RageQuit | Outcome.Sitting | Outcome.NoPlay | Outcome.Abort => false
         case Outcome.Good                                                        => true
       } match {
-        case c if c.size >= 5 => Some(c.count(identity).toDouble / c.size)
-        case _                => none
+        case c if c.sizeIs >= 5 => Some(c.count(identity).toDouble / c.size)
+        case _                  => none
       }
     }
 
@@ -208,7 +209,7 @@ final class PlaybanApi(
 
   def getRageSit(userId: User.ID) = rageSitCache get userId
 
-  private val rageSitCache = cacheApi[User.ID, RageSit](32768, "playban.ragesit") {
+  private val rageSitCache = cacheApi[User.ID, RageSit](512, "playban.ragesit") {
     _.expireAfterAccess(20 minutes)
       .buildAsyncFuture { userId =>
         coll.primitiveOne[RageSit]($doc("_id" -> userId, "c" $exists true), "c").map(_ | RageSit.empty)
@@ -246,7 +247,7 @@ final class PlaybanApi(
         (delta < 0) ?? {
           if (record.rageSit.isTerrible) funit
           else if (record.rageSit.isVeryBad)
-            userRepo byId record.userId map {
+            userRepo byId record.userId flatMap {
               _ ?? { u =>
                 lila.log("ragesit").info(s"https://lishogi.org/@/${u.username} ${record.rageSit.counterView}")
                 Bus.publish(

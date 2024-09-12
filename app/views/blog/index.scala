@@ -3,7 +3,7 @@ package views.html.blog
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
-import lila.blog.MiniPost
+import lila.blog.{ FullPost, MiniPost }
 import lila.common.paginator.Paginator
 
 import controllers.routes
@@ -14,20 +14,22 @@ object index {
       pager: Paginator[io.prismic.Document]
   )(implicit ctx: Context, prismic: lila.blog.BlogApi.Context) = {
 
-    val primaryPost = (pager.currentPage == 1).??(pager.currentPageResults.headOption)
+    val primaryPost =
+      (pager.currentPage == 1).??(pager.currentPageResults.headOption) flatMap FullPost.fromDocument("blog")
 
     views.html.base.layout(
-      title = "Blog",
+      title = trans.blog.txt(),
       moreCss = cssTag("blog"),
       csp = bits.csp,
-      moreJs = infiniteScrollTag
+      moreJs = infiniteScrollTag,
+      withHrefLangs = lila.i18n.LangList.EnglishJapanese.some
     )(
       main(cls := "page-menu")(
         bits.menu(none),
         div(cls := "blog index page-menu__content page-small box")(
           div(cls := "box__top")(
             h1(trans.officialBlog()),
-            a(cls := "atom", href := routes.Blog.atom(), dataIcon := "3")
+            (ctx.lang.language != "ja") option a(cls := "atom", href := routes.Blog.atom, dataIcon := "3")
           ),
           primaryPost map { post =>
             frag(
@@ -39,7 +41,7 @@ object index {
             pager.currentPageResults flatMap MiniPost.fromDocument("blog", "wide") map { post =>
               primaryPost.fold(true)(_.id != post.id) option bits.postCard(post, "paginated".some, h3)
             },
-            pagerNext(pager, np => routes.Blog.index(np).url)
+            pagerNext(pager, np => langHrefJP(routes.Blog.index(np)))
           )
         )
       )
@@ -64,27 +66,24 @@ object index {
     )
 
   private def latestPost(
-      doc: io.prismic.Document
-  )(implicit ctx: Context, prismic: lila.blog.BlogApi.Context) =
+      post: FullPost
+  )(implicit ctx: Context, prismic: lila.blog.BlogApi.Context) = {
+    val url = routes.Blog.show(post.id, ref = prismic.maybeRef)
     st.article(
-      doc.getText("blog.title").map { title =>
-        h2(a(href := routes.Blog.show(doc.id, doc.slug, prismic.maybeRef))(title))
-      },
-      bits.metas(doc),
+      h2(a(href := url)(post.title)),
+      bits.metas(post),
       div(cls := "parts")(
-        doc.getImage("blog.image", "main").map { img =>
-          div(cls := "illustration")(
-            a(href := routes.Blog.show(doc.id, doc.slug, ref = prismic.maybeRef))(st.img(src := img.url))
-          )
-        },
+        div(cls := "illustration")(
+          a(href := url)(st.img(src := post.image))
+        ),
         div(cls := "body")(
-          doc.getStructuredText("blog.body").map { body =>
+          post.doc.getStructuredText(s"${post.coll}.body").map { body =>
             raw(lila.blog.BlogApi.extract(body))
           },
           p(cls := "more")(
             a(
-              cls := "button",
-              href := routes.Blog.show(doc.id, doc.slug, ref = prismic.maybeRef),
+              cls      := "button",
+              href     := url,
               dataIcon := "G"
             )(
               trans.continueReadingThis()
@@ -93,4 +92,5 @@ object index {
         )
       )
     )
+  }
 }

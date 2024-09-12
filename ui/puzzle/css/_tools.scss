@@ -4,16 +4,16 @@
   background: $c-bg-box;
 
   .ceval-wrap {
-    flex: 0 0 38px;
+    flex: 0 0 40px;
   }
 
   .ceval {
-    height: 38px;
+    height: 40px;
   }
 }
 
 .puzzle__moves {
-  flex: 1 1 10rem;
+  flex: 2 1 0;
   overflow: auto;
   border: $border;
   border-width: 1px 0;
@@ -52,11 +52,11 @@
 .puzzle__feedback {
   @extend %flex-column;
 
-  flex: 1 0 10rem;
+  flex: 1 0 8rem;
 
   @include breakpoint($mq-col2) {
     @include breakpoint($mq-tall) {
-      flex: 1 0 11rem;
+      flex: 1 0 10rem;
     }
   }
 
@@ -71,25 +71,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .no-square {
-    flex: 0 0 64px;
-    height: 64px;
-    margin-right: 10px;
-  }
-  .color-piece {
-    height: 100%;
-    &.sente {
-      background-image: img-url('../images/blackPiece.svg');
-    }
-    &.gote {
-      background-image: img-url('../images/whitePiece.svg');
-    }
-  }
-
-  .is3d & div.no-square {
-    height: 82px;
   }
 
   piece {
@@ -142,9 +123,6 @@
 
 .puzzle__controls {
   @extend %flex-center;
-
-  height: $col3-uniboard-controls;
-  margin: $block-gap 0;
 
   .jumps {
     flex: 1 1 auto;

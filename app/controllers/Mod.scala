@@ -1,8 +1,5 @@
 package controllers
 
-import play.api.data._
-import play.api.data.Forms._
-import play.api.mvc._
 import scala.annotation.nowarn
 
 import lila.api.{ BodyContext, Context }
@@ -10,10 +7,13 @@ import lila.app._
 import lila.chat.Chat
 import lila.common.{ EmailAddress, HTTPRequest, IpAddress }
 import lila.mod.UserSearch
-import lila.report.{ Suspect, Mod => AsMod }
+import lila.report.{ Mod => AsMod, Suspect }
 import lila.security.{ FingerHash, Permission }
-import lila.user.{ User => UserModel, Title }
+import lila.user.{ Title, User => UserModel }
 import ornicar.scalalib.Zero
+import play.api.data._
+import play.api.data.Forms._
+import play.api.mvc._
 import views._
 
 final class Mod(
@@ -108,6 +108,11 @@ final class Mod(
       }
     )
 
+  def kid(username: String) =
+    OAuthMod(_.SetKidMode) { _ => me =>
+      modApi.setKid(me.id, username) map some
+    }(actionResult(username))
+
   def deletePmsAndChats(username: String) =
     OAuthMod(_.Shadowban) { _ => _ =>
       withSuspect(username) { sus =>
@@ -197,13 +202,6 @@ final class Mod(
       }
     }
 
-  def notifySlack(username: String) =
-    OAuthMod(_.ModNote) { _ => me =>
-      withSuspect(username) { sus =>
-        env.slack.api.userMod(user = sus.user, mod = me) map some
-      }
-    }(actionResult(username))
-
   def log =
     Secure(_.ModLog) { implicit ctx => _ =>
       modLogApi.recent map { html.mod.log(_) }
@@ -217,7 +215,7 @@ final class Mod(
   private def communications(username: String, priv: Boolean) =
     Secure { perms =>
       if (priv) perms.ViewPrivateComms else perms.Shadowban
-    } { implicit ctx => me =>
+    } { implicit ctx => _ =>
       OptionFuOk(env.user.repo named username) { user =>
         env.game.gameRepo
           .recentPovsByUserFromSecondary(user, 80)
@@ -240,21 +238,8 @@ final class Mod(
                 .mon(_.mod.comm.segment("notes")) zip
               env.mod.logApi
                 .userHistory(user.id)
-                .mon(_.mod.comm.segment("history")) zip
-              env.report.api.inquiries
-                .ofModId(me.id)
-                .mon(_.mod.comm.segment("inquiries")) map {
-                case chats ~ convos ~ publicLines ~ notes ~ history ~ inquiry =>
-                  if (priv) {
-                    if (!inquiry.??(_.isRecentCommOf(Suspect(user))))
-                      env.slack.api.commlog(mod = me, user = user, inquiry.map(_.oldestAtom.by.value))
-                    if (isGranted(_.MonitoredMod))
-                      env.slack.api.monitorMod(
-                        me.id,
-                        "eyes",
-                        s"checked out @${user.username}'s private comms"
-                      )
-                  }
+                .mon(_.mod.comm.segment("history")) map {
+                case ((((chats, convos), publicLines), notes), history) =>
                   html.mod.communication(
                     user,
                     (povs zip chats) collect {
@@ -262,7 +247,7 @@ final class Mod(
                     } take 15,
                     convos,
                     publicLines,
-                    notes.filter(_.from != "irwin"),
+                    notes,
                     history,
                     priv
                   )
@@ -281,11 +266,9 @@ final class Mod(
     s"${routes.User.show(username).url}${mod ?? "?mod"}"
 
   def refreshUserAssess(username: String) =
-    Secure(_.MarkEngine) { implicit ctx => me =>
+    Secure(_.MarkEngine) { implicit ctx => _ =>
       OptionFuResult(env.user.repo named username) { user =>
-        env.insight.api.ensureLatest(user.id)
-        assessApi.refreshAssessByUsername(username) >>
-          env.irwin.api.requests.fromMod(Suspect(user), AsMod(me)) >>
+        assessApi.refreshAssessOf(user) >>
           userC.renderModZoneActions(username)
       }
     }
@@ -293,7 +276,15 @@ final class Mod(
   def spontaneousInquiry(username: String) =
     Secure(_.SeeReport) { implicit ctx => me =>
       OptionFuResult(env.user.repo named username) { user =>
-        env.report.api.inquiries.spontaneous(AsMod(me), Suspect(user)) inject redirect(user.username, true)
+        env.appeal.api.exists(user) flatMap { isAppeal =>
+          val f =
+            if (isAppeal) env.report.api.inquiries.appeal _
+            else env.report.api.inquiries.spontaneous _
+          f(AsMod(me), Suspect(user)) inject {
+            if (isAppeal) Redirect(routes.Appeal.show(user.username))
+            else redirect(user.username, true)
+          }
+        }
       }
     }
 
@@ -440,12 +431,11 @@ final class Mod(
     }
 
   def chatPanicPost =
-    OAuthMod(_.Shadowban) { req => me =>
+    OAuthMod(_.Shadowban) { req => _ =>
       val v = getBool("v", req)
       env.chat.panic.set(v)
-      env.slack.api.chatPanic(me, v)
       fuccess(().some)
-    }(_ => _ => _ => Redirect(routes.Mod.chatPanic()).fuccess)
+    }(_ => _ => _ => Redirect(routes.Mod.chatPanic).fuccess)
 
   def eventStream =
     OAuthSecure(_.Admin) { _ => _ =>

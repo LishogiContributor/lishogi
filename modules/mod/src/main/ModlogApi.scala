@@ -3,17 +3,20 @@ package lila.mod
 import lila.db.dsl._
 import lila.report.{ Mod, ModId, Report, Suspect }
 import lila.security.Permission
-import lila.user.{ User, UserRepo }
+import lila.user.User
 
-final class ModlogApi(repo: ModlogRepo, userRepo: UserRepo, slackApi: lila.slack.SlackApi)(implicit
+final class ModlogApi(repo: ModlogRepo)(implicit
     ec: scala.concurrent.ExecutionContext
 ) {
 
   private def coll = repo.coll
 
-  import lila.db.BSON.BSONJodaDateTimeHandler
   implicit private val ModlogBSONHandler = reactivemongo.api.bson.Macros.handler[Modlog]
 
+  def streamerDecline(mod: Mod, streamerId: User.ID) =
+    add {
+      Modlog(mod.user.id, streamerId.some, Modlog.streamerDecline)
+    }
   def streamerList(mod: Mod, streamerId: User.ID, v: Boolean) =
     add {
       Modlog(mod.user.id, streamerId.some, if (v) Modlog.streamerList else Modlog.streamerUnlist)
@@ -51,6 +54,11 @@ final class ModlogApi(repo: ModlogRepo, userRepo: UserRepo, slackApi: lila.slack
   def troll(mod: Mod, sus: Suspect) =
     add {
       Modlog.make(mod, sus, if (sus.user.marks.troll) Modlog.troll else Modlog.untroll)
+    }
+
+  def setKidMode(mod: User.ID, kid: User.ID) =
+    add {
+      Modlog(mod, kid.some, Modlog.setKidMode)
     }
 
   def disableTwoFactor(mod: User.ID, user: User.ID) =
@@ -149,6 +157,11 @@ final class ModlogApi(repo: ModlogRepo, userRepo: UserRepo, slackApi: lila.slack
       Modlog(mod, none, Modlog.deleteTeam, details = s"$name / $desc".take(200).some)
     }
 
+  def disableTeam(mod: User.ID, name: String, desc: String) =
+    add {
+      Modlog(mod, none, Modlog.disableTeam, details = s"$name / $desc".take(200).some)
+    }
+
   def terminateTournament(mod: User.ID, name: String) =
     add {
       Modlog(mod, none, Modlog.terminateTournament, details = name.some)
@@ -172,11 +185,6 @@ final class ModlogApi(repo: ModlogRepo, userRepo: UserRepo, slackApi: lila.slack
   def modMessage(mod: User.ID, user: User.ID, subject: String) =
     add {
       Modlog(mod, user.some, Modlog.modMessage, details = subject.some)
-    }
-
-  def coachReview(mod: User.ID, coach: User.ID, author: User.ID) =
-    add {
-      Modlog(mod, coach.some, Modlog.coachReview, details = s"by $author".some)
     }
 
   def cheatDetected(user: User.ID, gameId: String) =
@@ -207,6 +215,11 @@ final class ModlogApi(repo: ModlogRepo, userRepo: UserRepo, slackApi: lila.slack
   def teamEdit(mod: User.ID, teamOwner: User.ID, teamName: String) =
     add {
       Modlog(mod, teamOwner.some, Modlog.teamEdit, details = Some(teamName take 140))
+    }
+
+  def alert(msg: String) =
+    add {
+      Modlog("lishogi", none, Modlog.alert, details = Some(msg take 140))
     }
 
   def recent =
@@ -243,25 +256,7 @@ final class ModlogApi(repo: ModlogRepo, userRepo: UserRepo, slackApi: lila.slack
   private def add(m: Modlog): Funit = {
     lila.mon.mod.log.create.increment()
     lila.log("mod").info(m.toString)
-    coll.insert.one(m) >> slackMonitor(m)
+    coll.insert.one(m).void
   }
 
-  private def slackMonitor(m: Modlog): Funit = {
-    import lila.mod.{ Modlog => M }
-    val icon = m.action match {
-      case M.alt | M.engine | M.booster | M.troll | M.closeAccount          => "thorhammer"
-      case M.unalt | M.unengine | M.unbooster | M.untroll | M.reopenAccount => "large_blue_circle"
-      case M.deletePost | M.deleteTeam | M.terminateTournament              => "x"
-      case M.chatTimeout                                                    => "hourglass_flowing_sand"
-      case M.closeTopic                                                     => "lock"
-      case M.openTopic                                                      => "unlock"
-      case M.modMessage                                                     => "left_speech_bubble"
-      case _                                                                => "gear"
-    }
-    val text = s"""${m.showAction.capitalize} ${m.user.??(u => s"@$u ")}${~m.details}"""
-    userRepo.isMonitoredMod(m.mod) flatMap {
-      _ ?? slackApi.monitorMod(m.mod, icon = icon, text = text)
-    }
-    slackApi.logMod(m.mod, icon = icon, text = text)
-  }
 }

@@ -1,6 +1,6 @@
 package lila.analyse
 
-import shogi.format.pgn.Glyph
+import shogi.format.Glyph
 import lila.tree.Eval._
 import scala.util.chaining._
 
@@ -24,9 +24,8 @@ sealed trait Advice {
         case CpAdvice(judgment, _, _) => judgment.toString
       }) + "." + {
         withBestMove ?? {
-          info.variation.headOption ?? { move =>
-            //s" $move was best." // we would need to take care of notation
-            " The best move was:"
+          info.variation.headOption ?? { usi =>
+            s" Best ${if (usi.contains("*")) "drop" else "move"} was [usi:${ply - 1}.$usi]"
           }
         }
       }
@@ -34,6 +33,7 @@ sealed trait Advice {
   def evalComment: Option[String] = {
     List(prev.evalComment, info.evalComment).flatten mkString " → "
   }.some filter (_.nonEmpty)
+
 }
 
 object Advice {
@@ -43,9 +43,9 @@ object Advice {
     def isBlunder         = this == Judgement.Blunder
   }
   object Judgement {
-    object Inaccuracy extends Judgement(Glyph.MoveAssessment.dubious, "Inaccuracy")
-    object Mistake    extends Judgement(Glyph.MoveAssessment.mistake, "Mistake")
-    object Blunder    extends Judgement(Glyph.MoveAssessment.blunder, "Blunder")
+    object Inaccuracy extends Judgement(Glyph.MoveOrDropAssessment.dubious, "Inaccuracy")
+    object Mistake    extends Judgement(Glyph.MoveOrDropAssessment.mistake, "Mistake")
+    object Blunder    extends Judgement(Glyph.MoveOrDropAssessment.blunder, "Blunder")
     val all = List(Inaccuracy, Mistake, Blunder)
   }
 

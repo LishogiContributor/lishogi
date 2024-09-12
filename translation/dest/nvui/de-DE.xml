@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="textualRepresentation">Textual representation</string>
+  <string name="gameInfo">Spiel-Info</string>
+  <string name="pieces">Figuren</string>
+  <string name="board">Spielbrett</string>
+  <string name="hands">Hände</string>
+  <string name="none" comment="No pieces in hand">None</string>
+  <string name="moves" comment="Followed by list of moves">Züge</string>
+  <string name="currentPosition">Aktuelle Position</string>
+  <string name="moveForm">Move form</string>
+  <string name="commandInput">Command input</string>
+  <string name="commands">Befehle</string>
+  <string name="useArrowKeys">Benutze die Pfeiltasten, um im Spiel zu navigieren</string>
+</resources>

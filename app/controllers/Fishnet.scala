@@ -15,31 +15,16 @@ final class Fishnet(env: Env) extends LilaController(env) {
   private def api    = env.fishnet.api
   private val logger = lila.log("fishnet")
 
-  def evalCachePut(key: String) = {
-    Action.async(parse.json) { req =>
-      api clientUserId lila.fishnet.Client.Key(key) map {
-        case Some(uid) => {
-          req.body
-            .validate[JsObject]
-            .fold(
-              errors => {
-                BadRequest("Missing js object")
-              },
-              data => {
-                env.evalCache.api.evalCacheRouteEndpoint(uid.value, data)
-                Ok("Eval will be processed.")
-              }
-            )
-        }
-        case None => BadRequest("Invalid key")
-      }
-    }
+  def notSupported = Action {
+    Unauthorized(
+      "Your shoginet version is no longer supported. Please restart shoginet to upgrade. (git pull)"
+    )
   }
 
   def acquire(slow: Boolean = false) =
     ClientAction[JsonApi.Request.Acquire] { _ => client =>
       api.acquire(client, slow) addEffect { jobOpt =>
-        lila.mon.fishnet.http.request(jobOpt.isDefined).increment()
+        lila.mon.fishnet.http.request(jobOpt.isDefined).increment().unit
       } map Right.apply
     }
 
@@ -59,15 +44,13 @@ final class Fishnet(env: Env) extends LilaController(env) {
         .postAnalysis(Work.Id(workId), client, data)
         .flatFold(
           {
-            case WorkNotFound    => onComplete
-            case GameNotFound    => onComplete
-            case NotAcquired     => onComplete
-            case WeakAnalysis(_) => onComplete
-            // case WeakAnalysis => fuccess(Left(UnprocessableEntity("Not enough nodes per move")))
-            case e => fuccess(Left(InternalServerError(e.getMessage)))
+            case WorkNotFound => onComplete
+            case GameNotFound => onComplete
+            case NotAcquired  => onComplete
+            case e            => fuccess(Left(InternalServerError(e.getMessage)))
           },
           {
-            case PostAnalysisResult.Complete(analysis) =>
+            case PostAnalysisResult.Complete(_, analysis) =>
               env.round.proxyRepo.updateIfPresent(analysis.id)(_.setAnalysed)
               onComplete
             case _: PostAnalysisResult.Partial    => fuccess(Left(NoContent))
@@ -79,6 +62,18 @@ final class Fishnet(env: Env) extends LilaController(env) {
   def abort(workId: String) =
     ClientAction[JsonApi.Request.Acquire] { _ => client =>
       api.abort(Work.Id(workId), client) inject Right(none)
+    }
+
+  def puzzle(workId: String) =
+    ClientAction[JsonApi.Request.PostPuzzle] { data => client =>
+      api.postPuzzle(Work.Id(workId), client, data) >>
+        api.acquire(client).map(Right.apply)
+    }
+
+  def verifiedPuzzle(workId: String) =
+    ClientAction[JsonApi.Request.PostPuzzleVerified] { data => client =>
+      api.postVerifiedPuzzle(Work.Id(workId), client, data) >>
+        api.acquire(client).map(Right.apply)
     }
 
   def keyExists(key: String) =

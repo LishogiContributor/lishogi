@@ -75,6 +75,10 @@ final class TeamApi(
   def mine(me: User): Fu[List[Team]] =
     cached teamIdsList me.id flatMap teamRepo.byIdsSortPopular
 
+  def isSubscribed = memberRepo.isSubscribed _
+
+  def subscribe = memberRepo.subscribe _
+
   def countTeamsOf(me: User) =
     cached teamIdsList me.id dmap (_.size)
 
@@ -111,22 +115,6 @@ final class TeamApi(
       }
     }
 
-  def joinApi(
-      teamId: Team.ID,
-      me: User,
-      oAuthAppOwner: Option[User.ID],
-      msg: Option[String]
-  ): Fu[Option[Requesting]] =
-    teamRepo.coll.byId[Team](teamId) flatMap {
-      _ ?? { team =>
-        if (team.open || oAuthAppOwner.contains(team.createdBy)) doJoin(team, me) inject Joined(team).some
-        else
-          msg.fold(fuccess[Option[Requesting]](Motivate(team).some)) { txt =>
-            createRequest(team, me, txt) inject Joined(team).some
-          }
-      }
-    }
-
   def requestable(teamId: Team.ID, user: User): Fu[Option[Team]] =
     for {
       teamOption <- teamRepo.coll.byId[Team](teamId)
@@ -147,6 +135,13 @@ final class TeamApi(
       }
     }
 
+  def cancelRequest(teamId: Team.ID, user: User): Fu[Option[Team]] =
+    teamRepo.coll.byId[Team](teamId) flatMap {
+      _ ?? { team =>
+        requestRepo.cancel(team.id, user) map (_ option team)
+      }
+    }
+
   def processRequest(team: Team, request: Request, accept: Boolean): Funit =
     for {
       _ <- requestRepo.coll.delete.one(request)
@@ -155,7 +150,7 @@ final class TeamApi(
       _ <-
         userOption
           .filter(_ => accept)
-          .??(user => doJoin(team, user) >>- notifier.acceptRequest(team, request))
+          .??(user => doJoin(team, user) >> notifier.acceptRequest(team, request))
     } yield ()
 
   def deleteRequestsByUserId(userId: User.ID) =
@@ -177,7 +172,7 @@ final class TeamApi(
             timeline ! Propagate(TeamJoin(user.id, team.id)).toFollowersOf(user.id)
             Bus.publish(JoinTeam(id = team.id, userId = user.id), "team")
           }
-      } recover lila.db.recoverDuplicateKey(_ => ())
+      } recover lila.db.ignoreDuplicateKey
     }
 
   def quit(teamId: Team.ID, me: User): Fu[Option[Team]] =
@@ -250,7 +245,12 @@ final class TeamApi(
     teamRepo.enable(team).void >>- (indexer ! InsertTeam(team))
 
   def disable(team: Team): Funit =
-    teamRepo.disable(team).void >>- (indexer ! RemoveTeam(team.id))
+    teamRepo.disable(team).void >>
+      memberRepo.userIdsByTeam(team.id).map {
+        _ foreach cached.invalidateTeamIds
+      } >>
+      requestRepo.removeByTeam(team.id).void >>-
+      (indexer ! RemoveTeam(team.id))
 
   // delete for ever, with members but not forums
   def delete(team: Team): Funit =

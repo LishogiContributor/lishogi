@@ -1,7 +1,7 @@
 .game-row {
   display: flex;
   align-items: stretch;
-  height: 21rem;
+  min-height: 21rem;
   padding: 0.5em 1em;
   border-bottom: $border;
   position: relative;
@@ -20,6 +20,13 @@
     margin-right: 1em;
     @include breakpoint($mq-not-small) {
       display: none;
+    }
+    &:has(.v-chushogi) {
+      display: flex;
+      align-items: center;
+      @include breakpoint($mq-not-small) {
+        display: none;
+      }
     }
   }
   &__infos {

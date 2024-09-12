@@ -22,7 +22,7 @@ object forms {
       routes.Setup.hook("sri-placeholder")
     ) {
       frag(
-        renderVariant(form, translatedVariantChoicesWithVariants),
+        renderVariant(form, translatedVariantChoices),
         renderTimeMode(form),
         ctx.isAuth option frag(
           div(cls := "mode_choice buttons")(
@@ -45,33 +45,29 @@ object forms {
       )
     }
 
-  def ai(form: Form[_], ratings: Map[Int, Int], validFen: Option[lila.setup.ValidFen])(implicit
+  def ai(form: Form[_], validSfen: Option[lila.setup.ValidSfen])(implicit
       ctx: Context
   ) =
-    layout("ai", trans.playWithTheMachine(), routes.Setup.ai()) {
+    layout("ai", trans.playWithTheMachine(), routes.Setup.ai) {
       frag(
-        renderVariant(form, translatedAiVariantChoices),
-        fenInput(form, true, validFen),
+        renderVariant(form, translatedAiChoices),
+        sfenInput(form, true, validSfen),
         renderTimeMode(form),
         if (ctx.blind)
           frag(
-            renderLabel(form("level"), trans.level()),
+            renderLabel(form("level"), trans.strength()),
             renderSelect(form("level"), lila.setup.AiConfig.levelChoices),
             blindSideChoice(form)
           )
         else
           frag(
             br,
-            trans.level(),
+            trans.strength(),
             div(cls := "level buttons")(
               div(id := "config_level")(
                 renderRadios(form("level"), lila.setup.AiConfig.levelChoices)
               ),
-              div(cls := "ai_info")(
-                ratings.toList.map { case (level, _) =>
-                  div(cls := s"${prefix}level_$level")(trans.aiNameLevelAiLevel("A.I.", level))
-                }
-              )
+              div(cls := "ai_info")
             )
           )
       )
@@ -81,11 +77,11 @@ object forms {
       form: Form[_],
       user: Option[User],
       error: Option[String],
-      validFen: Option[lila.setup.ValidFen]
+      validSfen: Option[lila.setup.ValidSfen]
   )(implicit ctx: Context) =
     layout(
       "friend",
-      (if (user.isDefined) trans.challengeToPlay else trans.playWithAFriend)(),
+      (if (user.isDefined) trans.challengeToPlay else trans.playWithAFriend) (),
       routes.Setup.friend(user map (_.id)),
       error.map(e => raw(e.replace("{{user}}", userIdLink(user.map(_.id)).toString)))
     )(
@@ -93,14 +89,21 @@ object forms {
         user.map { u =>
           userLink(u, cssClass = "target".some)
         },
-        renderVariant(form, translatedVariantChoicesWithVariantsAndFen),
-        fenInput(form, false, validFen),
+        renderVariant(form, translatedVariantChoices),
+        sfenInput(form, false, validSfen),
         renderTimeMode(form),
         ctx.isAuth option div(cls := "mode_choice buttons")(
           renderRadios(form("mode"), translatedModeChoices)
         ),
         blindSideChoice(form)
       )
+    )
+
+  private def translatedSideChoices(implicit ctx: Context) =
+    List(
+      ("sente", standardColorName(shogi.Color.Sente), none),
+      ("random", trans.randomColor.txt(), none),
+      ("gote", standardColorName(shogi.Color.Gote), none)
     )
 
   private def blindSideChoice(form: Form[_])(implicit ctx: Context) =
@@ -122,14 +125,13 @@ object forms {
           frag(
             p(cls := "error")(e),
             br,
-            a(href := routes.Lobby.home(), cls := "button text", dataIcon := "L")(trans.cancel.txt())
+            a(href := routes.Lobby.home, cls := "button text", dataIcon := "L")(trans.cancel.txt())
           )
         }
         .getOrElse {
           postForm(
             action := route,
             novalidate,
-            dataRandomColorVariants,
             dataType := typ,
             dataAnon := ctx.isAnon.option("1")
           )(
@@ -141,10 +143,10 @@ object forms {
                   case (key, name, _) => {
                     submitButton(
                       (typ == "hook") option disabled,
-                      title := name,
-                      cls := s"color-submits__button button button-metal $key",
+                      title   := name,
+                      cls     := s"color-submits__button button button-metal $key",
                       st.name := "color",
-                      value := key
+                      value   := key
                     )(i)
                   }
                 },
@@ -158,9 +160,9 @@ object forms {
             div(cls := perfType.key)(
               trans.perfRatingX(
                 raw(s"""<strong data-icon="${perfType.iconChar}">${me
-                  .perfs(perfType.key)
-                  .map(_.intRating)
-                  .getOrElse("?")}</strong> ${perfType.trans}""")
+                    .perfs(perfType.key)
+                    .map(_.intRating)
+                    .getOrElse("?")}</strong> ${perfType.trans}""")
               )
             )
           }

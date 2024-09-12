@@ -9,7 +9,7 @@
   @return mix(#000, $color, $weight);
 }
 
-$c-site-hue: 37;
+$c-site-hue: 32;
 
 $c-bg-page: hsl($c-site-hue, 10%, 92%); // hsl(210, 17%, 95%)
 $c-bg-high: hsl(0, 0%, 100%);
@@ -21,16 +21,16 @@ $c-bg-zebra2: hsl($c-site-hue, 12%, 92%);
 
 $c-body-gradient: hsl($c-site-hue, 12%, 84%);
 
-$c-font: hsl(0, 0%, 30%);
-$c-font-dim: c-light($c-font, 47%);
+$c-font: hsl(0, 0%, 28%);
+$c-font-dim: c-light($c-font, 42%);
 $c-font-dimmer: c-light($c-font, 70%);
 $c-font-clear: c-light($c-font, 12%);
 $c-font-clearer: c-light($c-font, 0%);
-$c-shade: c-dimmer($c-font, 80%);
+$c-shade: c-dimmer($c-font, 75%);
 $c-font-page: c-light($c-font, 37%);
 
 /* Primary: blue */
-$c-primary: hsl(209, 77%, 46%);
+$c-primary: hsl(209, 73%, 46%);
 $c-primary-dim: c-dimmer($c-primary);
 $c-primary-clear: c-clearer($c-primary);
 $c-primary-over: #fff; /* text over primary background */
@@ -72,6 +72,16 @@ $c-bad-over: $c-error-over;
 $c-fancy: hsl(294, 61%, 62%);
 $c-fancy-over: white; /* text over brag background */
 
+/* move error highlights */
+$c-inaccuracy: hsl(202, 78%, 40%);
+$c-mistake: hsl(41, 100%, 35%);
+$c-blunder: hsl(0, 68%, 50%);
+
+/* good move highlights */
+$c-good-move: hsl(130, 67%, 40%);
+$c-brilliant: hsl(129, 71%, 45%);
+$c-interesting: hsl(307, 80%, 70%);
+
 $c-link: $c-primary;
 $c-link-dim: $c-primary-dim;
 $c-link-clear: $c-primary-clear;
@@ -108,5 +118,14 @@ $border: $border-width $border-style $c-border;
 
 /* Shadows */
 
-$box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.2), 0 1px 5px 0 rgba(0, 0, 0, 0.12);
+$box-shadow:
+  0 2px 2px 0 rgba(0, 0, 0, 0.14),
+  0 3px 1px -2px rgba(0, 0, 0, 0.2),
+  0 1px 5px 0 rgba(0, 0, 0, 0.12);
 // $box-shadow: 0 2px 2px 0 rgba(0,0,0,.157);
+
+$c-bg-sente: $c-font;
+$c-font-sente: $c-bg-zebra;
+
+$c-bg-gote: $c-bg-zebra;
+$c-font-gote: $c-font;

@@ -4,7 +4,6 @@ import shogi.Status
 import org.joda.time.DateTime
 import reactivemongo.api.bson._
 
-import lila.db.BSON.BSONJodaDateTimeHandler
 import lila.db.dsl._
 import lila.user.User
 
@@ -26,6 +25,10 @@ object Query {
 
   val playable: Bdoc = F.status $lt Status.Aborted.id
 
+  val paused: Bdoc = F.status $eq Status.Paused.id
+
+  def paused(u: String): Bdoc = user(u) ++ paused
+
   val mate: Bdoc = status(Status.Mate)
 
   def draw(u: String): Bdoc = user(u) ++ finished ++ F.winnerId.$exists(false)
@@ -38,15 +41,13 @@ object Query {
 
   val frozen: Bdoc = F.status $gte Status.Mate.id
 
-  def imported(u: String): Bdoc = s"${F.pgnImport}.user" $eq u
+  def imported(u: String): Bdoc = s"${F.notationImport}.user" $eq u
 
   val friend: Bdoc = s"${F.source}" $eq Source.Friend.id
 
   def clock(c: Boolean): Bdoc = F.clock $exists c
 
   def clockHistory(c: Boolean): Bdoc = F.senteClockHistory $exists c
-
-  def lastMoveNotDrop: Bdoc = F.historyLastMove $regex "[a-i][1-9][a-i][1-9]"
 
   def user(u: String): Bdoc = F.playerUids $eq u
   def user(u: User): Bdoc   = F.playerUids $eq u.id
@@ -75,7 +76,6 @@ object Query {
 
   def loss(u: String) =
     user(u) ++ $doc(
-      F.status $in Status.finishedWithWinner.map(_.id),
       F.winnerId -> $doc(
         "$exists" -> true,
         "$ne"     -> u
@@ -99,7 +99,7 @@ object Query {
 
   def bothRatingsGreaterThan(v: Int) = $doc("p0.e" $gt v, "p1.e" $gt v)
 
-  def turnsGt(nb: Int) = F.turns $gt nb
+  def pliesGt(nb: Int) = F.plies $gt nb
 
   def checkable = F.checkAt $lt DateTime.now
 
@@ -111,7 +111,7 @@ object Query {
   lazy val variantStandard = variant(shogi.variant.Standard)
 
   val notFromPosition: Bdoc =
-    F.variant $ne shogi.variant.FromPosition.id
+    F.initialSfen $exists false
 
   def createdSince(d: DateTime): Bdoc =
     F.createdAt $gt d

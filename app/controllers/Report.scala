@@ -7,7 +7,7 @@ import views._
 import lila.api.{ BodyContext, Context }
 import lila.app._
 import lila.common.HTTPRequest
-import lila.report.{ Room, Report => ReportModel, Mod => AsMod, Reporter, Suspect }
+import lila.report.{ Mod => AsMod, Report => ReportModel, Reporter, Room, Suspect }
 import lila.user.{ User => UserModel }
 
 final class Report(
@@ -31,18 +31,20 @@ final class Report(
       renderList(room)
     }
 
+  protected[controllers] def getCounts =
+    api.countOpenByRooms zip env.streamer.api.approval.countRequests zip env.appeal.api.countUnread
+
   private def renderList(room: String)(implicit ctx: Context) =
     api.openAndRecentWithFilter(12, Room(room)) zip
-      api.countOpenByRooms zip
-      env.streamer.api.approval.countRequests flatMap { case reports ~ counts ~ streamers =>
+      getCounts flatMap { case (reports, ((counts, streamers), appeals)) =>
         (env.user.lightUserApi preloadMany reports.flatMap(_.report.userIds)) inject
-          Ok(html.report.list(reports, room, counts, streamers))
+          Ok(html.report.list(reports, room, counts, streamers, appeals))
       }
 
   def inquiry(id: String) =
     Secure(_.SeeReport) { _ => me =>
       api.inquiries.toggle(AsMod(me), id) map { newInquiry =>
-        newInquiry.fold(Redirect(routes.Report.list()))(onInquiryStart)
+        newInquiry.fold(Redirect(routes.Report.list))(onInquiryStart)
       }
     }
 
@@ -67,7 +69,7 @@ final class Report(
         }
         inquiry match {
           case None =>
-            goTo.fold(Redirect(routes.Report.list()).fuccess) { s =>
+            goTo.fold(Redirect(routes.Report.list).fuccess) { s =>
               userC.modZoneOrRedirect(s.user.username)
             }
           case Some(prev) =>
@@ -104,7 +106,7 @@ final class Report(
 
   def xfiles(id: String) =
     Secure(_.SeeReport) { _ => _ =>
-      api.moveToXfiles(id) inject Redirect(routes.Report.list())
+      api.moveToXfiles(id) inject Redirect(routes.Report.list)
     }
 
   def currentCheatInquiry(username: String) =

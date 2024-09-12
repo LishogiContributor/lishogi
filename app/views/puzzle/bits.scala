@@ -3,19 +3,29 @@ package html.puzzle
 
 import controllers.routes
 import play.api.i18n.Lang
-import play.api.libs.json.{ JsArray, JsObject, JsString, Json }
+import play.api.libs.json.Json
 
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
-import lila.i18n.{ JsDump, MessageKey }
+import lila.i18n.MessageKey
 import lila.puzzle.{ PuzzleDifficulty, PuzzleTheme }
 
 object bits {
 
-  private val dataLastmove = attr("data-lastmove")
+  private val dataLastUsi = attr("data-lastmove")
 
-  def daily(p: lila.puzzle.Puzzle, fen: shogi.format.FEN, lastMove: String) =
-    views.html.game.bits.miniTag(fen, p.color, lastMove)(span)
+  def miniTag(sfen: shogi.format.forsyth.Sfen, color: shogi.Color = shogi.Sente, lastUsi: String = "")(
+      tag: Tag
+  ): Tag =
+    tag(
+      cls         := "mini-board parse-sfen",
+      dataColor   := color.name,
+      dataSfen    := sfen.value,
+      dataLastUsi := lastUsi
+    )(div(cls     := s"sg-wrap d-9x9 orientation-${color.name}"))
+
+  def daily(p: lila.puzzle.Puzzle, sfen: shogi.format.forsyth.Sfen, lastUsi: String) =
+    miniTag(sfen, p.color, lastUsi)(span)
 
   def jsI18n(implicit lang: Lang) = i18nJsObject(i18nKeys)
 
@@ -55,20 +65,29 @@ object bits {
         trans.puzzle.history()
       ),
       a(cls := active.active("player"), href := routes.Puzzle.ofPlayer())(
-        "From my games"
+        trans.puzzle.fromMyGames()
+      ),
+      a(cls := active.active("submitted"), href := routes.Puzzle.submitted())(
+        trans.puzzle.submissions()
       )
     )
 
   private val i18nKeys: List[MessageKey] = {
     List(
+      trans.black,
+      trans.white,
+      trans.sente,
+      trans.gote,
+      trans.shitate,
+      trans.uwate,
       trans.puzzle.yourPuzzleRatingX,
       trans.puzzle.bestMove,
+      trans.mistake,
       trans.puzzle.keepGoing,
       trans.puzzle.notTheMove,
       trans.puzzle.trySomethingElse,
       trans.yourTurn,
-      trans.puzzle.findTheBestMoveForBlack,
-      trans.puzzle.findTheBestMoveForWhite,
+      trans.puzzle.findTheBestMoveForX,
       trans.viewTheSolution,
       trans.puzzle.puzzleSuccess,
       trans.puzzle.puzzleComplete,
@@ -89,6 +108,9 @@ object bits {
       trans.signUp,
       trans.analysis,
       trans.playWithTheMachine,
+      trans.pressXtoFocus,
+      trans.pressXtoSubmit,
+      trans.levelX,
       // ceval
       trans.depthX,
       trans.usingServerAnalysis,

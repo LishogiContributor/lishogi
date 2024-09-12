@@ -20,11 +20,14 @@ GET   /games/export/:username          controllers.Game.exportByUser(username: S
 GET   /tv                              controllers.Tv.index
 GET   /tv/frame                        controllers.Tv.frame
 GET   /tv/feed                         controllers.Tv.feed
-GET   /tv/channels                     controllers.Tv.channels
+GET   /tv/channels                     controllers.Main.movedPermanently(to: String = "/api/tv/channels")
 GET   /tv/:chanKey                     controllers.Tv.onChannel(chanKey: String)
 GET   /tv/$gameId<\w{8}>/$color<sente|gote>/sides controllers.Tv.sides(gameId: String, color: String)
 GET   /games                           controllers.Tv.games
 GET   /games/:chanKey                  controllers.Tv.gamesChannel(chanKey: String)
+GET   /api/tv/channels                 controllers.Tv.channels
+GET   /api/tv/feed                     controllers.Tv.feed
+GET   /api/tv/:chanKey                 controllers.Tv.apiGamesChannel(chanKey: String)
 
 # Relation
 POST  /rel/follow/:userId              controllers.Relation.follow(userId: String)
@@ -34,13 +37,6 @@ POST  /rel/unblock/:userId             controllers.Relation.unblock(userId: Stri
 GET   /@/:username/following           controllers.Relation.following(username: String, page: Int ?= 1)
 GET   /@/:username/followers           controllers.Relation.followers(username: String, page: Int ?= 1)
 GET   /rel/blocks                      controllers.Relation.blocks(page: Int ?= 1)
-
-# Insight
-# POST  /insights/refresh/:username      controllers.Insight.refresh(username: String)
-# POST  /insights/data/:username         controllers.Insight.json(username: String)
-# GET   /insights/:username              controllers.Insight.index(username: String)
-# GET   /insights/:username/:metric/:dimension controllers.Insight.path(username: String, metric: String, dimension: String, filters: String = "")
-# GET   /insights/:username/:metric/:dimension/*filters controllers.Insight.path(username: String, metric: String, dimension: String, filters: String)
 
 # User subpages
 GET   /@/:username/tournaments/:path   controllers.UserTournament.path(username: String, path: String, page: Int ?= 1)
@@ -61,7 +57,7 @@ GET   /player                          controllers.User.list
 GET   /player/top/:nb/:perfKey         controllers.User.topNb(nb: Int, perfKey: String)
 GET   /player/top/week                 controllers.User.topWeek
 GET   /player/online                   controllers.User.online
-GET   /player/autocomplete             controllers.User.autocomplete
+GET   /api/player/autocomplete         controllers.User.autocomplete
 
 GET   /dasher                          controllers.Dasher.get
 
@@ -70,7 +66,9 @@ GET   /blog                            controllers.Blog.index(page: Int ?= 1)
 GET   /blog/all                        controllers.Blog.all
 GET   /blog/:year                      controllers.Blog.year(year: Int)
 GET   /blog/discuss/:id                controllers.Blog.discuss(id: String)
-GET   /blog/:id/:slug                  controllers.Blog.show(id: String, slug: String, ref: Option[String] ?= None)
+GET   /blog/post/latest                controllers.Blog.latest(ref: Option[String] ?= None)
+GET   /blog/post/:id                   controllers.Blog.show(id: String, ref: Option[String] ?= None)
+GET   /blog/:id/:slug                  controllers.Blog.showBc(id: String, slug: String, ref: Option[String] ?= None)
 GET   /blog.atom                       controllers.Blog.atom
 GET   /blog.txt                        controllers.Blog.sitemapTxt
 
@@ -83,20 +81,20 @@ POST  /training/coordinate/color       controllers.Coordinate.color
 GET   /training                        controllers.Puzzle.home
 GET   /training/daily                  controllers.Puzzle.daily
 GET   /training/frame                  controllers.Puzzle.frame
+GET   /training/export/gif/thumbnail/:id.gif controllers.Export.puzzleThumbnail(id: String)
 GET   /training/themes                 controllers.Puzzle.themes
 GET   /training/of-player              controllers.Puzzle.ofPlayer(name: Option[String] ?= None, page: Int ?= 1)
 GET   /training/dashboard/$days<\d+>   controllers.Puzzle.dashboard(days: Int, path: String = "home")
 GET   /training/dashboard/$days<\d+>/:path  controllers.Puzzle.dashboard(days: Int, path: String)
 GET   /training/replay/$days<\d+>/:theme controllers.Puzzle.replay(days: Int, theme: String)
 GET   /training/history                controllers.Puzzle.history(page: Int ?= 1)
-# GET   /training/batch                  controllers.Puzzle.mobileBcBatchSelect
-# POST  /training/batch                  controllers.Puzzle.mobileBcBatchSolve
-GET   /training/new                    controllers.Puzzle.mobileBcNew
-GET   /training/$numericalId<\d{6,}>/load      controllers.Puzzle.mobileBcLoad(numericalId: Long)
-POST  /training/$numericalId<\d{6,}>/vote      controllers.Puzzle.mobileBcVote(numericalId: Long)
+GET   /training/upload                 controllers.Puzzle.newPuzzlesForm
+POST  /training/upload                 controllers.Puzzle.addPuzzles
+GET   /training/submitted              controllers.Puzzle.submitted(name: Option[String] ?= None, page: Int ?= 1)
+GET   /training/mobile/:themeOrId      controllers.Puzzle.mobileShow(themeOrId: String)
+POST  /training/mobile-solve           controllers.Puzzle.mobileSolve
 GET   /training/:themeOrId             controllers.Puzzle.show(themeOrId: String)
 GET   /training/:theme/$id<\w{5}>      controllers.Puzzle.showWithTheme(theme: String, id: String)
-POST  /training/$numericalId<\d{6,}>/round2    controllers.Puzzle.mobileBcRound(numericalId: Long)
 POST  /training/$id<\w{5}>/vote        controllers.Puzzle.vote(id: String)
 POST  /training/$id<\w{5}>/vote/:theme controllers.Puzzle.voteTheme(id: String, theme: String)
 POST  /training/complete/:theme/$id<\w{5}>  controllers.Puzzle.complete(theme: String, id: String)
@@ -113,84 +111,85 @@ GET   /api/storm/dashboard/:username    controllers.Storm.apiDashboardOf(usernam
 GET   /analysis/help                   controllers.UserAnalysis.help
 GET   /analysis/*something             controllers.UserAnalysis.parseArg(something: String)
 GET   /analysis                        controllers.UserAnalysis.index
-POST  /analysis/pgn                    controllers.UserAnalysis.pgn
+POST  /analysis/notation               controllers.UserAnalysis.notation
 
 # Study
 GET   /study                           controllers.Study.allDefault(page: Int ?= 1)
 GET   /study/all/:order                controllers.Study.all(order: String, page: Int ?= 1)
 GET   /study/mine/:order               controllers.Study.mine(order: String, page: Int ?= 1)
+GET   /study/member/post-game-study/:order  controllers.Study.minePostGameStudies(order: String, page: Int ?= 1)
 GET   /study/member/:order             controllers.Study.mineMember(order: String, page: Int ?= 1)
 GET   /study/public/:order             controllers.Study.minePublic(order: String, page: Int ?= 1)
 GET   /study/private/:order            controllers.Study.minePrivate(order: String, page: Int ?= 1)
 GET   /study/likes/:order              controllers.Study.mineLikes(order: String, page: Int ?= 1)
+GET   /study/post-game-study/:gameId   controllers.Study.postGameStudiesOfDefault(gameId: String, page: Int ?= 1)
+GET   /study/post-game-study/:gameId/:order  controllers.Study.postGameStudiesOf(gameId: String, order: String, page: Int ?= 1)
 GET   /study/by/:username              controllers.Study.byOwnerDefault(username: String, page: Int ?= 1)
 GET   /study/by/:username/:order       controllers.Study.byOwner(username: String, order: String, page: Int ?= 1)
 GET   /study/search                    controllers.Study.search(q: String ?= "", page: Int ?= 1)
 GET   /study/$id<\w{8}>                controllers.Study.show(id: String)
 POST  /study                           controllers.Study.create
 POST  /study/as                        controllers.Study.createAs
-GET   /study/$id<\w{8}>.pgn            controllers.Study.pgn(id: String)
-GET   /study/$id<\w{8}>/$chapterId<\w{8}>.pgn controllers.Study.chapterPgn(id: String, chapterId: String)
-#GET   /study/$id<\w{8}>/$chapterId<\w{8}>.gif controllers.Study.chapterGif(id: String, chapterId: String)
+POST  /study/post-game-study           controllers.Study.postGameStudy
+POST  /study/post-game-study/:gameId   controllers.Study.postGameStudyWithOpponent(gameId: String)
+GET   /study/$id<\w{8}>.kif            controllers.Study.notation(id: String, csa: Boolean ?= false)
+GET   /study/$id<\w{8}>.csa            controllers.Study.notation(id: String, csa: Boolean ?= true)
+GET   /study/$id<\w{8}>/$chapterId<\w{8}>.kif controllers.Study.chapterNotation(id: String, chapterId: String, csa: Boolean ?= false)
+GET   /study/$id<\w{8}>/$chapterId<\w{8}>.csa controllers.Study.chapterNotation(id: String, chapterId: String, csa: Boolean ?= true)
+GET   /study/$id<\w{8}>/$chapterId<\w{8}>.gif controllers.Study.chapterGif(id: String, chapterId: String)
 POST  /study/$id<\w{8}>/delete         controllers.Study.delete(id: String)
 GET   /study/$id<\w{8}>/clone          controllers.Study.cloneStudy(id: String)
 POST  /study/$id<\w{8}>/cloneAplly     controllers.Study.cloneApply(id: String)
 GET   /study/$id<\w{8}>/$chapterId<\w{8}>        controllers.Study.chapter(id: String, chapterId: String)
 GET   /study/$id<\w{8}>/$chapterId<\w{8}>/meta   controllers.Study.chapterMeta(id: String, chapterId: String)
 GET   /study/embed/$id<\w{8}>/$chapterId<\w{8}>  controllers.Study.embed(id: String, chapterId: String)
-POST  /study/$id<\w{8}>/clear-chat     controllers.Study.clearChat(id: String)
-POST  /study/$id<\w{8}>/import-pgn     controllers.Study.importPgn(id: String)
-GET   /study/$id<\w{8}>/multi-board    controllers.Study.multiBoard(id: String, page: Int ?= 1)
-POST  /study/$id<\w{8}>/admin          controllers.Study.admin(id: String)
-GET   /study/topic                     controllers.Study.topics
-POST  /study/topic                     controllers.Study.setTopics
-GET   /study/topic/:topic/:order       controllers.Study.byTopic(topic: String, order: String, page: Int ?= 1)
-GET   /study/topic/autocomplete        controllers.Study.topicAutocomplete
-
-# Relay
-GET   /broadcast                           controllers.Relay.index(page: Int ?= 1)
-GET   /broadcast/new                       controllers.Relay.form
-POST  /broadcast/new                       controllers.Relay.create
-GET   /broadcast/:slug/$id<\w{8}>          controllers.Relay.show(slug: String, id: String)
-GET   /broadcast/:slug/$id<\w{8}>/$chapterId<\w{8}> controllers.Relay.chapter(slug: String, id: String, chapterId: String)
-GET   /broadcast/:slug/$id<\w{8}>/edit     controllers.Relay.edit(slug: String, id: String)
-POST  /broadcast/:slug/$id<\w{8}>/edit     controllers.Relay.update(slug: String, id: String)
-POST  /broadcast/:slug/$id<\w{8}>/reset    controllers.Relay.reset(slug: String, id: String)
-POST  /broadcast/:slug/$id<\w{8}>/clone    controllers.Relay.cloneRelay(slug: String, id: String)
-POST  /broadcast/:slug/$id<\w{8}>/push     controllers.Relay.push(slug: String, id: String)
+POST  /study/$id<\w{8}>/clear-chat      controllers.Study.clearChat(id: String)
+POST  /study/$id<\w{8}>/import-notation controllers.Study.importNotation(id: String)
+GET   /study/$id<\w{8}>/multi-board     controllers.Study.multiBoard(id: String, page: Int ?= 1)
+POST  /study/$id<\w{8}>/admin           controllers.Study.admin(id: String)
+GET   /study/topic                      controllers.Study.topics
+POST  /study/topic                      controllers.Study.setTopics
+GET   /study/topic/:topic/:order        controllers.Study.byTopic(topic: String, order: String, page: Int ?= 1)
+GET   /study/topic/autocomplete         controllers.Study.topicAutocomplete
 
 # Learn
 GET   /learn                           controllers.Learn.index
 POST  /learn/score                     controllers.Learn.score
+POST  /learn/scores                    controllers.Learn.scores
 POST  /learn/reset                     controllers.Learn.reset
 
+# Insights
+GET   /insights                    controllers.Insights.index
+GET   /insights/:username          controllers.Insights.user(username: String, path: String = "")
+GET   /insights/:username/*path    controllers.Insights.user(username: String, path: String)
+
 # Patron
-GET   /patreon                         controllers.Page.patron
 GET   /patron                          controllers.Plan.index
 GET   /patron/thanks                   controllers.Plan.thanks
 GET   /patron/list                     controllers.Plan.list
 POST  /patron/switch                   controllers.Plan.switch
 POST  /patron/cancel                   controllers.Plan.cancel
 POST  /patron/webhook                  controllers.Plan.webhook
-POST  /patron/stripe-checkout          controllers.Plan.stripeCheckout
 POST  /patron/ipn                      controllers.Plan.payPalIpn
 GET   /features                        controllers.Plan.features
+GET   /patreon                         controllers.Main.movedPermanently(to: String = "/patron")
 GET   /donate                          controllers.Main.movedPermanently(to: String = "/patron")
 
 # Practice
-#GET   /practice                                   controllers.Page.notSupported
-#GET   /practice/load/:studyId/:chapterId          controllers.Practice.chapter(studyId: String, chapterId: String)
-#GET   /practice/config                            controllers.Practice.config
-#POST  /practice/config                            controllers.Practice.configSave
-#POST  /practice/reset                             controllers.Practice.reset
-#GET   /practice/:sectionId                        controllers.Practice.showSection(sectionId: String)
-#GET   /practice/:sectionId/:studySlug             controllers.Practice.showStudySlug(sectionId: String, studySlug: String)
-#GET   /practice/:sectionId/:studySlug/:studyId    controllers.Practice.show(sectionId: String, studySlug: String, studyId: String)
-#GET   /practice/:sectionId/:studySlug/:studyId/:chapterId controllers.Practice.showChapter(sectionId: String, studySlug: String, studyId: String, chapterId: String)
-#POST  /practice/complete/:chapterId/:moves        controllers.Practice.complete(chapterId: String, moves: Int)
+GET   /practice                                   controllers.Practice.index
+GET   /practice/load/:studyId/:chapterId          controllers.Practice.chapter(studyId: String, chapterId: String)
+GET   /practice/config                            controllers.Practice.config
+POST  /practice/config                            controllers.Practice.configSave
+POST  /practice/reset                             controllers.Practice.reset
+GET   /practice/:sectionId                        controllers.Practice.showSection(sectionId: String)
+GET   /practice/:sectionId/:studySlug             controllers.Practice.showStudySlug(sectionId: String, studySlug: String)
+GET   /practice/:sectionId/:studySlug/:studyId    controllers.Practice.show(sectionId: String, studySlug: String, studyId: String)
+GET   /practice/:sectionId/:studySlug/:studyId/:chapterId controllers.Practice.showChapter(sectionId: String, studySlug: String, studyId: String, chapterId: String)
+POST  /practice/complete/:chapterId/:moves        controllers.Practice.complete(chapterId: String, moves: Int)
 
 # Streamer
 GET   /streamer                        controllers.Streamer.index(page: Int ?= 1)
+GET   /api/streamer/featured           controllers.Streamer.featured
 GET   /streamer/live                   controllers.Streamer.live
 GET   /streamer/edit                   controllers.Streamer.edit
 POST  /streamer/new                    controllers.Streamer.create
@@ -216,7 +215,7 @@ GET   /$fullId<\w{12}>/mini                      controllers.Round.miniFullId(fu
 GET   /$gameId<\w{8}>/edit                       controllers.Editor.game(gameId: String)
 GET   /$gameId<\w{8}>/$color<sente|gote>/analysis controllers.UserAnalysis.game(gameId: String, color: String)
 POST  /$fullId<\w{12}>/forecasts                  controllers.UserAnalysis.forecasts(fullId: String)
-POST  /$fullId<\w{12}>/forecasts/:uci            controllers.UserAnalysis.forecastsOnMyTurn(fullId: String, uci: String)
+POST  /$fullId<\w{12}>/forecasts/:usi            controllers.UserAnalysis.forecastsOnMyTurn(fullId: String, usi: String)
 POST  /$fullId<\w{12}>/resign                    controllers.Round.resign(fullId: String)
 
 GET   /embed/$gameId<\w{8}>                      controllers.Analyse.embed(gameId: String, color: String = "sente")
@@ -246,6 +245,7 @@ GET   /tournament/$id<\w{8}>/team/:team       controllers.Tournament.teamInfo(id
 POST  /tournament/$id<\w{8}>/terminate        controllers.Tournament.terminate(id: String)
 GET   /tournament/$id<\w{8}>/edit             controllers.Tournament.edit(id: String)
 POST  /tournament/$id<\w{8}>/edit             controllers.Tournament.update(id: String)
+GET   /tournament/$id<\w{8}>/teams            controllers.Tournament.battleTeams(id: String)
 GET   /tournament/help                        controllers.Tournament.help(system: Option[String] ?= None)
 GET   /tournament/leaderboard                 controllers.Tournament.leaderboard
 GET   /tournament/shields                     controllers.Tournament.shields
@@ -259,28 +259,14 @@ POST  /tournament/manager/$id<\w{8}>          controllers.TournamentCrud.update(
 GET   /tournament/manager/new                 controllers.TournamentCrud.form
 POST  /tournament/manager                     controllers.TournamentCrud.create
 
-# Swiss
-# GET   /swiss                                  controllers.Swiss.home
-# GET   /swiss/new/:teamId                      controllers.Swiss.form(teamId: String)
-# POST  /swiss/new/:teamId                      controllers.Swiss.create(teamId: String)
-# GET   /swiss/$id<\w{8}>                       controllers.Swiss.show(id: String)
-# GET   /swiss/$id<\w{8}>.trf                   controllers.Swiss.exportTrf(id: String)
-# POST  /swiss/$id<\w{8}>/join                  controllers.Swiss.join(id: String)
-# POST  /swiss/$id<\w{8}>/withdraw              controllers.Swiss.withdraw(id: String)
-# GET   /swiss/$id<\w{8}>/edit                  controllers.Swiss.edit(id: String)
-# POST  /swiss/$id<\w{8}>/edit                  controllers.Swiss.update(id: String)
-# POST  /swiss/$id<\w{8}>/terminate             controllers.Swiss.terminate(id: String)
-# GET   /swiss/$id<\w{8}>/standing/:page        controllers.Swiss.standing(id: String, page: Int)
-# GET   /swiss/$id<\w{8}>/page-of/:user         controllers.Swiss.pageOf(id: String, user: String)
-# GET   /swiss/$id<\w{8}>/player/:user          controllers.Swiss.player(id: String, user: String)
-# POST  /swiss/$id<\w{8}>/schedule-next-round   controllers.Swiss.scheduleNextRound(id: String)
-
 # Simul
 GET   /simul                                  controllers.Simul.home
 GET   /simul/new                              controllers.Simul.form
 POST  /simul/new                              controllers.Simul.create
 GET   /simul/reload                           controllers.Simul.homeReload
 GET   /simul/$id<\w{8}>                       controllers.Simul.show(id: String)
+GET   /simul/$id<\w{8}>/edit                  controllers.Simul.edit(id: String)
+POST  /simul/$id<\w{8}>/edit                  controllers.Simul.update(id: String)
 POST  /simul/$id<\w{8}>/host-ping             controllers.Simul.hostPing(id: String)
 POST  /simul/$id<\w{8}>/accept/:user          controllers.Simul.accept(id: String, user: String)
 POST  /simul/$id<\w{8}>/reject/:user          controllers.Simul.reject(id: String, user: String)
@@ -288,7 +274,6 @@ POST  /simul/$id<\w{8}>/start                 controllers.Simul.start(id: String
 POST  /simul/$id<\w{8}>/abort                 controllers.Simul.abort(id: String)
 POST  /simul/$id<\w{8}>/join/:variant         controllers.Simul.join(id: String, variant: String)
 POST  /simul/$id<\w{8}>/withdraw              controllers.Simul.withdraw(id: String)
-POST  /simul/$id<\w{8}>/set-text              controllers.Simul.setText(id: String)
 
 # Team
 GET   /team                                   controllers.Team.home(page: Int ?= 1)
@@ -314,10 +299,12 @@ POST  /team/:id/kick/:user                    controllers.Team.kickUser(id: Stri
 GET   /team/:id/leaders                       controllers.Team.leadersForm(id: String)
 POST  /team/:id/leaders                       controllers.Team.leaders(id: String)
 POST  /team/:id/close                         controllers.Team.close(id: String)
+POST  /team/:id/disable                       controllers.Team.disable(id: String)
 GET   /team/:id/users                         controllers.Team.legacyUsers(id: String)
 GET   /team/:id/tournaments                   controllers.Team.tournaments(id: String)
 GET   /team/:id/pm-all                        controllers.Team.pmAll(id: String)
 POST  /team/:id/pm-all                        controllers.Team.pmAllSubmit(id: String)
+POST  /team/:id/subscribe                     controllers.Team.subscribe(id: String)
 # Team API
 GET   /api/team/all                           controllers.Team.apiAll(page: Int ?= 1)
 GET   /api/team/search                        controllers.Team.apiSearch(text: String ?= "", page: Int ?= 1)
@@ -330,20 +317,22 @@ GET   /api/team/:id/arena                     controllers.Tournament.byTeam(id: 
 POST  /$gameId<\w{8}>/request-analysis        controllers.Analyse.requestAnalysis(gameId: String)
 
 GET   /game/export/$gameId<\w{8}>                             controllers.Game.exportOne(gameId: String)
-GET   /game/export/$gameId<\w{8}>.pgn                         controllers.Game.exportOne(gameId: String)
-# GET   /game/export/png/$gameId<\w{8}>.png                     controllers.Export.legacyGameThumbnail(gameId: String)
-# GET   /game/export/gif/thumbnail/$gameId<\w{8}>.gif           controllers.Export.gameThumbnail(gameId: String)
-# GET   /game/export/gif/$gameId<\w{8}>.gif                     controllers.Export.gif(gameId: String, color: String = "sente")
-# GET   /game/export/gif/$color<sente|gote>/$gameId<\w{8}>.gif controllers.Export.gif(gameId: String, color: String)
+GET   /game/export/$gameId<\w{8}>.kif                         controllers.Game.exportOne(gameId: String)
+GET   /game/export/png/$gameId<\w{8}>.png                     controllers.Export.legacyGameThumbnail(gameId: String)
+GET   /game/export/gif/thumbnail/$gameId<\w{8}>.gif           controllers.Export.gameThumbnail(gameId: String)
+GET   /game/export/gif/$gameId<\w{8}>.gif                     controllers.Export.gif(gameId: String, color: String = "sente")
+GET   /game/export/gif/$color<sente|gote>/$gameId<\w{8}>.gif controllers.Export.gif(gameId: String, color: String)
 
 # Fishnet
-POST  /fishnet/acquire                        controllers.Fishnet.acquire(slow: Boolean ?= false)
-POST  /fishnet/move/$workId<\w{8}>            controllers.Fishnet.move(workId: String)
-POST  /fishnet/analysis/$workId<\w{8}>        controllers.Fishnet.analysis(workId: String, slow: Boolean ?= false, stop: Boolean ?= false)
-POST  /fishnet/abort/$workId<\w{8}>           controllers.Fishnet.abort(workId: String)
-GET   /fishnet/key/$key<\w{8}>                controllers.Fishnet.keyExists(key: String)
-POST  /fishnet/evalCache/$key<\w{8}>          controllers.Fishnet.evalCachePut(key: String)
-GET   /fishnet/status                         controllers.Fishnet.status
+POST  /fishnet/acquire                         controllers.Fishnet.notSupported
+POST  /shoginet/acquire                        controllers.Fishnet.acquire(slow: Boolean ?= false)
+POST  /shoginet/move/$workId<\w{8}>            controllers.Fishnet.move(workId: String)
+POST  /shoginet/analysis/$workId<\w{8}>        controllers.Fishnet.analysis(workId: String, slow: Boolean ?= false, stop: Boolean ?= false)
+POST  /shoginet/puzzle/$workId<\w{8}>          controllers.Fishnet.puzzle(workId: String)
+POST  /shoginet/puzzle-verification/$workId<\w{8}> controllers.Fishnet.verifiedPuzzle(workId: String)
+POST  /shoginet/abort/$workId<\w{8}>           controllers.Fishnet.abort(workId: String)
+GET   /shoginet/key/$key<\w{8}>                controllers.Fishnet.keyExists(key: String)
+GET   /shoginet/status                         controllers.Fishnet.status
 
 # Pref
 POST  /pref/:name                             controllers.Pref.set(name: String)
@@ -360,7 +349,7 @@ GET   /setup/hook                      controllers.Setup.hookForm
 POST  /setup/hook/:sri/like/:gameId    controllers.Setup.like(sri: String, gameId: String)
 POST  /setup/hook/:sri                 controllers.Setup.hook(sri: String)
 GET   /setup/filter                    controllers.Setup.filterForm
-GET   /setup/validate-fen              controllers.Setup.validateFen
+GET   /setup/validate-sfen             controllers.Setup.validateSfen
 
 # Challenge
 GET   /challenge                       controllers.Challenge.all
@@ -372,7 +361,8 @@ POST  /challenge/$id<\w{8}>/to-friend  controllers.Challenge.toFriend(id: String
 POST  /challenge/rematch-of/$id<\w{8}> controllers.Challenge.rematchOf(id: String)
 
 # Notify
-GET /notify                            controllers.Notify.recent(page: Int ?= 1)
+GET  /notify                           controllers.Notify.recent(page: Int ?= 1)
+POST /notify/clear                     controllers.Notify.clear
 
 # Video
 GET   /video                           controllers.Video.index
@@ -413,6 +403,7 @@ POST  /mod/:username/booster/:v        controllers.Mod.booster(username: String,
 POST  /mod/:username/troll/:v          controllers.Mod.troll(username: String, v: Boolean)
 POST  /mod/:username/delete-pms-and-chats controllers.Mod.deletePmsAndChats(username: String)
 POST  /mod/:username/warn              controllers.Mod.warn(username: String, subject: String)
+POST  /mod/:username/kid               controllers.Mod.kid(username: String)
 POST  /mod/:username/disable-2fa       controllers.Mod.disableTwoFactor(username: String)
 POST  /mod/:username/close             controllers.Mod.closeAccount(username: String)
 POST  /mod/:username/reopen            controllers.Mod.reopenAccount(username: String)
@@ -427,7 +418,6 @@ GET   /mod/log                         controllers.Mod.log
 GET   /mod/table                       controllers.Mod.table
 POST  /mod/:username/refreshUserAssess controllers.Mod.refreshUserAssess(username: String)
 POST  /mod/:username/email             controllers.Mod.setEmail(username: String)
-POST  /mod/:username/notify-slack      controllers.Mod.notifySlack(username: String)
 GET   /mod/leaderboard                 controllers.Mod.gamify
 GET   /mod/leaderboard/:period         controllers.Mod.gamifyPeriod(period: String)
 GET   /mod/search                      controllers.Mod.search
@@ -443,11 +433,6 @@ POST  /mod/print/ban/:v/:fh            controllers.Mod.printBan(v: Boolean, fh: 
 GET   /mod/ip/:ip                      controllers.Mod.singleIp(ip: String)
 POST  /mod/ip/ban/:v/:ip               controllers.Mod.singleIpBan(v: Boolean, ip: String)
 GET   /api/stream/mod                  controllers.Mod.eventStream
-
-# Irwin
-GET   /irwin                           controllers.Irwin.dashboard
-POST  /irwin/report                    controllers.Irwin.saveReport
-GET   /api/stream/irwin                controllers.Irwin.eventStream
 
 # Bookmark
 POST  /bookmark/$gameId<\w{8}>     controllers.Bookmark.toggle(gameId: String)
@@ -487,10 +472,7 @@ POST  /coach/edit                      controllers.Coach.editApply
 GET   /coach/picture/edit              controllers.Coach.picture
 POST  /coach/picture/upload            controllers.Coach.pictureApply
 POST  /coach/picture/delete            controllers.Coach.pictureDelete
-POST  /coach/approve-review/:id        controllers.Coach.approveReview(id: String)
-POST  /coach/mod-review/:id            controllers.Coach.modReview(id: String)
 GET   /coach/:username                 controllers.Coach.show(username: String)
-POST  /coach/:username/review          controllers.Coach.review(username: String)
 GET   /coach/:lang/:order              controllers.Coach.search(lang: String, order: String, page: Int ?= 1)
 
 # Clas
@@ -531,11 +513,10 @@ GET   /image/:id/:hash/:name           controllers.Main.image(id: String, hash: 
 # Paste
 GET   /paste                           controllers.Importer.importGame
 POST  /import                          controllers.Importer.sendGame
-GET   /import/master/$id<\w{8}>/:color controllers.Importer.masterGame(id: String, color: String)
 
 # Edit
 GET   /editor.json                     controllers.Editor.data
-GET   /editor/*urlFen                  controllers.Editor.load(urlFen: String)
+GET   /editor/*something               controllers.Editor.parseArg(something: String)
 GET   /editor                          controllers.Editor.index
 
 # Report
@@ -550,13 +531,24 @@ POST  /report/:id/process              controllers.Report.process(id: String)
 POST  /report/:id/xfiles               controllers.Report.xfiles(id: String)
 GET   /report/:username/cheat-inquiry  controllers.Report.currentCheatInquiry(username: String)
 
+# Appeal
+GET   /appeal                          controllers.Appeal.home
+POST  /appeal                          controllers.Appeal.post
+GET   /appeal/queue                    controllers.Appeal.queue
+GET   /appeal/:username                controllers.Appeal.show(username: String)
+POST  /appeal/:username                controllers.Appeal.reply(username: String)
+POST  /appeal/:username/act/:action    controllers.Appeal.act(username: String, action: String)
+
 # Stats
 GET    /stat/rating/distribution/:perf controllers.Stat.ratingDistribution(perf: String)
 
 # API
-#GET   /api                             controllers.Api.index
+GET   /api                             controllers.Api.index
 POST  /api/users                       controllers.Api.usersByIds
 GET   /api/user/puzzle-activity        controllers.Puzzle.activity
+GET   /api/puzzle/daily                controllers.Puzzle.apiDaily
+GET   /api/puzzle/activity             controllers.Puzzle.activity
+GET   /api/puzzle/dashboard/:days      controllers.Puzzle.apiDashboard(days: Int)
 GET   /api/user/:name/tournament/created controllers.Api.tournamentsByOwner(name: String)
 GET   /api/user/:name                  controllers.Api.user(name: String)
 GET   /api/user/:name/activity         controllers.Api.activity(name: String)
@@ -572,8 +564,6 @@ GET   /api/tournament/:id/games        controllers.Api.tournamentGames(id: Strin
 GET   /api/tournament/:id/results      controllers.Api.tournamentResults(id: String)
 GET   /api/tournament/:id/teams        controllers.Api.tournamentTeams(id: String)
 POST  /api/tournament                  controllers.Tournament.apiCreate
-POST  /api/swiss/new/:teamId           controllers.Swiss.apiCreate(teamId: String)
-GET   /api/swiss/:id/games             controllers.Api.swissGames(id: String)
 GET   /api/simul                       controllers.Simul.apiList
 GET   /api/status                      controllers.Api.status
 GET   /api/users/status                controllers.Api.usersStatus
@@ -592,7 +582,6 @@ POST  /api/challenge/:user             controllers.Challenge.apiCreate(user: Str
 POST  /api/challenge/$id<\w{8}>/accept  controllers.Challenge.apiAccept(id: String)
 POST  /api/challenge/$id<\w{8}>/decline controllers.Challenge.apiDecline(id: String)
 GET   /api/cloud-eval                  controllers.Api.cloudEval
-GET   /api/broadcast                   controllers.Relay.apiIndex
 
 GET   /api/games/user/:username        controllers.Game.apiExportByUser(username: String)
 
@@ -601,13 +590,15 @@ GET   /api/user/:name/games            controllers.Api.userGames(name: String)
 
 # Bot API
 GET   /api/bot/game/stream/:id         controllers.PlayApi.botGameStream(id: String)
-POST  /api/bot/game/:id/move/:uci      controllers.PlayApi.botMove(id: String, uci: String, offeringDraw: Option[Boolean] ?= None)
+POST  /api/bot/game/:id/move/:usi      controllers.PlayApi.botMove(id: String, usi: String, offeringDraw: Option[Boolean] ?= None)
+GET   /api/bot/online                  controllers.PlayApi.botOnlineApi
 POST  /api/bot/*cmd                    controllers.PlayApi.botCommand(cmd: String)
+GET   /api/bot/*cmd                    controllers.PlayApi.botCommandGet(cmd: String)
 GET   /player/bots                     controllers.PlayApi.botOnline
 
 # Board API
 GET   /api/board/game/stream/:id        controllers.PlayApi.boardGameStream(id: String)
-POST  /api/board/game/:id/move/:uci     controllers.PlayApi.boardMove(id: String, uci: String, offeringDraw: Option[Boolean] ?= None)
+POST  /api/board/game/:id/move/:usi     controllers.PlayApi.boardMove(id: String, usi: String, offeringDraw: Option[Boolean] ?= None)
 POST  /api/board/seek                   controllers.Setup.boardApiHook
 POST  /api/board/*cmd                   controllers.PlayApi.boardCommand(cmd: String)
 
@@ -633,24 +624,22 @@ GET   /account/reopen                  controllers.Account.reopen
 POST  /account/reopen/send             controllers.Account.reopenApply
 GET   /account/reopen/sent/:email      controllers.Account.reopenSent(email: String)
 GET   /account/reopen/login/:token     controllers.Account.reopenLogin(token: String)
-# App BC
+# App
 GET   /account/security                controllers.Account.security
 POST  /account/signout/:sessionId      controllers.Account.signout(sessionId: String)
 GET   /account/info                    controllers.Account.info
 GET   /account/now-playing             controllers.Account.nowPlaying
 
 # OAuth
+GET   /oauth                           controllers.OAuth.authorize
+POST  /oauth                           controllers.OAuth.authorizeApply
+POST  /oauth/revoke-client             controllers.OAuth.revokeClient
+POST  /api/token                       controllers.OAuth.tokenApply
+DELETE /api/token                      controllers.OAuth.tokenRevoke
 GET   /account/oauth/token             controllers.OAuthToken.index
 GET   /account/oauth/token/create      controllers.OAuthToken.create
 POST  /account/oauth/token/create      controllers.OAuthToken.createApply
 POST  /account/oauth/token/:id/delete  controllers.OAuthToken.delete(id: String)
-GET   /account/oauth/app               controllers.OAuthApp.index
-GET   /account/oauth/app/create        controllers.OAuthApp.create
-POST  /account/oauth/app/create        controllers.OAuthApp.createApply
-GET   /account/oauth/app/:id/edit      controllers.OAuthApp.edit(id: String)
-POST  /account/oauth/app/:id/edit      controllers.OAuthApp.update(id: String)
-POST  /account/oauth/app/:id/delete    controllers.OAuthApp.delete(id: String)
-POST  /account/oauth/app/:id/revoke    controllers.OAuthApp.revoke(id: String)
 
 # Events
 GET   /event/$id<\w{8}>                controllers.Event.show(id: String)
@@ -664,13 +653,7 @@ POST  /event/manager                   controllers.Event.create
 # Misc
 GET   /captcha/$id<\w{8}>              controllers.Main.captchaCheck(id: String)
 GET   /developers                      controllers.Main.webmasters
-GET   /mobile                          controllers.Main.mobile
 GET   /lag                             controllers.Main.lag
-GET   /get-fishnet                     controllers.Main.getFishnet
-GET   /costs                           controllers.Main.costs
-GET   /verify-title                    controllers.Main.verifyTitle
-GET   /InstantChess.com                controllers.Main.instantChess
-GET   /daily-puzzle-slack              controllers.Main.dailyPuzzleSlackApp
 
 # Dev
 GET   /dev/cli                         controllers.Dev.cli
@@ -692,34 +675,29 @@ GET   /contact                         controllers.Main.contact
 GET   /about                           controllers.Page.about
 GET   /faq                             controllers.Main.faq
 GET   /source                          controllers.Page.source
-GET   /qa                              controllers.Main.movedPermanently(to: String = "/faq")
 GET   /contribute                      controllers.Page.help
 GET   /help                            controllers.Main.movedPermanently(to: String = "/contact")
-GET   /qa/:id/:slug                    controllers.Main.legacyQaQuestion(id: Int, slug: String)
-GET   /how-to-cheat                    controllers.Page.howToCheat
 GET   /ads                             controllers.Page.ads
+GET   /donations                       controllers.Page.donations
 GET   /resources                       controllers.Page.resources
 GET   /page/:bookmark                  controllers.Page.loneBookmark(bookmark: String)
+GET   /explanation/impasse             controllers.Page.impasse
+GET   /explanation/storm               controllers.Page.storm
+GET   /explanation/tsume               controllers.Page.tsume
+GET   /explanation/kif                 controllers.Page.kif
+GET   /explanation/csa                 controllers.Page.csa
 
 # Variants
 GET   /variant                         controllers.Page.variantHome
 GET   /variant/:key                    controllers.Page.variant(key)
 
 # Help
-GET   /help/master                     controllers.Page.notSupported
-
 GET   /prismic-preview                 controllers.Blog.preview(token: String)
 POST  /jslog/$id<\w{12}>               controllers.Main.jslog(id: String)
 POST  /jsmon/:event                    controllers.Main.jsmon(event: String)
-
-#GET   /swag                            controllers.Main.movedPermanently(to: String = "https://shop.spreadshirt.com/lichess-org")
-#GET   /yt                              controllers.Main.movedPermanently(to: String = "https://www.youtube.com/channel/UCr6RfQga70yMM9-nuzAYTsA")
 
 GET   /assets/_$v<\w{6}>/*file         controllers.Main.devAsset(v, path="public", file)
 GET   /assets/*file                    controllers.ExternalAssets.at(path="public", file)
 
 GET   /manifest.json                   controllers.Main.manifest
 GET   /robots.txt                      controllers.Main.robots
-
-OPTIONS /                              controllers.Options.root
-OPTIONS /*url                          controllers.Options.all(url: String)

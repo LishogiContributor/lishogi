@@ -59,16 +59,24 @@
   }
 }
 
-/* atm only chrome supports min-content, max-content */
-@mixin proper-grid {
-  @supports (height: max-content) {
-    @content;
+@mixin board-width($prop: width) {
+  #{$prop}: calc((100% - #{$hands-gap}) / 11 * 9);
+  .main-v-minishogi &,
+  .main-v-kyotoshogi & {
+    #{$prop}: calc((100% - #{$hands-gap}) / 7 * 5);
+  }
+  .main-v-chushogi & {
+    #{$prop}: 100%;
   }
 }
 
-@mixin body-fixed-scroll {
-  body {
-    /* prevents scroll bar flicker when dragging a piece out */
-    overflow-y: scroll;
+@mixin hand-width($prop: width) {
+  #{$prop}: calc((100% - #{$hands-gap}) / 11 + #{$hand-gap});
+  .main-v-minishogi &,
+  .main-v-kyotoshogi & {
+    #{$prop}: calc((100% - #{$hands-gap}) / 7 + #{$hand-gap});
+  }
+  .main-v-chushogi & {
+    #{$prop}: 0;
   }
 }

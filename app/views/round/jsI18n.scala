@@ -1,23 +1,22 @@
 package views.html.round
 
-import play.api.i18n.Lang
-
+import lila.api.Context
 import lila.app.templating.Environment._
 import lila.i18n.{ I18nKeys => trans }
 
 object jsI18n {
 
-  def apply(g: lila.game.Game)(implicit lang: Lang) =
+  def apply(g: lila.game.Game)(implicit ctx: Context) =
     i18nJsObject {
       baseTranslations ++ {
         if (g.isCorrespondence) correspondenceTranslations
         else realtimeTranslations
       } ++ {
-        g.variant.exotic ?? variantTranslations
+        g.variant.chushogi ?? chushogiTranslations
       } ++ {
         g.isTournament ?? tournamentTranslations
       } ++ {
-        g.isSwiss ?? swissTranslations
+        ctx.blind ?? nvuiTranslations
       }
     }
 
@@ -29,10 +28,19 @@ object jsI18n {
 
   private val realtimeTranslations = Vector(trans.nbSecondsToPlayTheFirstMove).map(_.key)
 
-  private val variantTranslations = Vector(
-    trans.kingInTheCenter,
-    trans.threeChecks,
-    trans.variantEnding
+  private val chushogiTranslations = Vector(
+    trans.royalsLost,
+    trans.bareKing,
+    trans.gameAdjourned,
+    trans.offerAdjournment,
+    trans.adjournmentOfferSent,
+    trans.yourOpponentOffersAnAdjournment,
+    trans.offerResumption,
+    trans.acceptResumption,
+    trans.resumptionOfferSent,
+    trans.yourOpponentProposesResumption,
+    trans.makeASealedMove,
+    trans.waitingForASealedMove
   ).map(_.key)
 
   private val tournamentTranslations = Vector(
@@ -41,14 +49,15 @@ object jsI18n {
     trans.standing
   ).map(_.key)
 
-  private val swissTranslations = Vector(
-    trans.backToTournament,
-    trans.viewTournament
-  ).map(_.key)
-
   private val baseTranslations = Vector(
+    trans.black,
+    trans.white,
+    trans.sente,
+    trans.gote,
+    trans.shitate,
+    trans.uwate,
     trans.flipBoard,
-    trans.aiNameLevelAiLevel,
+    trans.levelX,
     trans.yourTurn,
     trans.abortGame,
     trans.proposeATakeback,
@@ -58,7 +67,6 @@ object jsI18n {
     trans.opponentLeftChoices,
     trans.forceResignation,
     trans.forceDraw,
-    trans.threefoldRepetition,
     trans.claimADraw,
     trans.drawOfferSent,
     trans.cancel,
@@ -70,15 +78,18 @@ object jsI18n {
     trans.thisAccountViolatedTos,
     trans.gameAborted,
     trans.checkmate,
-    trans.whiteResigned,
-    trans.blackResigned,
+    trans.xResigned,
     trans.stalemate,
-    trans.whiteLeftTheGame,
-    trans.blackLeftTheGame,
+    trans.check,
+    trans.repetition,
+    trans.perpetualCheck,
+    trans.xLeftTheGame,
+    trans.xDidntMove,
     trans.draw,
+    trans.impasse,
     trans.timeOut,
-    trans.whiteIsVictorious,
-    trans.blackIsVictorious,
+    trans.variantEnding,
+    trans.xIsVictorious,
     trans.withdraw,
     trans.rematch,
     trans.rematchOfferSent,
@@ -88,15 +99,29 @@ object jsI18n {
     trans.newOpponent,
     trans.confirmMove,
     trans.viewRematch,
-    trans.whitePlays,
-    trans.blackPlays,
+    trans.xPlays,
     trans.giveNbSeconds,
     trans.preferences.giveMoreTime,
     trans.gameOver,
     trans.analysis,
+    trans.postGameStudy,
+    trans.standardStudy,
+    trans.postGameStudyExplanation,
+    trans.studyWithOpponent,
+    trans.studyOfPlayers,
+    trans.studyWith,
+    trans.optional,
+    trans.postGameStudiesOfGame,
+    trans.study.createStudy,
+    trans.study.searchByUsername,
     trans.yourOpponentWantsToPlayANewGameWithYou,
-    trans.youPlayTheWhitePieces,
-    trans.youPlayTheBlackPieces,
-    trans.itsYourTurn
+    trans.youPlayAsX,
+    trans.itsYourTurn,
+    trans.enteringKing,
+    trans.invadingPieces,
+    trans.totalImpasseValue,
+    trans.fromPosition,
+    trans.pressXtoFocus,
+    trans.pressXtoSubmit
   ).map(_.key)
 }

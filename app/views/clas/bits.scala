@@ -21,7 +21,7 @@ object bits {
       if (isGranted(_.Teacher))
         main(cls := "page-menu")(
           st.nav(cls := "page-menu__menu subnav")(
-            a(cls := active.toOption.map(_.active("classes")), href := routes.Clas.index())(
+            a(cls := active.toOption.map(_.active("classes")), href := routes.Clas.index)(
               trans.clas.lishogiClasses()
             ),
             active.left.toOption.map { clas =>
@@ -29,7 +29,7 @@ object bits {
                 a(cls := "active", href := routes.Clas.show(clas.clas.id.value))(clas.clas.name),
                 clas.students.map { s =>
                   a(
-                    cls := List("student" -> true, "active" -> student.exists(s.is)),
+                    cls  := List("student" -> true, "active" -> student.exists(s.is)),
                     href := routes.Clas.studentShow(clas.clas.id.value, s.userId)
                   )(
                     usernameOrId(s.userId),
@@ -38,7 +38,7 @@ object bits {
                 }
               )
             } | {
-              a(cls := active.toOption.map(_.active("newClass")), href := routes.Clas.form())(
+              a(cls := active.toOption.map(_.active("newClass")), href := routes.Clas.form)(
                 trans.clas.newClass()
               )
             }

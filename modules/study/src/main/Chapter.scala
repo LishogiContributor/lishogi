@@ -1,11 +1,10 @@
 package lila.study
 
-import shogi.format.pgn.{ Glyph, Tags }
+import shogi.format.{ Glyph, Tags }
 import shogi.variant.Variant
-import shogi.{ Centis, Color }
+import shogi.{ Centis, Color, Status }
 import org.joda.time.DateTime
 
-import shogi.opening.{ FullOpening, FullOpeningDB }
 import lila.tree.Node.{ Comment, Gamebook, Shapes }
 import lila.user.User
 
@@ -22,7 +21,6 @@ case class Chapter(
     practice: Option[Boolean] = None,
     gamebook: Option[Boolean] = None,
     description: Option[String] = None,
-    relay: Option[Chapter.Relay] = None,
     serverEval: Option[Chapter.ServerEval] = None,
     createdAt: DateTime
 ) extends Chapter.Like {
@@ -32,11 +30,9 @@ case class Chapter(
       copy(root = newRoot)
     }
 
-  def addNode(node: Node, path: Path, newRelay: Option[Chapter.Relay] = None): Option[Chapter] =
+  def addNode(node: Node, path: Path): Option[Chapter] =
     updateRoot {
       _.withChildren(_.addNodeAt(node, path))
-    } map {
-      _.copy(relay = newRelay orElse relay)
     }
 
   def setShapes(shapes: Shapes, path: Path): Option[Chapter] =
@@ -60,11 +56,6 @@ case class Chapter(
   def forceVariation(force: Boolean, path: Path): Option[Chapter] =
     updateRoot(_.forceVariationAt(force, path))
 
-  def opening: Option[FullOpening] = None
-  // no openings in lishogi right now
-  //if (!Variant.openingSensibleVariants(setup.variant)) none
-  //else FullOpeningDB searchInFens root.mainline.map(_.fen)
-
   def isEmptyInitial = order == 1 && root.children.nodes.isEmpty
 
   def cloneFor(study: Study) =
@@ -81,11 +72,13 @@ case class Chapter(
   def isGamebook = ~gamebook
   def isConceal  = conceal.isDefined
 
+  def isGameChapter          = root.isGameRoot
+  def isFirstGameRootChapter = root.gameMainline.exists(_.part == 0)
+  def gameMainlineLength     = root.gameMainline.map(_.usis.size)
+
   def withoutChildren = copy(root = root.withoutChildren)
 
   def withoutChildrenIfPractice = if (isPractice) copy(root = root.withoutChildren) else this
-
-  def relayAndTags = relay map { Chapter.RelayAndTags(id, _, tags) }
 
   def isOverweight = root.children.countRecursive >= Chapter.maxNodes
 }
@@ -111,37 +104,19 @@ object Chapter {
     def initialPosition = Position.Ref(id, Path.root)
   }
 
+  // for final status comment
+  case class EndStatus(status: Status, winner: Option[Color])
+
   case class Setup(
       gameId: Option[lila.game.Game.ID],
       variant: Variant,
-      orientation: Color,
-      fromFen: Option[Boolean] = None
-  ) {
-    def isFromFen = ~fromFen
-  }
+      orientation: Color, // post-game study - overriden for players to their color
+      endStatus: Option[EndStatus] = None,
+      fromSfen: Boolean = false,
+      fromNotation: Boolean = false
+  ) {}
 
-  case class Relay(
-      index: Int, // game index in the source URL
-      path: Path,
-      lastMoveAt: DateTime
-  ) {
-    def secondsSinceLastMove: Int = (nowSeconds - lastMoveAt.getSeconds).toInt
-  }
-
-  case class ServerEval(path: Path, done: Boolean)
-
-  case class RelayAndTags(id: Id, relay: Relay, tags: Tags) {
-
-    def looksAlive =
-      tags.resultColor.isEmpty &&
-        relay.lastMoveAt.isAfter {
-          DateTime.now.minusMinutes {
-            tags.clockConfig.fold(40)(_.limitInMinutes.toInt / 2 atLeast 15 atMost 60)
-          }
-        }
-
-    def looksOver = !looksAlive
-  }
+  case class ServerEval(done: Boolean)
 
   case class Metadata(
       _id: Id,
@@ -176,8 +151,7 @@ object Chapter {
       ownerId: User.ID,
       practice: Boolean,
       gamebook: Boolean,
-      conceal: Option[Ply],
-      relay: Option[Relay] = None
+      conceal: Option[Ply]
   ) =
     Chapter(
       _id = makeId,
@@ -191,7 +165,6 @@ object Chapter {
       practice = practice option true,
       gamebook = gamebook option true,
       conceal = conceal,
-      relay = relay,
       createdAt = DateTime.now
     )
 }

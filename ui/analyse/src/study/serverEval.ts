@@ -1,9 +1,8 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { Prop, defined, prop } from 'common/common';
+import { bind, onInsert } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
-import { spinner, bind, onInsert } from '../util';
-import { Prop, prop, defined } from 'common';
-import { notationStyle } from 'common/notation';
 
 export interface ServerEvalCtrl {
   requested: Prop<boolean>;
@@ -27,7 +26,7 @@ export function ctrl(root: AnalyseCtrl, chapterId: () => string): ServerEvalCtrl
     chart.getSelectedPoints().forEach(p => p.select(false));
   }
 
-  li.pubsub.on('analysis.change', (_fen: string, _path: string, mainlinePly: number | false) => {
+  li.pubsub.on('analysis.change', (_sfen: string, _path: string, mainlinePly: number | false) => {
     if (!li.advantageChart || lastPly() === mainlinePly) return;
     const lp = lastPly(typeof mainlinePly === 'undefined' ? lastPly() : mainlinePly),
       el = chartEl();
@@ -80,8 +79,7 @@ export function view(ctrl: ServerEvalCtrl): VNode {
         ctrl.lastPly(false);
         li.requestIdleCallback(() => {
           li.loadScript('javascripts/chart/acpl.js').then(() => {
-            const notation = ctrl.root.data.pref.pieceNotation ?? 0;
-            li.advantageChart!(ctrl.root.data, ctrl.root.trans, el, notationStyle(notation));
+            li.advantageChart!(ctrl.root.data, ctrl.root.trans, el);
             ctrl.chartEl(el);
           });
         });
@@ -106,24 +104,24 @@ function requestButton(ctrl: ServerEvalCtrl) {
     root.mainline.length < 5
       ? h('p', root.trans.noarg('theChapterIsTooShortToBeAnalysed'))
       : !root.study!.members.canContribute()
-      ? [root.trans.noarg('onlyContributorsCanRequestAnalysis')]
-      : [
-          h('p', [
-            root.trans.noarg('getAFullComputerAnalysis'),
-            h('br'),
-            root.trans.noarg('makeSureTheChapterIsComplete'),
-          ]),
-          h(
-            'a.button.text',
-            {
-              attrs: {
-                'data-icon': '',
-                disabled: root.mainline.length < 5,
+        ? [root.trans.noarg('onlyContributorsCanRequestAnalysis')]
+        : [
+            h('p', [
+              root.trans.noarg('getAFullComputerAnalysis'),
+              h('br'),
+              root.trans.noarg('makeSureTheChapterIsComplete'),
+            ]),
+            h(
+              'a.button.text',
+              {
+                attrs: {
+                  'data-icon': '',
+                  disabled: root.mainline.length < 5,
+                },
+                hook: bind('click', ctrl.request, root.redraw),
               },
-              hook: bind('click', ctrl.request, root.redraw),
-            },
-            root.trans.noarg('requestAComputerAnalysis')
-          ),
-        ]
+              root.trans.noarg('requestAComputerAnalysis')
+            ),
+          ]
   );
 }

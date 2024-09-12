@@ -1,12 +1,12 @@
 package lila.puzzle
 
+import cats.implicits._
 import org.goochjs.glicko2.{ Rating, RatingCalculator, RatingPeriodResults }
 import org.joda.time.DateTime
 import scala.concurrent.duration._
 import scala.util.chaining._
 
 import lila.common.Bus
-import lila.db.AsyncColl
 import lila.db.dsl._
 import lila.rating.Perf
 import lila.rating.{ Glicko, PerfType }
@@ -28,6 +28,21 @@ final private[puzzle] class PuzzleFinisher(
       timeout = 5 seconds,
       name = "puzzle.finish"
     )
+
+  def batch(
+      user: User,
+      solutions: List[PuzzleForm.mobile.Solution]
+  ): Fu[List[(PuzzleRound, IntRatingDiff)]] =
+    solutions.foldM((user.perfs.puzzle, List.empty[(PuzzleRound, IntRatingDiff)])) {
+      case ((perf, rounds), sol) =>
+        apply(Puzzle.Id(sol.id), PuzzleTheme.findOrAny(sol.theme).key, user, Result(sol.win)) map {
+          case Some((round, newPerf)) => {
+            val rDiff = IntRatingDiff(newPerf.intRating - perf.intRating)
+            (newPerf, (round, rDiff) :: rounds)
+          }
+          case None => (perf, rounds)
+        }
+    } map { case (_, rounds) => rounds.reverse }
 
   def apply(
       id: Puzzle.Id,
@@ -173,6 +188,9 @@ final private[puzzle] class PuzzleFinisher(
 
   def incPuzzlePlays(puzzleId: Puzzle.Id): Funit =
     colls.puzzle.map(_.incFieldUnchecked($id(puzzleId), Puzzle.BSONFields.plays))
+
+  def batchIncPuzzlePlays(puzzleIds: List[Puzzle.Id]): Funit =
+    puzzleIds.map(incPuzzlePlays).sequenceFu.void
 
   private def updateRatings(u1: Rating, u2: Rating, result: Glicko.Result): Unit = {
     val results = new RatingPeriodResults()

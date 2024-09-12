@@ -1,36 +1,28 @@
-import { AnalyseApi, AnalyseOpts } from './interfaces';
-import AnalyseCtrl from './ctrl';
-
-import makeCtrl from './ctrl';
-import view from './view';
-import boot from './boot';
-import { Shogiground } from 'shogiground';
 import LishogiChat from 'chat';
+import menuHover from 'common/menuHover';
+import { Shogiground } from 'shogiground';
+import makeBoot from './boot';
+import makeCtrl from './ctrl';
+import { AnalyseApi, AnalyseOpts } from './interfaces';
+import patch from './patch';
+import makeView from './view';
 
-import { init } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import klass from 'snabbdom/modules/class';
-import attributes from 'snabbdom/modules/attributes';
-import { menuHover } from 'common/menuHover';
-
-menuHover();
-
-export const patch = init([klass, attributes]);
+export { patch };
 
 export function start(opts: AnalyseOpts): AnalyseApi {
   opts.element = document.querySelector('main.analyse') as HTMLElement;
 
-  let vnode: VNode, ctrl: AnalyseCtrl;
+  const ctrl = new makeCtrl(opts, redraw);
+
+  const blueprint = makeView(ctrl);
+  opts.element.innerHTML = '';
+  let vnode = patch(opts.element, blueprint);
 
   function redraw() {
-    vnode = patch(vnode, view(ctrl));
+    vnode = patch(vnode, makeView(ctrl));
   }
 
-  ctrl = new makeCtrl(opts, redraw);
-
-  const blueprint = view(ctrl);
-  opts.element.innerHTML = '';
-  vnode = patch(opts.element, blueprint);
+  menuHover();
 
   return {
     socketReceive: ctrl.socket.receive,
@@ -41,7 +33,7 @@ export function start(opts: AnalyseOpts): AnalyseApi {
   };
 }
 
-export { boot };
+export const boot = makeBoot(start);
 
 // that's for the rest of lishogi to access shogiground
 // without having to include it a second time

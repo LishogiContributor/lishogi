@@ -1,51 +1,25 @@
-import { Attrs } from 'snabbdom/modules/attributes';
+import { dataIcon } from 'common/snabbdom';
 import { h } from 'snabbdom';
-import { Hooks } from 'snabbdom/hooks';
-import { VNode } from 'snabbdom/vnode';
-
-export function bind(eventName: string, f: (e: Event) => any, redraw?: () => void): Hooks {
-  return onInsert(el =>
-    el.addEventListener(eventName, e => {
-      const res = f(e);
-      if (redraw) redraw();
-      return res;
-    })
-  );
-}
-
-export function onInsert(f: (element: HTMLElement) => void): Hooks {
-  return {
-    insert(vnode) {
-      f(vnode.elm as HTMLElement);
-    },
-  };
-}
-
-export function dataIcon(icon: string): Attrs {
-  return {
-    'data-icon': icon,
-  };
-}
 
 export function miniBoard(game) {
   return h(
-    'a.mini-board.parse-fen.is2d.mini-board-' + game.id,
+    'a.mini-board' + '.v-' + game.variant + '.parse-sfen.mini-board-' + game.id,
     {
       key: game.id,
       attrs: {
         href: '/' + game.id + (game.color === 'sente' ? '' : '/gote'),
         'data-color': game.color,
-        'data-fen': game.fen,
+        'data-sfen': game.sfen,
         'data-lastmove': game.lastMove,
-        'data-pocket': game.pockets,
+        'data-variant': game.variant,
       },
       hook: {
         insert(vnode) {
-          window.lishogi.parseFen($(vnode.elm as HTMLElement));
+          window.lishogi.parseSfen($(vnode.elm as HTMLElement));
         },
       },
     },
-    [h('div.cg-wrap')]
+    [h('div.sg-wrap')]
   );
 }
 
@@ -85,20 +59,10 @@ export function numberRow(name: string, value: any, typ?: string) {
       typ === 'raw'
         ? value
         : typ === 'percent'
-        ? value[1] > 0
-          ? ratio2percent(value[0] / value[1])
-          : 0
-        : window.lishogi.numberFormat(value)
+          ? value[1] > 0
+            ? ratio2percent(value[0] / value[1])
+            : 0
+          : window.lishogi.numberFormat(value)
     ),
-  ]);
-}
-
-export function spinner(): VNode {
-  return h('div.spinner', [
-    h('svg', { attrs: { viewBox: '0 0 40 40' } }, [
-      h('circle', {
-        attrs: { cx: 20, cy: 20, r: 18, fill: 'none' },
-      }),
-    ]),
   ]);
 }

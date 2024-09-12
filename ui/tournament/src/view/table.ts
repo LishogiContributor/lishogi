@@ -1,10 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { bind } from 'common/snabbdom';
 import { opposite } from 'shogiground/util';
-import { player as renderPlayer, miniBoard, bind } from './util';
+import { VNode, h } from 'snabbdom';
+import TournamentController from '../ctrl';
 import { Duel, DuelPlayer, DuelTeams, TeamBattle } from '../interfaces';
 import { teamName } from './battle';
-import TournamentController from '../ctrl';
+import { miniBoard, player as renderPlayer } from './util';
 
 function featuredPlayer(player) {
   return h('div.tour__featured__player', [

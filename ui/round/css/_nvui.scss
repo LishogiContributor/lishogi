@@ -1,10 +1,12 @@
-.round {
+#main-wrap > .round,
+#main-wrap > .analyse {
   grid-template-areas:
     'nvui'
     'side'
-    'uchat';
-  grid-template-columns: auto;
-  grid-template-rows: auto;
+    'uchat' !important;
+  grid-template-columns: auto !important;
+  grid-template-rows: auto !important;
+  width: 90vw;
 }
 .nvui {
   h2 {
@@ -15,17 +17,18 @@
     max-height: 140px;
     overflow-y: auto;
   }
-  .board {
+  .board,
+  .hand {
     font-family: monospace;
     font-size: 1.5em;
     margin: 0;
   }
-  .pieces h3 {
-    font-weight: bold;
-  }
-  .pieces h3 {
-    margin: 0 5px 0 0;
-    display: inline;
+  .pieces {
+    h3 {
+      font-weight: bold;
+      margin: 0 5px 0 0;
+      display: inline;
+    }
   }
   .notify {
     color: $c-bad;

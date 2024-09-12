@@ -1,9 +1,10 @@
-modules
-app
+/modules
+/app
 project
 bin
 
 public/css
+public/doc
 public/piece-css
 public/compiled
 public/glyphs.json
@@ -19,6 +20,7 @@ ui/game/**/*.js
 ui/game/**/*.d.ts
 ui/nvui/**/*.js
 ui/nvui/**/*.d.ts
+ui/@types/lishogi/i18n.d.ts
 
 *.min.js
 

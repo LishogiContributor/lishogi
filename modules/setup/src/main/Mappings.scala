@@ -10,14 +10,15 @@ import lila.lobby.Color
 
 private object Mappings {
 
-  val variant                   = number.verifying(Config.variants contains _)
-  val variantWithFen            = number.verifying(Config.variantsWithFen contains _)
-  val aiVariants                = number.verifying(Config.aiVariants contains _)
-  val variantWithVariants       = number.verifying(Config.variantsWithVariants contains _)
-  val variantWithFenAndVariants = number.verifying(Config.variantsWithFenAndVariants contains _)
+  val variants   = number.verifying(Config.variants contains _)
+  val aiVariants = number.verifying(Config.aiVariants contains _)
   val boardApiVariants = Set(
     V.Standard.key,
-    //V.MiniShogi.key,
+    V.Minishogi.key,
+    V.Chushogi.key,
+    V.Annanshogi.key,
+    V.Kyotoshogi.key,
+    V.Checkshogi.key
   )
   val boardApiVariantKeys      = text.verifying(boardApiVariants contains _)
   val time                     = of[Double].verifying(HookConfig validateTime _)
@@ -35,5 +36,5 @@ private object Mappings {
   val color       = text.verifying(Color.names contains _)
   val level       = number.verifying(AiConfig.levels contains _)
   val speed       = number.verifying(Config.speeds contains _)
-  val fenField    = optional(nonEmptyText)
+  val sfenField   = optional(nonEmptyText.transform[String](_.replace("_", " "), identity))
 }

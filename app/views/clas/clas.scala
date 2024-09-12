@@ -23,7 +23,7 @@ object clas {
       main(cls := "page-small box box-pad page clas-home")(
         h1(trans.clas.lishogiClasses()),
         div(cls := "clas-home__doc body")(
-          p(trans.clas.teachClassesOfChessStudents()),
+          p(trans.clas.teachClassesOfShogiStudents()),
           h2(trans.clas.features()),
           ul(
             li(trans.clas.quicklyGenerateSafeUsernames()),
@@ -33,7 +33,7 @@ object clas {
           )
         ),
         div(cls := "clas-home__onboard")(
-          postForm(action := routes.Clas.becomeTeacher())(
+          postForm(action := routes.Clas.becomeTeacher)(
             submitButton(cls := "button button-fat")(trans.clas.applyToBeLishogiTeacher())
           )
         )
@@ -46,9 +46,9 @@ object clas {
       div(cls := "box__top")(
         h1(trans.clas.lishogiClasses()),
         a(
-          href := routes.Clas.form(),
-          cls := "new button button-empty",
-          title := trans.clas.newClass.txt(),
+          href     := routes.Clas.form,
+          cls      := "new button button-empty",
+          title    := trans.clas.newClass.txt(),
           dataIcon := "O"
         )
       ),
@@ -69,7 +69,7 @@ object clas {
     div(cls := "classes")(
       classes.map { clas =>
         div(
-          cls := List("clas-widget" -> true, "clas-widget-archived" -> clas.isArchived),
+          cls      := List("clas-widget" -> true, "clas-widget-archived" -> clas.isArchived),
           dataIcon := "f"
         )(
           a(cls := "overlay", href := routes.Clas.show(clas.id.value)),
@@ -102,7 +102,7 @@ object clas {
         hr,
         c.isActive option postForm(
           action := routes.Clas.archive(c.id.value, true),
-          cls := "clas-edit__archive"
+          cls    := "clas-edit__archive"
         )(
           form3.submit(trans.clas.closeClass(), icon = none)(
             cls := "confirm button-red button-empty"
@@ -134,7 +134,7 @@ object clas {
     )
 
   private def innerForm(form: Form[ClasData], clas: Option[Clas])(implicit ctx: Context) =
-    postForm(cls := "form3", action := clas.fold(routes.Clas.create())(c => routes.Clas.update(c.id.value)))(
+    postForm(cls := "form3", action := clas.fold(routes.Clas.create)(c => routes.Clas.update(c.id.value)))(
       form3.globalError(form),
       form3.group(form("name"), trans.clas.className())(form3.input(_)(autofocus)),
       form3.group(
@@ -156,7 +156,7 @@ object clas {
           )(form3.textarea(_)(rows := 4))
       },
       form3.actions(
-        a(href := clas.fold(routes.Clas.index())(c => routes.Clas.show(c.id.value)))(trans.cancel()),
+        a(href := clas.fold(routes.Clas.index)(c => routes.Clas.show(c.id.value)))(trans.cancel()),
         form3.submit(trans.apply())
       )
     )

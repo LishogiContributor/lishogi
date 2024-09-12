@@ -1,29 +1,22 @@
-import { init } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import klass from 'snabbdom/modules/class';
-import attributes from 'snabbdom/modules/attributes';
 import { Shogiground } from 'shogiground';
-import { LobbyOpts, Tab } from './interfaces';
-import LobbyController from './ctrl';
-
-export const patch = init([klass, attributes]);
-
-import makeCtrl from './ctrl';
-import view from './view/main';
+import { attributesModule, classModule, init } from 'snabbdom';
 import boot from './boot';
+import makeCtrl from './ctrl';
+import { LobbyOpts, Tab } from './interfaces';
+import view from './view/main';
+
+export const patch = init([classModule, attributesModule]);
 
 export function start(opts: LobbyOpts) {
-  let vnode: VNode, ctrl: LobbyController;
+  const ctrl = new makeCtrl(opts, redraw);
+
+  const blueprint = view(ctrl);
+  opts.element.innerHTML = '';
+  let vnode = patch(opts.element, blueprint);
 
   function redraw() {
     vnode = patch(vnode, view(ctrl));
   }
-
-  ctrl = new makeCtrl(opts, redraw);
-
-  const blueprint = view(ctrl);
-  opts.element.innerHTML = '';
-  vnode = patch(opts.element, blueprint);
 
   return {
     socketReceive: ctrl.socket.receive,
@@ -33,8 +26,6 @@ export function start(opts: LobbyOpts) {
     },
     gameActivity: ctrl.gameActivity,
     setRedirecting: ctrl.setRedirecting,
-    enterPool: ctrl.enterPool,
-    leavePool: ctrl.leavePool,
     setup: ctrl.setup,
     redraw: ctrl.redraw,
   };

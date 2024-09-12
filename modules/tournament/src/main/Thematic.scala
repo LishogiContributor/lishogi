@@ -1,17 +1,16 @@
 package lila.tournament
 
-import shogi.StartingPosition
+import shogi.Handicap
+import shogi.format.forsyth.Sfen
 
-private object Thematic {
+object Thematic {
 
-  def byFen = fenIndex.get _
-  def byEco = ecoIndexForBc.get _
+  def bySfen(sfen: Sfen, variant: shogi.variant.Variant): Option[Handicap] =
+    sfenIndex.get(variant).flatMap { _.get(sfen.value) }
 
-  private lazy val fenIndex: Map[String, StartingPosition] = StartingPosition.all.view.map { p =>
-    p.fen -> p
-  }.toMap
+  private lazy val sfenIndex: Map[shogi.variant.Variant, Map[String, Handicap]] =
+    Handicap.allByVariant.view.map { case (v, hs) =>
+      v -> hs.map(h => h.sfen.value -> h).toMap
+    }.toMap
 
-  private lazy val ecoIndexForBc: Map[String, StartingPosition] = StartingPosition.all.view.map { p =>
-    p.eco -> p
-  }.toMap
 }

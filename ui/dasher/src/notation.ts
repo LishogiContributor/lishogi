@@ -1,46 +1,31 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-
-import { Redraw, Close, bind, header } from './util';
-
-type Key = string;
-
-export type Notation = string[];
+import { Notation } from 'common/notation';
+import { VNode, h } from 'snabbdom';
+import { Close, Redraw, bind, header } from './util';
 
 export interface NotationData {
-  current: Key;
-  list: Notation;
+  current: Notation;
+  list: Notation[];
 }
 
 export interface NotationCtrl {
-  makeList(): Notation[];
-  set(k: Key): void;
-  data: () => NotationData;
+  set(n: Notation): void;
+  data: NotationData;
   redraw: Redraw;
   trans: Trans;
   close: Close;
 }
 
 export function ctrl(data: NotationData, trans: Trans, redraw: Redraw, close: Close): NotationCtrl {
-  const list: Notation[] = data.list.map(n => n.split(' '));
-  function getData() {
-    return data;
-  }
-
   return {
-    makeList() {
-      return list;
-    },
-    set(k: Key) {
-      data.current = k;
-      $.post('/pref/pieceNotation', { pieceNotation: k }).fail(() =>
-        window.lishogi.announce({ msg: 'Failed to save notation preference' })
-      );
+    set(n: Notation) {
+      data.current = n;
+      $.post('/pref/notation', { notation: n }, () => {
+        // we need to reload the page to see changes
+        window.lishogi.reload();
+      }).fail(() => window.lishogi.announce({ msg: 'Failed to save notation preference' }));
       redraw();
-      // we need to reload the page to see changes - kinda stupid solution, but it works
-      setTimeout(location.reload.bind(location), 250);
     },
-    data: getData,
+    data,
     redraw,
     trans,
     close,
@@ -48,40 +33,58 @@ export function ctrl(data: NotationData, trans: Trans, redraw: Redraw, close: Cl
 }
 
 export function view(ctrl: NotationCtrl): VNode {
-  return h(
-    'div.sub.sound.', // too lazy to add notation specific css
-    {},
-    [
-      header(ctrl.trans('notationSystem'), ctrl.close),
-      h('div.content', [h('div.selector', ctrl.makeList().map(notationView(ctrl, ctrl.data().current.toString())))]),
-    ]
-  );
+  return h('div.sub.notation.', [
+    header(ctrl.trans('notationSystem'), ctrl.close),
+    h('div.content', [h('div.selector', ctrl.data.list.map(notationView(ctrl, ctrl.data.current)))]),
+  ]);
 }
 
-function notationView(ctrl: NotationCtrl, current: Key) {
-  return (s: Notation) =>
+function notationView(ctrl: NotationCtrl, current: Notation) {
+  return (n: Notation) =>
     h(
       'a.text',
       {
-        hook: bind('click', () => ctrl.set(s[0])),
-        class: { active: current === s[0] },
-        attrs: { 'data-icon': 'E' },
+        hook: bind('click', () => ctrl.set(n)),
+        class: { active: current === n },
+        attrs: {
+          title: notationExample(n),
+          'data-icon': 'E',
+        },
       },
-      notationDisplay(s[1])
+      notationDisplay(ctrl, n)
     );
 }
 
-function notationDisplay(notation: string): string {
+function notationExample(notation: Notation): string {
   switch (notation) {
-    case 'Western':
-      return 'Western        - P-76';
-    case 'Western2':
-      return 'Western        - P-7f';
-    case 'Japanese':
-      return 'Japanese       - ７六歩';
-    case 'Kawasaki':
-      return 'Kitao-Kawasaki - 歩-76';
-    default:
-      return notation;
+    case Notation.Western:
+      return 'P-76';
+    case Notation.WesternEngine:
+      return 'P-7f';
+    case Notation.Japanese:
+      return '７六歩';
+    case Notation.Kawasaki:
+      return '歩-76';
+    case Notation.Kif:
+      return '７六歩(77)';
+    case Notation.Usi:
+      return '7g7f';
+  }
+}
+
+function notationDisplay(ctrl: NotationCtrl, notation: Notation): string {
+  switch (notation) {
+    case Notation.Western:
+      return ctrl.trans.noarg('westernNotation') + ' (76)';
+    case Notation.WesternEngine:
+      return ctrl.trans.noarg('westernNotation') + ' (7f)';
+    case Notation.Japanese:
+      return ctrl.trans.noarg('japaneseNotation');
+    case Notation.Kawasaki:
+      return ctrl.trans.noarg('kitaoKawasakiNotation');
+    case Notation.Kif:
+      return ctrl.trans.noarg('kifNotation');
+    case Notation.Usi:
+      return 'USI';
   }
 }

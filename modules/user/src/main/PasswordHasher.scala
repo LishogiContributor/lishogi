@@ -10,8 +10,7 @@ import lila.common.config.Secret
 
 /** Encryption for bcrypt hashes.
   *
-  * CTS reveals input length, which is fine for
-  * this application.
+  * CTS reveals input length, which is fine for this application.
   */
 final private class Aes(secret: Secret) {
   private val sKey = {
@@ -43,7 +42,7 @@ private object Aes {
 }
 
 case class HashedPassword(bytes: Array[Byte]) extends AnyVal {
-  def parse = bytes.length == 39 option bytes.splitAt(16)
+  def parse = bytes.lengthIs == 39 option bytes.splitAt(16)
 }
 
 final private class PasswordHasher(

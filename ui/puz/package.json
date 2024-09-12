@@ -3,8 +3,17 @@
   "version": "2.0.0",
   "private": true,
   "description": "lishogi.org fast puzzle utils",
-  "main": "dist/main.js",
-  "types": "dist/main",
+  "exports": {
+    ".": "./dist/main.js",
+    "./*": "./dist/*.js"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "dist/*"
+      ]
+    }
+  },
   "author": "Thibault Duplessis",
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -13,13 +22,13 @@
     "prod": "yarn run compile"
   },
   "dependencies": {
-    "shogiops": "^0.2.2",
-    "snabbdom": "^0.7.4",
-    "shogiground": "^7.8.1",
-    "common": "2.0.0"
+    "common": "2.0.0",
+    "shogiground": "^0.8.6",
+    "shogiops": "^0.16.3",
+    "snabbdom": "^3.5.1"
   },
   "devDependencies": {
     "@types/lishogi": "2.0.0",
-    "typescript": "^4.1.3"
+    "typescript": "^5"
   }
 }

@@ -54,7 +54,7 @@ final class PairingRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionConte
           case (acc, _) => acc
         }
         .takeWhile(
-          r => r.size < nbUsers,
+          r => r.sizeIs < nbUsers,
           true
         )
         .toMat(Sink.lastOption)(Keep.right)
@@ -71,9 +71,11 @@ final class PairingRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionConte
       .cursor[Bdoc]()
       .list()
       .dmap {
-        _.view.flatMap { doc =>
-          ~doc.getAsOpt[List[User.ID]]("u").find(userId !=)
-        }.toSet
+        _.view
+          .flatMap { doc =>
+            ~doc.getAsOpt[List[User.ID]]("u").find(userId !=)
+          }
+          .toSet
       }
 
   def recentIdsByTourAndUserId(tourId: Tournament.ID, userId: User.ID, nb: Int): Fu[List[Tournament.ID]] =
@@ -107,14 +109,16 @@ final class PairingRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionConte
     coll
       .list[Pairing](selectTourUser(tourId, userId))
       .flatMap {
-        _.withFilter(_ notLostBy userId).map { p =>
-          coll.update.one(
-            $id(p.id),
-            $set(
-              "w" -> p.colorOf(userId).map(_.gote)
+        _.withFilter(_ notLostBy userId)
+          .map { p =>
+            coll.update.one(
+              $id(p.id),
+              $set(
+                "w" -> p.colorOf(userId).map(_.gote)
+              )
             )
-          )
-        }.sequenceFu
+          }
+          .sequenceFu
       }
       .void
 
@@ -122,22 +126,26 @@ final class PairingRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionConte
     coll.countSel(selectTour(tourId))
 
   private[tournament] def countByTourIdAndUserIds(tourId: Tournament.ID): Fu[Map[User.ID, Int]] = {
+    val max = 10_000
     coll
-      .aggregateList(maxDocs = 10000) { framework =>
+      .aggregateList(maxDocs = max) { framework =>
         import framework._
         Match(selectTour(tourId)) -> List(
           Project($doc("u" -> true, "_id" -> false)),
           UnwindField("u"),
           GroupField("u")("nb" -> SumAll),
-          Sort(Descending("nb"))
+          Sort(Descending("nb")),
+          Limit(max)
         )
       }
       .map {
-        _.view.flatMap { doc =>
-          doc.getAsOpt[User.ID]("_id") flatMap { uid =>
-            doc.int("nb") map { uid -> _ }
+        _.view
+          .flatMap { doc =>
+            doc.getAsOpt[User.ID]("_id") flatMap { uid =>
+              doc.int("nb") map { uid -> _ }
+            }
           }
-        }.toMap
+          .toMap
       }
   }
 
@@ -175,7 +183,7 @@ final class PairingRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionConte
           $set(
             "s" -> g.status.id,
             "w" -> g.winnerColor.map(_.sente),
-            "t" -> g.turns
+            "t" -> g.plies
           )
         )
         .void

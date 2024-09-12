@@ -10,13 +10,13 @@ import scala.util.chaining._
 import actorApi._, round._
 import shogi.{ Centis, Color, Gote, Sente }
 import lila.game.Game.{ FullId, PlayerId }
-import lila.game.{ Game, GameRepo, Pov, Event, Progress, Player => GamePlayer }
+import lila.game.{ Event, Game, GameRepo, Player => GamePlayer, Pov, Progress }
 import lila.hub.actorApi.round.{
   Abort,
   BotPlay,
   FishnetPlay,
-  FishnetStart,
   IsOnGame,
+  PostGameStudy,
   RematchNo,
   RematchYes,
   Resign
@@ -186,10 +186,10 @@ final private[round] class RoundDuct(
             lila
               .log("cheat")
               .info(
-                s"hold alert $ip https://lishogi.org/${pov.gameId}/${pov.color.name}#${pov.game.turns} ${pov.player.userId | "anon"} mean: $mean SD: $sd"
+                s"hold alert $ip https://lishogi.org/${pov.gameId}/${pov.color.name}#${pov.game.plies} ${pov.player.userId | "anon"} mean: $mean SD: $sd"
               )
             lila.mon.cheat.holdAlert.increment()
-            gameRepo.setHoldAlert(pov, GamePlayer.HoldAlert(ply = pov.game.turns, mean = mean, sd = sd)).void
+            gameRepo.setHoldAlert(pov, GamePlayer.HoldAlert(ply = pov.game.plies, mean = mean, sd = sd)).void
         } inject Nil
       }
 
@@ -204,16 +204,27 @@ final private[round] class RoundDuct(
                 "analysis" -> lila.analyse.JsonView.bothPlayers(a.game, a.analysis),
                 "tree" -> lila.tree.Node.minimalNodeJsonWriter.writes {
                   TreeBuilder(
-                    id = a.analysis.id,
-                    pgnMoves = a.game.pgnMoves,
-                    variant = a.variant,
-                    analysis = a.analysis.some,
-                    initialFen = a.initialFen,
-                    withFlags = JsonView.WithFlags(),
-                    clocks = none
+                    a.game,
+                    a.analysis.some,
+                    JsonView.WithFlags()
                   )
                 }
               )
+            )
+          )
+        )
+      }
+
+    case PostGameStudy(studyId) =>
+      updateGame { game =>
+        game.setPostGameStudy(studyId)
+      } inject {
+        socketSend(
+          RP.Out.tellRoom(
+            roomId,
+            makeMessage(
+              "postGameStudy",
+              studyId
             )
           )
         )
@@ -224,11 +235,8 @@ final private[round] class RoundDuct(
     case p: HumanPlay =>
       handle(p.playerId) { pov =>
         if (pov.player.isAi) fufail(s"player $pov can't play AI")
-        else if (pov.game.nextPeriodClock(withGrace = true)) {
-          pov.game.moveToNextPeriod ?? { g =>
-            proxy save g inject List(Event.Reload)
-          }
-        } else if (pov.game.outoftime(withGrace = true)) finisher.outOfTime(pov.game)
+        else if (pov.game.outoftime(withGrace = true))
+          finisher.outOfTime(pov.game)
         else {
           recordLag(pov)
           player.human(p, this)(pov)
@@ -249,24 +257,18 @@ final private[round] class RoundDuct(
       val res = proxy.withPov(PlayerId(p.playerId)) {
         _ ?? { pov =>
           {
-            if (pov.game.nextPeriodClock(withGrace = true))
-              pov.game.moveToNextPeriod ?? { g =>
-                proxy save g inject List(Event.Reload)
-              }
-            else if (pov.game.outoftime(withGrace = true)) finisher.outOfTime(pov.game)
-            else player.bot(p.uci, this)(pov)
+            if (pov.game.outoftime(withGrace = true))
+              finisher.outOfTime(pov.game)
+            else player.bot(p.usi, this)(pov)
           }
         }
       } dmap publish
       p.promise.foreach(_ completeWith res)
       res
 
-    case FishnetPlay(uci, ply) =>
+    case FishnetPlay(usi, ply) =>
       handle { game =>
-        if (game.nextPeriodClock(withGrace = false))
-          game.moveToNextPeriod ?? { p => player.fishnet(p.game, ply, uci) }
-        else if (game.outoftime(withGrace = false)) finisher.outOfTime(game)
-        else player.fishnet(game, ply, uci)
+        player.fishnet(game, ply, usi)
       }.mon(_.round.move.time)
 
     case Abort(playerId) =>
@@ -284,11 +286,12 @@ final private[round] class RoundDuct(
         pov.game.resignable ?? finisher.other(pov.game, _.Resign, Some(!pov.color))
       }
 
-    case GoBerserk(color) =>
+    case GoBerserk(color, promise) =>
       handle(color) { pov =>
-        pov.game.goBerserk(color) ?? { progress =>
+        val berserked = pov.game.goBerserk(color)
+        berserked ?? { progress =>
           proxy.save(progress) >> gameRepo.goBerserk(pov) inject progress.events
-        }
+        } >>- promise.success(berserked.isDefined)
       }
 
     case ResignForce(playerId) =>
@@ -298,7 +301,7 @@ final private[round] class RoundDuct(
             case true =>
               finisher.rageQuit(
                 pov.game,
-                Some(pov.color) ifFalse pov.game.situation.opponentHasInsufficientMaterial
+                Some(pov.color)
               )
             case _ => fuccess(List(Event.Reload))
           }
@@ -318,13 +321,7 @@ final private[round] class RoundDuct(
     // checks if any player can safely (grace) be flagged
     case QuietFlag =>
       handle { game =>
-        {
-          if (game.nextPeriodClock(withGrace = true))
-            game.moveToNextPeriod ?? { g =>
-              proxy save g inject List(Event.Reload)
-            }
-          else game.outoftime(withGrace = true) ?? finisher.outOfTime(game)
-        }
+        game.outoftime(withGrace = true) ?? finisher.outOfTime(game)
       }
 
     // flags a specific player, possibly without grace if self
@@ -332,11 +329,7 @@ final private[round] class RoundDuct(
       handle { game =>
         (game.turnColor == color) ?? {
           val toSelf = from has PlayerId(game.player(color).id)
-          if (game.nextPeriodClock(withGrace = !toSelf)) {
-            game.moveToNextPeriod ?? { g =>
-              proxy save g inject List(Event.Reload)
-            }
-          } else game.outoftime(withGrace = !toSelf) ?? finisher.outOfTime(game)
+          game.outoftime(withGrace = !toSelf) ?? finisher.outOfTime(game)
         }
       }
 
@@ -360,6 +353,22 @@ final private[round] class RoundDuct(
         }
       }
     case TooManyPlies => handle(drawer force _)
+
+    case PauseYes(playerId) => handle(playerId)(pauser.yes)
+    case PauseNo(playerId)  => handle(playerId)(pauser.no)
+
+    case ResumeYes(playerId) =>
+      handle(playerId) { pov =>
+        getPlayer(!pov.color).isOnline ?? {
+          pauser.resumeYes(pov) map {
+            case Left(events) => events
+            case Right((usi, prog)) =>
+              player.notifyUsi(usi, prog.game)
+              prog.events
+          }
+        }
+      }
+    case ResumeNo(playerId) => handle(playerId)(pauser.resumeNo)
 
     case RematchYes(playerId) => handle(PlayerId(playerId))(rematcher.yes)
     case RematchNo(playerId)  => handle(PlayerId(playerId))(rematcher.no)
@@ -388,11 +397,11 @@ final private[round] class RoundDuct(
         }
       }
 
-    case ForecastPlay(lastMove) =>
+    case ForecastPlay(lastUsi) =>
       handle { game =>
-        forecastApi.nextMove(game, lastMove) map { mOpt =>
-          mOpt foreach { move =>
-            this ! HumanPlay(PlayerId(game.player.id), move, false)
+        forecastApi.nextMove(game, lastUsi) map { usiOpt =>
+          usiOpt foreach { usi =>
+            this ! HumanPlay(PlayerId(game.player.id), usi, false)
           }
           Nil
         }
@@ -405,8 +414,8 @@ final private[round] class RoundDuct(
             g.clock.fold(Progress(g)) { clock =>
               g.withClock {
                 clock
-                  .giveTime(g.turnColor, Centis(2000))
-                  .giveTime(!g.turnColor, Centis(1000))
+                  .giveTime(g.turnColor, Centis(5000))
+                  .giveTime(!g.turnColor, Centis(2000))
               }
             }
           }
@@ -418,13 +427,13 @@ final private[round] class RoundDuct(
         game.playable ?? {
           messenger.system(game, "Lishogi has been updated! Sorry for the inconvenience.")
           val progress = moretimer.give(game, Color.all, MoretimeDuration(20 seconds))
-          proxy save progress inject progress.events
+          proxy save progress inject (progress.events :+ Event.Reload)
         }
       }
 
     case AbortForce =>
       handle { game =>
-        game.playable ?? finisher.other(game, _.Aborted, None)
+        game.playableEvenPaused ?? finisher.other(game, _.Aborted, None)
       }
 
     case BotConnected(color, v) =>
@@ -435,16 +444,8 @@ final private[round] class RoundDuct(
     case NoStart =>
       handle { game =>
         game.timeBeforeExpiration.exists(_.centis == 0) ?? {
-          if (game.isSwiss) game.startClock ?? { g =>
-            proxy save g inject List(Event.Reload)
-          }
-          else finisher.noStart(game)
+          finisher.noStart(game)
         }
-      }
-
-    case FishnetStart =>
-      proxy.withGame { g =>
-        g.playableByAi ?? player.requestFishnet(g, this)
       }
 
     case Tick =>
@@ -455,7 +456,11 @@ final private[round] class RoundDuct(
               getPlayer(c).showMillisToGone foreach {
                 _ ?? { millis =>
                   if (millis <= 0) notifyGone(c, true)
-                  else if (g.clock.exists(_.remainingTime(c).millis > millis + 3000)) notifyGoneIn(c, millis)
+                  else
+                    g.clock.exists(_.currentClockFor(c).time.millis > millis + 3000) ?? notifyGoneIn(
+                      c,
+                      millis
+                    )
                 }
               }
             }
@@ -469,7 +474,7 @@ final private[round] class RoundDuct(
   private def getPlayer(color: Color): Player = color.fold(sentePlayer, gotePlayer)
 
   private def recordLag(pov: Pov): Unit =
-    if ((pov.game.playedTurns & 30) == 10) {
+    if ((pov.game.playedPlies & 30) == 10) {
       // Triggers every 32 moves starting on ply 10.
       // i.e. 10, 11, 42, 43, 74, 75, ...
       for {
@@ -479,14 +484,14 @@ final private[round] class RoundDuct(
       } UserLagCache.put(user, lag)
     }
 
-  private def notifyGone(color: Color, gone: Boolean): Unit =
+  private def notifyGone(color: Color, gone: Boolean): Funit =
     proxy.withPov(color) { pov =>
       fuccess {
         socketSend(Protocol.Out.gone(FullId(pov.fullId), gone))
       }
     }
 
-  private def notifyGoneIn(color: Color, millis: Long): Unit =
+  private def notifyGoneIn(color: Color, millis: Long): Funit =
     proxy.withPov(color) { pov =>
       fuccess {
         socketSend(Protocol.Out.goneIn(FullId(pov.fullId), millis))
@@ -522,7 +527,7 @@ final private[round] class RoundDuct(
 
   private def publish[A](events: Events): Unit =
     if (events.nonEmpty) {
-      events map { e =>
+      events foreach { e =>
         version = version.inc
         socketSend {
           Protocol.Out.tellVersion(roomId, version, e)
@@ -533,13 +538,13 @@ final private[round] class RoundDuct(
   private def errorHandler(name: String): PartialFunction[Throwable, Unit] = {
     case e: ClientError =>
       logger.info(s"Round client error $name: ${e.getMessage}")
-      lila.mon.round.error.client.increment()
+      lila.mon.round.error.client.increment().unit
     case e: FishnetError =>
       logger.info(s"Round fishnet error $name: ${e.getMessage}")
-      lila.mon.round.error.fishnet.increment()
+      lila.mon.round.error.fishnet.increment().unit
     case e: Exception =>
       logger.warn(s"$name: ${e.getMessage}")
-      lila.mon.round.error.other.increment()
+      lila.mon.round.error.other.increment().unit
   }
 
   def roomId = RoomId(gameId)
@@ -577,6 +582,7 @@ object RoundDuct {
       val rematcher: Rematcher,
       val player: Player,
       val drawer: Drawer,
+      val pauser: Pauser,
       val forecastApi: ForecastApi,
       val isSimulHost: IsSimulHost
   )

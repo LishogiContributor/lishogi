@@ -39,8 +39,8 @@ $button.find('span').text('Blocked!');
           "In the meantime, you can block this user: ",
           submitButton(
             attr("data-action") := routes.Relation.block(userId),
-            cls := "report-block button",
-            st.title := trans.block.txt()
+            cls                 := "report-block button",
+            st.title            := trans.block.txt()
           )(
             span(cls := "text", dataIcon := "k")("Block ", usernameOrId(userId))
           )
@@ -48,7 +48,7 @@ $button.find('span').text('Blocked!');
         br,
         br,
         p(
-          a(href := routes.Lobby.home())("Return to Lishogi homepage")
+          a(href := routes.Lobby.home)("Return to Lishogi homepage")
         )
       )
 

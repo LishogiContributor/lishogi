@@ -1,17 +1,17 @@
 package lila.study
 
+import cats.data.Validated
+
 import actorApi.Who
 import shogi.Centis
-import shogi.format.pgn.{ Glyph, Glyphs }
+import shogi.format.{ Glyph, Glyphs }
 import play.api.libs.json._
 import scala.concurrent.duration._
 
-import lila.common.Bus
 import lila.room.RoomSocket.{ Protocol => RP, _ }
 import lila.socket.RemoteSocket.{ Protocol => P, _ }
 import lila.socket.Socket.{ makeMessage, Sri }
-import lila.socket.{ AnaAny, AnaDests, AnaDrop, AnaMove }
-import lila.tree.Node.{ defaultNodeJsonWriter, Comment, Gamebook, Shape, Shapes }
+import lila.tree.Node.{ Comment, Gamebook, Shape, Shapes }
 import lila.user.User
 
 final private class StudySocket(
@@ -41,7 +41,7 @@ final private class StudySocket(
 
   def onServerEval(studyId: Study.Id, eval: ServerEval.Progress): Unit =
     eval match {
-      case ServerEval.Progress(chapterId, tree, analysis, division) =>
+      case ServerEval.Progress(chapterId, root, analysis, division) =>
         import lila.game.JsonView.divisionWriter
         import JsonView._
         send(
@@ -52,7 +52,7 @@ final private class StudySocket(
               Json.obj(
                 "analysis" -> analysis,
                 "ch"       -> chapterId,
-                "tree"     -> defaultNodeJsonWriter.writes(tree),
+                "tree"     -> JsonView.defaultNodeJsonWriter.writes(root),
                 "division" -> division
               )
             )
@@ -75,13 +75,9 @@ final private class StudySocket(
           (o \ "d" \ "liked").asOpt[Boolean] foreach { v =>
             who foreach api.like(studyId, v)
           }
-        case "anaMove" =>
-          AnaMove parse o foreach { move =>
+        case "anaUsi" =>
+          AnaUsi parse o foreach { move =>
             who foreach moveOrDrop(studyId, move, MoveOpts parse o)
-          }
-        case "anaDrop" =>
-          AnaDrop parse o foreach { drop =>
-            who foreach moveOrDrop(studyId, drop, MoveOpts parse o)
           }
         case "deleteNode" =>
           reading[AtPosition](o) { position =>
@@ -149,6 +145,10 @@ final private class StudySocket(
           o.get[Chapter.Id]("d") foreach { id =>
             who foreach api.clearAnnotations(studyId, id)
           }
+        case "unbindFromGame" =>
+          o.get[Chapter.Id]("d") foreach { id =>
+            who foreach api.unbindFromGame(studyId, id)
+          }
         case "sortChapters" =>
           o.get[List[Chapter.Id]]("d") foreach { ids =>
             who foreach api.sortChapters(studyId, ids)
@@ -189,10 +189,6 @@ final private class StudySocket(
           o strs "d" foreach { topics =>
             who foreach api.setTopics(studyId, topics)
           }
-        case "explorerGame" =>
-          reading[actorApi.ExplorerGame](o) { data =>
-            who foreach api.explorerGame(studyId, data)
-          }
         case "requestAnalysis" =>
           o.get[Chapter.Id]("d") foreach { chapterId =>
             user foreach { api.analysisRequest(studyId, chapterId, _) }
@@ -210,9 +206,10 @@ final private class StudySocket(
               onError = err => send(P.Out.tellSri(w.sri, makeMessage("error", err)))
             )
           }(funit)
-        case "relaySync" =>
+        case "rematch" =>
           who foreach { w =>
-            Bus.publish(actorApi.RelayToggle(studyId, ~(o \ "d").asOpt[Boolean], w), "relayToggle")
+            val yes = o.obj("d").flatMap(_.boolean("yes")) | true
+            api.studyRematch(studyId, yes)(w)
           }
         case t => logger.warn(s"Unhandled study socket message: $t")
       }
@@ -229,19 +226,21 @@ final private class StudySocket(
     chatBusChan = _.Study
   )
 
-  private def moveOrDrop(studyId: Study.Id, m: AnaAny, opts: MoveOpts)(who: Who) =
-    m.branch match {
-      case scalaz.Success(branch) if branch.ply < Node.MAX_PLIES =>
-        m.chapterId.ifTrue(opts.write) foreach { chapterId =>
+  private def moveOrDrop(studyId: Study.Id, au: AnaUsi, opts: MoveOpts)(who: Who) = {
+    val path = Path(au.path)
+    au.node match {
+      case Validated.Valid(node) if path.depth < Node.MAX_PLIES =>
+        au.chapterId.ifTrue(opts.write) foreach { chapterId =>
           api.addNode(
             studyId,
-            Position.Ref(Chapter.Id(chapterId), Path(m.path)),
-            Node.fromBranch(branch) withClock opts.clock,
+            Position.Ref(Chapter.Id(chapterId), path),
+            node withClock opts.clock,
             opts
           )(who)
         }
       case _ =>
     }
+  }
 
   private lazy val send: String => Unit = remoteSocketApi.makeSender("study-out").apply _
 
@@ -253,14 +252,7 @@ final private class StudySocket(
 
   import JsonView._
   import jsonView.membersWrites
-  import lila.tree.Node.{
-    clockWrites,
-    commentWriter,
-    defaultNodeJsonWriter,
-    glyphsWriter,
-    openingWriter,
-    shapesWrites
-  }
+  import lila.tree.Node.{ clockWrites, commentWriter, glyphsWriter, shapesWrites }
   private type SendToStudy = Study.Id => Unit
   private def version[A: Writes](tpe: String, data: A): SendToStudy =
     studyId => rooms.tell(studyId.value, NotifyVersion(tpe, data))
@@ -273,26 +265,38 @@ final private class StudySocket(
   def addNode(
       pos: Position.Ref,
       node: Node,
-      variant: shogi.variant.Variant,
       sticky: Boolean,
-      relay: Option[Chapter.Relay],
       who: Who
-  ) = {
-    val dests = AnaDests(variant, node.fen, pos.path.toString, pos.chapterId.value.some)
+  ) =
     version(
       "addNode",
       Json
         .obj(
-          "n" -> defaultNodeJsonWriter.writes(TreeBuilder.toBranch(node, variant)),
+          "n" -> JsonView.defaultNodeJsonWriter.writes(node),
           "p" -> pos,
           "w" -> who,
-          "d" -> dests.dests,
-          "o" -> dests.opening,
           "s" -> sticky
         )
-        .add("relay", relay)
     )
-  }
+
+  def roundRematchOffer(by: Option[shogi.Color]) =
+    version(
+      "rematchOffer",
+      Json
+        .obj(
+          "by" -> by
+        )
+    )
+
+  def roundRematch(gameId: String) =
+    version(
+      "rematch",
+      Json
+        .obj(
+          "g" -> gameId
+        )
+    )
+
   def deleteNode(pos: Position.Ref, who: Who) = version("deleteNode", Json.obj("p" -> pos, "w" -> who))
   def promote(pos: Position.Ref, toMainline: Boolean, who: Who) =
     version(
@@ -363,7 +367,7 @@ final private class StudySocket(
     )
   def reloadChapters(chapters: List[Chapter.Metadata]) = version("chapters", chapters)
   def reloadAll                                        = version("reload", JsNull)
-  def changeChapter(pos: Position.Ref, who: Who)       = version("changeChapter", Json.obj("p" -> pos, "w" -> who))
+  def changeChapter(pos: Position.Ref, who: Who) = version("changeChapter", Json.obj("p" -> pos, "w" -> who))
   def updateChapter(chapterId: Chapter.Id, who: Who) =
     version("updateChapter", Json.obj("chapterId" -> chapterId, "w" -> who))
   def descChapter(chapterId: Chapter.Id, desc: Option[String], who: Who) =
@@ -395,7 +399,7 @@ final private class StudySocket(
         "ply" -> ply.map(_.value)
       )
     )
-  def setTags(chapterId: Chapter.Id, tags: shogi.format.pgn.Tags, who: Who) =
+  def setTags(chapterId: Chapter.Id, tags: shogi.format.Tags, who: Who) =
     version(
       "setTags",
       Json.obj(
@@ -450,7 +454,6 @@ object StudySocket {
         implicit val StudyDataReader: Reads[Study.Data]                  = Json.reads[Study.Data]
         implicit val setTagReader: Reads[actorApi.SetTag]                = Json.reads[actorApi.SetTag]
         implicit val gamebookReader: Reads[Gamebook]                     = Json.reads[Gamebook]
-        implicit val explorerGame: Reads[actorApi.ExplorerGame]          = Json.reads[actorApi.ExplorerGame]
       }
     }
 

@@ -29,15 +29,15 @@ final class I18n(env: Env) extends LilaController(env) {
             } >> negotiate(
               html = {
                 val redir = Redirect {
-                  HTTPRequest.referer(ctx.req).fold(routes.Lobby.home().url) { str =>
+                  HTTPRequest.referer(ctx.req).fold(routes.Lobby.home.url) { str =>
                     try {
-                      val pageUrl = new java.net.URL(str)
+                      val pageUrl = new java.net.URI(str).parseServerAuthority().toURL()
                       val path    = pageUrl.getPath
                       val query   = pageUrl.getQuery
-                      if (query == null) path
+                      if (query == null || query.startsWith("lang=") || query.contains("&lang=")) path
                       else path + "?" + query
                     } catch {
-                      case _: java.net.MalformedURLException => routes.Lobby.home().url
+                      case _: Exception => routes.Lobby.home.url
                     }
                   }
                 }

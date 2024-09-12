@@ -1,22 +1,22 @@
-import { opposite } from 'shogiground/util';
-import { evalSwings } from '../nodeFinder';
 import { winningChances } from 'ceval';
+import { isEmpty, prop } from 'common/common';
+import { opposite } from 'shogiground/util';
 import { path as treePath } from 'tree';
-import { empty, prop } from 'common';
-import { OpeningData } from '../explorer/interfaces';
 import AnalyseCtrl from '../ctrl';
+import { evalSwings } from '../nodeFinder';
 
 export interface RetroCtrl {
   isSolving(): boolean;
   trans: Trans;
   [key: string]: any;
-  notation: number;
+  variant: VariantKey;
+  initialSfen: Sfen | undefined;
+  offset: number;
 }
 
 type Feedback = 'find' | 'eval' | 'win' | 'fail' | 'view';
 
 export function make(root: AnalyseCtrl, color: Color): RetroCtrl {
-  const game = root.data.game;
   let candidateNodes: Tree.Node[] = [];
   const explorerCancelPlies: number[] = [];
   let solvedPlies: number[] = [];
@@ -59,29 +59,8 @@ export function make(root: AnalyseCtrl, color: Color): RetroCtrl {
         node: solutionNode,
         path: prevPath + solutionNode!.id,
       },
-      openingUcis: [],
+      openingUsis: [],
     });
-    // fetch opening explorer moves
-    if (
-      game.variant.key === 'standard' &&
-      game.division &&
-      (!game.division.middle || fault.node.ply < game.division.middle)
-    ) {
-      root.explorer.fetchMasterOpening(prev.node.fen).then((res: OpeningData) => {
-        const cur = current();
-        const ucis: Uci[] = [];
-        res!.moves.forEach(m => {
-          if (m.sente + m.draws + m.gote > 1) ucis.push(m.uci);
-        });
-        if (ucis.includes(fault.node.uci!)) {
-          explorerCancelPlies.push(fault.node.ply);
-          setTimeout(jumpToNext, 100);
-        } else {
-          cur.openingUcis = ucis;
-          current(cur);
-        }
-      });
-    }
     root.userJump(prev.path);
     redraw();
   }
@@ -97,7 +76,7 @@ export function make(root: AnalyseCtrl, color: Color): RetroCtrl {
       return;
     }
     if (isSolving() && cur.fault.node.ply === node.ply) {
-      if (cur.openingUcis.includes(node.uci)) onWin();
+      if (cur.openingUsis.includes(node.usi)) onWin();
       // found in opening explorer
       else if (node.comp) onWin();
       // the computer solution line
@@ -113,7 +92,7 @@ export function make(root: AnalyseCtrl, color: Color): RetroCtrl {
   }
 
   function isCevalReady(node: Tree.Node): boolean {
-    return node.ceval ? node.ceval.depth >= 18 || (node.ceval.depth >= 14 && node.ceval.millis > 7000) : false;
+    return node.ceval ? node.ceval.depth >= 18 || (node.ceval.depth >= 14 && (node.ceval.millis ?? 0) > 7000) : false;
   }
 
   function checkCeval(): void {
@@ -140,7 +119,7 @@ export function make(root: AnalyseCtrl, color: Color): RetroCtrl {
       path: root.path,
     };
     root.userJump(current().prev.path);
-    if (!root.tree.pathIsMainline(bad.path) && empty(bad.node.children)) root.tree.deleteNodeAt(bad.path);
+    if (!root.tree.pathIsMainline(bad.path) && isEmpty(bad.node.children)) root.tree.deleteNodeAt(bad.path);
     redraw();
   }
 
@@ -208,6 +187,8 @@ export function make(root: AnalyseCtrl, color: Color): RetroCtrl {
     noarg: root.trans.noarg,
     node: () => root.node,
     redraw,
-    notation: root.data.pref.pieceNotation,
+    variant: root.data.game.variant.key,
+    initialSfen: root.data.game.initialSfen,
+    offset: root.plyOffset(),
   };
 }

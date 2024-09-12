@@ -1,15 +1,16 @@
 package lila.puzzle
 
-import org.joda.time.DateTime
+import cats.implicits._
 import scala.concurrent.duration._
+
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.Usi
 
 import lila.common.paginator.Paginator
 import lila.common.config.MaxPerPage
-import lila.db.AsyncColl
 import lila.db.dsl._
 import lila.db.paginator.Adapter
-import lila.memo.CacheApi
-import lila.user.{ User, UserRepo }
+import lila.user.User
 
 final class PuzzleApi(
     colls: PuzzleColls,
@@ -25,6 +26,15 @@ final class PuzzleApi(
     def find(id: Puzzle.Id): Fu[Option[Puzzle]] =
       colls.puzzle(_.byId[Puzzle](id.value))
 
+    def exists(id: Puzzle.Id): Fu[Boolean] =
+      colls.puzzle(_.exists($id(id)))
+
+    def existsBySfen(sfen: Sfen): Fu[Boolean] =
+      colls.puzzle(_.exists($doc(F.sfen -> sfen.value)))
+
+    def fromGame(gameId: lila.game.Game.ID): Fu[List[Puzzle]] =
+      colls.puzzle(_.list[Puzzle]($doc(F.gameId -> gameId), 5))
+
     def delete(id: Puzzle.Id): Funit =
       colls.puzzle(_.delete.one($id(id.value))).void
 
@@ -39,6 +49,20 @@ final class PuzzleApi(
           ),
           page,
           MaxPerPage(30)
+        )
+      }
+
+    def submitted(user: User, page: Int): Fu[Paginator[Puzzle]] =
+      colls.puzzle { coll =>
+        Paginator(
+          adapter = new Adapter[Puzzle](
+            collection = coll,
+            selector = $doc("submittedBy" -> user.id),
+            projection = none,
+            sort = $sort desc "plays"
+          ),
+          page,
+          MaxPerPage(15)
         )
       }
   }
@@ -145,8 +169,8 @@ final class PuzzleApi(
                         F.themes -> newThemes
                       ).some
                     )
-                  case Some(v) =>
-                    trustApi.theme(user, round, theme, v) map2 { weight =>
+                  case Some(_) =>
+                    trustApi.theme(user) map2 { weight =>
                       $set(
                         F.themes -> newThemes,
                         F.puzzle -> id,
@@ -175,5 +199,56 @@ final class PuzzleApi(
     def set(user: User, id: Puzzle.Id) = store.put(key(user, id))
 
     def apply(user: User, id: Puzzle.Id) = store.get(key(user, id))
+  }
+
+  object submissions {
+
+    def addNew(
+        sfen: Sfen,
+        line: List[Usi],
+        ambProms: List[Int],
+        themes: List[String],
+        source: Either[Option[String], lila.game.Game.ID],
+        submittedBy: Option[String]
+    ): Funit =
+      (for {
+        validSfen     <- fuccess(sfen.toSituation(shogi.variant.Standard).map(_.toSfen)) orFail "Invalid sfen"
+        validLine     <- fuccess(line.toNel) orFail "No moveline"
+        alreadyExists <- puzzle.existsBySfen(validSfen)
+        _             <- alreadyExists ?? fufail[Unit]("Puzzle with the same position already present")
+        similarExists <- source.fold(
+          _ => fuccess(false),
+          gameId =>
+            puzzle
+              .fromGame(gameId)
+              .map(_.exists(p => Math.abs(~p.sfen.stepNumber - ~validSfen.stepNumber) >= 10))
+        )
+        _  <- similarExists ?? fufail[Unit](s"Similar puzzle exists (~${source.map(_.toString)})")
+        id <- makeId
+      } yield Puzzle(
+        id = id,
+        sfen = validSfen,
+        line = validLine,
+        ambiguousPromotions = ambProms,
+        glicko = Puzzle.glickoDefault(validLine.size),
+        plays = 0,
+        vote = 0f,
+        gameId = source.toOption,
+        themes = themes.flatMap(PuzzleTheme.find).map(_.key).toSet,
+        author = source.left.toOption.flatten,
+        description = None,
+        submittedBy = submittedBy
+      )).flatMap { p =>
+        colls.puzzle(_.insert.one(p))
+      }.void
+
+    private def makeId: Fu[Puzzle.Id] = {
+      val id = Puzzle.Id(lila.common.ThreadLocalRandom nextString 5)
+      puzzle.exists(id).flatMap {
+        case true  => makeId
+        case false => fuccess(id)
+      }
+    }
+
   }
 }

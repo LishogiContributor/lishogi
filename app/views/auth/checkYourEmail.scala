@@ -15,7 +15,7 @@ object checkYourEmail {
       form: Option[Form[_]] = None
   )(implicit ctx: Context) =
     views.html.base.layout(
-      title = "Check your email",
+      title = trans.checkYourEmail.txt(),
       moreCss = cssTag("email-confirm")
     ) {
       main(
@@ -31,13 +31,13 @@ object checkYourEmail {
               h3("Make sure your email address is correct:"),
               br,
               br,
-              postForm(action := routes.Auth.fixEmail())(
+              postForm(action := routes.Auth.fixEmail)(
                 input(
-                  id := "new-email",
+                  id  := "new-email",
                   tpe := "email",
                   required,
-                  name := "email",
-                  value := form.flatMap(_("email").value).getOrElse(email.value),
+                  name    := "email",
+                  value   := form.flatMap(_("email").value).getOrElse(email.value),
                   pattern := s"^((?!^${email.value}$$).)*$$"
                 ),
                 embedJsUnsafe("""
@@ -67,7 +67,7 @@ email.setCustomValidity(email.validity.patternMismatch ? currentError : "");
             "Did you wait 5 minutes?",
             br,
             "If so, ",
-            a(href := routes.Account.emailConfirmHelp())("proceed to this page to solve the issue"),
+            a(href := routes.Account.emailConfirmHelp)("proceed to this page to solve the issue"),
             "."
           )
         )

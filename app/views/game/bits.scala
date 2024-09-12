@@ -1,57 +1,54 @@
 package views.html.game
 
+import play.api.i18n.Lang
+
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
 import lila.game.{ Game, Player, Pov }
 import lila.user.Title
+import lila.rating.PerfType.Correspondence
 
 import controllers.routes
 
 object bits {
 
-  private val dataLastmove = attr("data-lastmove")
-
   def featuredJs(pov: Pov): Frag =
     frag(
-      gameFenNoCtx(pov, tv = true),
-      vstext(pov)(none)
+      gameSfenNoCtx(pov, tv = true),
+      vstext(pov)(lila.i18n.defaultLang)
     )
 
   def mini(pov: Pov)(implicit ctx: Context): Frag =
     a(href := gameLink(pov))(
-      gameFen(pov, withLink = false),
-      vstext(pov)(ctx.some)
+      gameSfen(pov, withLink = false),
+      vstext(pov)
     )
 
-  def miniBoard(fen: shogi.format.FEN, color: shogi.Color = shogi.Sente): Frag =
+  def miniBoard(
+      sfen: shogi.format.forsyth.Sfen,
+      color: shogi.Color = shogi.Sente,
+      variant: shogi.variant.Variant = shogi.variant.Standard
+  ): Frag =
     div(
-      cls := "mini-board parse-fen cg-wrap is2d",
-      dataColor := color.name,
-      dataFen := fen.value
-    )(cgWrapContent)
-
-  def miniTag(fen: shogi.format.FEN, color: shogi.Color = shogi.Sente, lastMove: String = "")(tag: Tag): Tag =
-    tag(
-      cls := "mini-board parse-fen cg-wrap is2d",
-      dataColor := color.name,
-      dataFen := fen.value,
-      dataLastmove := lastMove
-    )(cgWrapContent)
+      cls         := s"mini-board parse-sfen ${variantClass(variant)}",
+      dataColor   := color.name,
+      dataSfen    := sfen.value,
+      dataVariant := variant.key
+    )(shogigroundEmpty(variant, color))
 
   def gameIcon(game: Game): Char =
     game.perfType match {
-      case _ if game.fromPosition         => '*'
-      case _ if game.imported             => '/'
-      case Some(p) if game.variant.exotic => p.iconChar
-      case _ if game.hasAi                => 'n'
-      case Some(p)                        => p.iconChar
-      case _                              => '9'
+      case _ if game.initialSfen.isDefined   => '*'
+      case _ if game.imported                => '/'
+      case Some(p) if !game.variant.standard => p.iconChar
+      case _ if game.hasAi                   => 'n'
+      case Some(p)                           => p.iconChar
+      case _                                 => '9'
     }
 
   def sides(
       pov: Pov,
-      initialFen: Option[shogi.format.FEN],
       tour: Option[lila.tournament.TourAndTeamVs],
       cross: Option[lila.game.Crosstable.WithMatchup],
       simul: Option[lila.simul.Simul],
@@ -59,7 +56,7 @@ object bits {
       bookmarked: Boolean
   )(implicit ctx: Context) =
     div(
-      side.meta(pov, initialFen, tour, simul, userTv, bookmarked = bookmarked),
+      side.meta(pov, tour, simul, userTv, bookmarked = bookmarked),
       cross.map { c =>
         div(cls := "crosstable")(crosstable(ctx.userId.fold(c)(c.fromPov), pov.gameId.some))
       }
@@ -67,28 +64,45 @@ object bits {
 
   def variantLink(
       variant: shogi.variant.Variant,
-      name: String,
-      initialFen: Option[shogi.format.FEN] = None
-  ) =
-    a(
-      cls := "variant-link",
-      href := (variant match {
-        case shogi.variant.Standard => "https://en.wikipedia.org/wiki/Shogi"
-        case shogi.variant.FromPosition =>
-          s"""${routes.Editor.index()}?fen=${initialFen.??(_.value.replace(' ', '_'))}"""
-        case v => routes.Page.variant(v.key).url
-      }),
-      rel := "nofollow",
-      target := "_blank",
-      title := variant.title
+      perfType: Option[lila.rating.PerfType] = None
+  )(implicit lang: Lang): Frag = {
+    def link(
+        href: String,
+        title: String,
+        name: String
+    ) = a(
+      cls      := "variant-link",
+      st.href  := href,
+      rel      := "nofollow",
+      target   := "_blank",
+      st.title := title
     )(name)
+
+    if (!variant.standard)
+      link(
+        href = routes.Page.variant(variant.key).url,
+        title = variantDescription(variant),
+        name = variantName(variant)
+      )
+    else
+      perfType match {
+        case Some(Correspondence) =>
+          link(
+            href = s"${routes.Main.faq}#correspondence",
+            title = Correspondence.desc,
+            name = Correspondence.trans
+          )
+        case Some(pt) => span(title := pt.desc)(pt.trans)
+        case _        => variantName(variant)
+      }
+  }
 
   private def playerTitle(player: Player) =
     player.userId.flatMap(lightUser).flatMap(_.title) map Title.apply map { t =>
       span(cls := "title", dataBot(t), title := Title titleName t)(t.value)
     }
 
-  def vstext(pov: Pov)(ctxOption: Option[Context]): Frag =
+  def vstext(pov: Pov)(implicit lang: Lang): Frag =
     span(cls := "vstext")(
       span(cls := "vstext__pl user-link")(
         playerUsername(pov.player, withRating = false, withTitle = false),
@@ -96,24 +110,22 @@ object bits {
         playerTitle(pov.player) map { t =>
           frag(t, " ")
         },
-        pov.player.rating,
+        pov.player.rating.map(_.toString).orElse(pov.player.engineConfig.map(engineLevel)),
         pov.player.provisional option "?"
       ),
       pov.game.clock map { c =>
         span(cls := "vstext__clock")(shortClockName(c.config))
       } orElse {
-        ctxOption flatMap { implicit ctx =>
-          pov.game.daysPerTurn map { days =>
-            span(cls := "vstext__clock")(
-              if (days == 1) trans.oneDay() else trans.nbDays.pluralSame(days)
-            )
-          }
+        pov.game.daysPerTurn map { days =>
+          span(cls := "vstext__clock")(
+            if (days == 1) trans.oneDay() else trans.nbDays.pluralSame(days)
+          )
         }
       },
       span(cls := "vstext__op user-link")(
         playerUsername(pov.opponent, withRating = false, withTitle = false),
         br,
-        pov.opponent.rating,
+        pov.opponent.rating.map(_.toString).orElse(pov.opponent.engineConfig.map(engineLevel)),
         pov.opponent.provisional option "?",
         playerTitle(pov.opponent) map { t =>
           frag(" ", t)

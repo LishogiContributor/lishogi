@@ -25,11 +25,12 @@ object list {
       wrapClass = "full-screen-force",
       openGraph = lila.app.ui
         .OpenGraph(
-          title = "Shogi players and leaderboards",
-          url = s"$netBaseUrl${routes.User.list().url}",
-          description = "Best Shogi players in bullet, blitz, rapid and classical"
+          title = s"${trans.players.txt()} - ${trans.leaderboards.txt()}",
+          url = s"$netBaseUrl${routes.User.list.url}",
+          description = trans.bestPlayersInVariousCategories.txt()
         )
         .some
+      // todo later - withHrefLangs = lila.i18n.LangList.All.some
     ) {
       main(cls := "page-menu")(
         bits.communityMenu("leaderboard"),
@@ -46,14 +47,19 @@ object list {
           div(cls := "community__leaders")(
             h2(trans.leaderboard()),
             div(cls := "leaderboards")(
-              userTopPerf(leaderboards.bullet, PerfType.Bullet), // todo variant
+              userTopPerf(leaderboards.bullet, PerfType.Bullet),
               userTopPerf(leaderboards.blitz, PerfType.Blitz),
               userTopPerf(leaderboards.rapid, PerfType.Rapid),
               userTopPerf(leaderboards.classical, PerfType.Classical),
               userTopPerf(leaderboards.ultraBullet, PerfType.UltraBullet),
               userTopPerf(leaderboards.correspondence, PerfType.Correspondence),
               userTopActive(nbAllTime, trans.activePlayers(), icon = 'U'.some),
-              tournamentWinners(tourneyWinners)
+              tournamentWinners(tourneyWinners),
+              userTopPerf(leaderboards.minishogi, PerfType.Minishogi),
+              userTopPerf(leaderboards.chushogi, PerfType.Chushogi),
+              userTopPerf(leaderboards.annanshogi, PerfType.Annanshogi),
+              userTopPerf(leaderboards.kyotoshogi, PerfType.Kyotoshogi),
+              userTopPerf(leaderboards.checkshogi, PerfType.Checkshogi)
             )
           )
         )
@@ -63,7 +69,7 @@ object list {
   private def tournamentWinners(winners: List[lila.tournament.Winner])(implicit ctx: Context) =
     st.section(cls := "user-top")(
       h2(cls := "text", dataIcon := "g")(
-        a(href := routes.Tournament.leaderboard())(trans.tournament())
+        a(href := routes.Tournament.leaderboard)(trans.tournament())
       ),
       ol(winners take 10 map { w =>
         li(

@@ -20,7 +20,6 @@ private class RoundConfig(
     @ConfigName("collection.note") val noteColl: CollName,
     @ConfigName("collection.forecast") val forecastColl: CollName,
     @ConfigName("collection.alarm") val alarmColl: CollName,
-    @ConfigName("animation.duration") val animationDuration: AnimationDuration,
     @ConfigName("moretime") val moretimeDuration: MoretimeDuration
 )
 
@@ -42,15 +41,12 @@ final class Env(
     gameJsonView: lila.game.JsonView,
     rankingApi: lila.user.RankingApi,
     notifyApi: lila.notify.NotifyApi,
-    uciMemo: lila.game.UciMemo,
     rematches: lila.game.Rematches,
     divider: lila.game.Divider,
     prefApi: lila.pref.PrefApi,
     historyApi: lila.history.HistoryApi,
     evalCache: lila.evalCache.EvalCacheApi,
     remoteSocketApi: lila.socket.RemoteSocket,
-    isBotSync: lila.common.LightUser.IsBotSync,
-    slackApi: lila.slack.SlackApi,
     ratingFactors: () => lila.rating.RatingFactors,
     shutdown: akka.actor.CoordinatedShutdown
 )(implicit
@@ -59,9 +55,8 @@ final class Env(
     scheduler: akka.actor.Scheduler
 ) {
 
-  implicit private val moretimeLoader  = durationLoader(MoretimeDuration.apply)
-  implicit private val animationLoader = durationLoader(AnimationDuration.apply)
-  private val config                   = appConfig.get[RoundConfig]("round")(AutoConfig.loader)
+  implicit private val moretimeLoader = durationLoader(MoretimeDuration.apply)
+  private val config                  = appConfig.get[RoundConfig]("round")(AutoConfig.loader)
 
   private val defaultGoneWeight                      = fuccess(1f)
   private def goneWeight(userId: User.ID): Fu[Float] = playban.getRageSit(userId).dmap(_.goneWeight)
@@ -92,7 +87,7 @@ final class Env(
 
   Bus.subscribeFuns(
     "accountClose" -> { case lila.hub.actorApi.security.CloseAccount(userId) =>
-      gameRepo.allPlaying(userId) map {
+      gameRepo.allPlaying(userId) foreach {
         _ foreach { pov =>
           tellRound(pov.gameId, Resign(pov.playerId))
         }
@@ -102,7 +97,7 @@ final class Env(
       onStart(gameId)
     },
     "selfReport" -> { case RoundSocket.Protocol.In.SelfReport(fullId, ip, userId, name) =>
-      selfReport(userId, ip, fullId, name)
+      selfReport(userId, ip, fullId, name).unit
     }
   )
 
@@ -113,9 +108,10 @@ final class Env(
   lazy val onStart: OnStart = new OnStart((gameId: Game.ID) =>
     proxyRepo game gameId foreach {
       _ foreach { game =>
-        Bus.publish(lila.game.actorApi.StartGame(game), "startGame")
+        val sg = lila.game.actorApi.StartGame(game)
+        Bus.publish(sg, "startGame")
         game.userIds foreach { userId =>
-          Bus.publish(lila.game.actorApi.StartGame(game), s"userStartGame:$userId")
+          Bus.publish(sg, s"userStartGame:$userId")
         }
       }
     }
@@ -151,6 +147,10 @@ final class Env(
   private lazy val player: Player = wire[Player]
 
   private lazy val drawer = wire[Drawer]
+
+  private lazy val pauser: Pauser = wire[Pauser]
+
+  lazy val isOfferingResume = new IsOfferingResume(pauser.isOfferingResume)
 
   lazy val messenger = wire[Messenger]
 

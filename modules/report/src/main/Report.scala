@@ -1,7 +1,7 @@
 package lila.report
 
 import org.joda.time.DateTime
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 import lila.user.User
 
@@ -29,7 +29,7 @@ case class Report(
 
   def add(atom: Atom) =
     atomBy(atom.by)
-      .fold(copy(atoms = atom <:: atoms)) { existing =>
+      .fold(copy(atoms = atom :: atoms)) { existing =>
         if (existing.text contains atom.text) this
         else
           copy(
@@ -82,6 +82,8 @@ case class Report(
         case Report.sandbagWithRegex(userId) => userId
       }
     }
+
+  def isAppeal = room == Room.Other && atoms.head.text == Report.appealText
 }
 
 object Report {
@@ -106,7 +108,7 @@ object Report {
   ) {
     def simplifiedText = text.linesIterator.filterNot(_ startsWith "[AUTOREPORT]") mkString "\n"
 
-    def byHuman = !byLishogi && by != ReporterId.irwin
+    def byHuman = !byLishogi
 
     def byLishogi = by == ReporterId.lishogi
   }
@@ -134,7 +136,6 @@ object Report {
     def scored(score: Score) = Candidate.Scored(this, score)
     def isAutomatic          = reporter.id == ReporterId.lishogi
     def isAutoComm           = isAutomatic && isComm
-    def isCoachReview        = isOther && text.contains("COACH REVIEW")
     def isCommFlag           = text contains Reason.Comm.flagText
   }
 
@@ -152,6 +153,7 @@ object Report {
   }
 
   private[report] val spontaneousText = "Spontaneous inquiry"
+  private[report] val appealText      = "Appeal"
 
   def make(c: Candidate.Scored, existing: Option[Report]) =
     c match {
@@ -162,7 +164,7 @@ object Report {
             user = candidate.suspect.user.id,
             reason = candidate.reason,
             room = Room(candidate.reason),
-            atoms = NonEmptyList(c.atom),
+            atoms = NonEmptyList.one(c.atom),
             score = score,
             inquiry = none,
             open = true,

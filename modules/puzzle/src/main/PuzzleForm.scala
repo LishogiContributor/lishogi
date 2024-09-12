@@ -30,24 +30,28 @@ object PuzzleForm {
     single("difficulty" -> stringIn(PuzzleDifficulty.all.map(_.key).toSet))
   )
 
-  object bc {
+  val newPuzzles = Form(
+    mapping(
+      "sfens"  -> nonEmptyText,
+      "source" -> optional(text)
+    )(Tuple2.apply)(Tuple2.unapply)
+  )
 
-    val round = Form(
-      mapping(
-        "win" -> text
-      )(w => RoundData(w == "1" || w == "true", none))(r => none)
+  object mobile {
+
+    case class Solution(id: String, theme: String, win: Boolean)
+
+    val solutions = Form(
+      single(
+        "solutions" -> list(
+          mapping(
+            "id"    -> nonEmptyText,
+            "theme" -> nonEmptyText,
+            "win"   -> boolean
+          )(Solution.apply)(Solution.unapply)
+        )
+      )
     )
 
-    val vote = Form(
-      single("vote" -> numberIn(Set(0, 1)))
-    )
-
-    import play.api.libs.json._
-
-    case class Solution(id: Long, win: Boolean)
-    case class SolveData(solutions: List[Solution])
-
-    implicit val SolutionReads  = Json.reads[Solution]
-    implicit val SolveDataReads = Json.reads[SolveData]
   }
 }

@@ -1,12 +1,14 @@
 package lila.simul
 
+import shogi.format.forsyth.Sfen
+
+import org.joda.time.DateTime
 import play.api.data._
 import play.api.data.Forms._
 import play.api.data.validation.{ Constraint, Constraints }
-import lila.user.User
 
-import shogi.StartingPosition
 import lila.common.Form._
+import lila.user.User
 
 object SimulForm {
 
@@ -14,15 +16,15 @@ object SimulForm {
   val clockTimeDefault = 20
   val clockTimeChoices = options(clockTimes, "%d minute{s}")
 
-  val clockIncrements       = (0 to 2 by 1) ++ (3 to 7) ++ (10 to 30 by 5) ++ (40 to 60 by 10) ++ (90 to 180 by 30)
-  val clockIncrementDefault = 60
+  val clockIncrements = (0 to 2 by 1) ++ (3 to 7) ++ (10 to 30 by 5) ++ (40 to 60 by 10) ++ (90 to 180 by 30)
+  val clockIncrementDefault = 0
   val clockIncrementChoices = options(clockIncrements, "%d second{s}")
 
   val clockExtras       = (0 to 15 by 5) ++ (20 to 60 by 10) ++ (90 to 120 by 30)
   val clockExtraChoices = options(clockExtras, "%d minute{s}")
   val clockExtraDefault = 0
 
-  val clockByoyomi        = (0 to 2 by 1) ++ (3 to 7) ++ (10 to 30 by 5) ++ (40 to 60 by 10) ++ (90 to 180 by 30)
+  val clockByoyomi = (0 to 2 by 1) ++ (3 to 7) ++ (10 to 30 by 5) ++ (40 to 60 by 10) ++ (90 to 180 by 30)
   val clockByoyomiDefault = 0
   val clockByoyomiChoices = options(clockByoyomi, "%d second{s}")
 
@@ -30,16 +32,11 @@ object SimulForm {
   val periodsDefault = 1
   val periodsChoices = options(periods, "%d period{s}")
 
-  val colors = List("sente", "random", "gote")
-  val colorChoices = List(
-    "sente"  -> "Sente/Shitate",
-    "random" -> "Random",
-    "gote"   -> "Gote/Uwate"
-  )
+  val colors       = List("sente", "random", "gote")
   val colorDefault = "gote"
 
   private def nameType(host: User) =
-    clean(text).verifying(
+    cleanText.verifying(
       Constraints minLength 2,
       Constraints maxLength 40,
       Constraints.pattern(
@@ -67,6 +64,37 @@ object SimulForm {
     )
 
   def create(host: User) =
+    baseForm(host) fill Setup(
+      name = host.titleUsername,
+      clockTime = clockTimeDefault,
+      clockIncrement = clockIncrementDefault,
+      clockByoyomi = clockByoyomiDefault,
+      periods = periodsDefault,
+      clockExtra = clockExtraDefault,
+      variants = List(shogi.variant.Standard.id),
+      position = none,
+      color = colorDefault,
+      text = "",
+      estimatedStartAt = none,
+      team = none
+    )
+  def edit(host: User, simul: Simul) =
+    baseForm(host) fill Setup(
+      name = simul.name,
+      clockTime = simul.clock.config.limitInMinutes.toInt,
+      clockIncrement = simul.clock.config.increment.roundSeconds,
+      clockByoyomi = simul.clock.config.byoyomi.roundSeconds,
+      periods = simul.clock.config.periodsTotal,
+      clockExtra = simul.clock.hostExtraMinutes,
+      variants = simul.variants.map(_.id),
+      position = simul.position,
+      color = simul.color | "random",
+      text = simul.text,
+      estimatedStartAt = simul.estimatedStartAt,
+      team = simul.team
+    )
+
+  private def baseForm(host: User) =
     Form(
       mapping(
         "name"           -> nameType(host),
@@ -78,37 +106,24 @@ object SimulForm {
         "variants" -> list {
           number.verifying(
             Set(
-              shogi.variant.Standard.id
+              shogi.variant.Standard.id,
+              shogi.variant.Minishogi.id,
+              shogi.variant.Chushogi.id,
+              shogi.variant.Annanshogi.id,
+              shogi.variant.Kyotoshogi.id,
+              shogi.variant.Checkshogi.id
             ) contains _
           )
         }.verifying("At least one variant", _.nonEmpty),
-        "position" -> optional(nonEmptyText),
-        "color"    -> stringIn(colorChoices),
-        "text"     -> clean(text),
-        "team"     -> optional(nonEmptyText)
+        "position"         -> optional(lila.common.Form.sfen.clean),
+        "color"            -> stringIn(colors.toSet),
+        "text"             -> cleanText,
+        "estimatedStartAt" -> optional(inTheFuture(ISODateTimeOrTimestamp.isoDateTimeOrTimestamp)),
+        "team"             -> optional(nonEmptyText)
       )(Setup.apply)(Setup.unapply)
-    ) fill Setup(
-      name = host.titleUsername,
-      clockTime = clockTimeDefault,
-      clockIncrement = clockIncrementDefault,
-      clockByoyomi = clockByoyomiDefault,
-      periods = periodsDefault,
-      clockExtra = clockExtraDefault,
-      variants = List(shogi.variant.Standard.id),
-      position = StartingPosition.initial.fen.some,
-      color = colorDefault,
-      text = "",
-      team = none
+        .verifying("Custom position allowed only with one variant", _.canHaveCustomPosition)
+        .verifying("Custom position is not valid", _.isCustomPositionValid)
     )
-
-  val positions = StartingPosition.allWithInitial.map(_.fen)
-  val positionChoices = StartingPosition.allWithInitial.map { p =>
-    p.fen -> p.fullName
-  }
-  val positionDefault = StartingPosition.initial.fen
-
-  def startingPosition(fen: String, variant: shogi.variant.Variant): StartingPosition =
-    Simul.fenIndex.get(fen).ifTrue(variant.standard) | StartingPosition.initial
 
   def setText = Form(single("text" -> text))
 
@@ -120,9 +135,29 @@ object SimulForm {
       periods: Int,
       clockExtra: Int,
       variants: List[Int],
-      position: Option[String],
+      position: Option[Sfen],
       color: String,
       text: String,
+      estimatedStartAt: Option[DateTime] = None,
       team: Option[String]
-  )
+  ) {
+    def clock =
+      SimulClock(
+        config = shogi.Clock.Config(clockTime * 60, clockIncrement, clockByoyomi, periods),
+        hostExtraTime = clockExtra * 60
+      )
+
+    def canHaveCustomPosition =
+      actualVariants.sizeIs == 1 || !position.isDefined
+
+    def isCustomPositionValid =
+      position.fold(true) { sfen =>
+        sfen
+          .toSituation(actualVariants.headOption | shogi.variant.Standard)
+          .exists(_.playable(strict = true, withImpasse = true))
+      }
+
+    def actualVariants = variants.flatMap(shogi.variant.Variant(_)).distinct
+
+  }
 }

@@ -22,7 +22,6 @@ final class Env(
     db: lila.db.Db,
     gameRepo: lila.game.GameRepo,
     userRepo: lila.user.UserRepo,
-    renderer: lila.hub.actors.Renderer,
     timeline: lila.hub.actors.Timeline,
     chatApi: lila.chat.ChatApi,
     lightUser: lila.common.LightUser.Getter,
@@ -51,11 +50,13 @@ final class Env(
   val isHosting = new lila.round.IsSimulHost(u => api.currentHostIds dmap (_ contains u))
 
   val allCreatedFeaturable = cacheApi.unit[List[Simul]] {
-    _.refreshAfterWrite(3 seconds)
+    _.refreshAfterWrite(5 seconds)
       .buildAsyncFuture(_ => repo.allCreatedFeaturable)
   }
 
-  val featurable = new SimulIsFeaturable((simul: Simul) => featureLimiter(simul.hostId)(true)(false))
+  val featurable = new SimulIsFeaturable((simul: Simul) =>
+    simul.veryPopular || featureLimiter(simul.hostId)(true)(false)
+  )
 
   private val featureLimiter = new lila.memo.RateLimit[lila.user.User.ID](
     credits = config.featureViews.value,
@@ -70,9 +71,11 @@ final class Env(
   Bus.subscribeFuns(
     "finishGame" -> { case lila.game.actorApi.FinishGame(game, _, _) =>
       api finishGame game
+      ()
     },
     "adjustCheater" -> { case lila.hub.actorApi.mod.MarkCheater(userId, true) =>
       api ejectCheater userId
+      ()
     },
     "simulGetHosts" -> { case lila.hub.actorApi.simul.GetHostIds(promise) =>
       promise completeWith api.currentHostIds

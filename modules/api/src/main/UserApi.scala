@@ -52,14 +52,17 @@ final private[api] class UserApi(
         as.map(_.id).?? { relationApi.fetchFollows(u.id, _) } zip
         bookmarkApi.countByUser(u) zip
         gameCache.nbPlaying(u.id) zip
+        gameCache.nbPaused(u.id) zip
         gameCache.nbImportedBy(u.id) zip
         playBanApi
           .completionRate(u.id)
           .map(_.map { cr =>
             math.round(cr * 100)
           }) map {
-          case gameOption ~ nbGamesWithMe ~ following ~ followers ~ followable ~ relation ~
-              isFollowed ~ nbBookmarks ~ nbPlaying ~ nbImported ~ completionRate =>
+          // format: off
+          case (((((((((((gameOption,nbGamesWithMe),following),followers),followable),
+              relation),isFollowed),nbBookmarks),nbPlaying),nbPaused),nbImported),completionRate) =>
+          // format: on
             jsonView(u) ++ {
               Json
                 .obj(
@@ -80,6 +83,7 @@ final private[api] class UserApi(
                     "winH"     -> u.count.winH,
                     "bookmark" -> nbBookmarks,
                     "playing"  -> nbPlaying,
+                    "paused"   -> nbPaused,
                     "import"   -> nbImported,
                     "me"       -> nbGamesWithMe
                   )

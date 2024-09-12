@@ -29,17 +29,20 @@ object embed {
           layout.viewport,
           layout.metaCsp(basicCsp withNonce config.nonce),
           st.headTitle(s"${s.name} ${chapter.name}"),
-          layout.pieceSprite(lila.pref.PieceSet.default),
+          layout.pieceSprite(config.pieceSet),
           cssTagWithTheme("analyse.embed", config.bg)
         ),
         body(
-          cls := s"highlight ${config.bg} ${config.board}",
-          dataDev := (!isProd).option("true"),
-          dataAssetUrl := assetBaseUrl,
+          cls              := s"highlight ${config.bg} ${config.board}",
+          dataDev          := (!isProd).option("true"),
+          dataAssetUrl     := assetBaseUrl,
           dataAssetVersion := assetVersion.value,
-          dataTheme := config.bg
+          dataTheme        := config.bg,
+          dataPieceSet     := config.pieceSet.key,
+          dataChuPieceSet  := config.chuPieceSet.key,
+          dataKyoPieceSet  := config.kyoPieceSet.key
         )(
-          div(cls := "is2d")(
+          div(
             main(cls := "analyse")
           ),
           footer {
@@ -55,11 +58,11 @@ object embed {
                 a(target := "_blank", href := url)(h1(s.name.value))
               ),
               a(
-                target := "_blank",
-                cls := "open",
+                target   := "_blank",
+                cls      := "open",
                 dataIcon := "=",
-                href := url,
-                title := trans.study.open.txt()
+                href     := url,
+                title    := trans.study.open.txt()
               )
             )
           },
@@ -71,14 +74,14 @@ object embed {
           analyseTag,
           embedJsUnsafe(
             s"""lishogi.startEmbeddedAnalyse(${safeJsonValue(
-              Json.obj(
-                "study"  -> data.study,
-                "data"   -> data.analysis,
-                "embed"  -> true,
-                "i18n"   -> views.html.board.userAnalysisI18n(),
-                "userId" -> none[String]
-              )
-            )});
+                Json.obj(
+                  "study"  -> data.study,
+                  "data"   -> data.analysis,
+                  "embed"  -> true,
+                  "i18n"   -> views.html.board.userAnalysisI18n(),
+                  "userId" -> none[String]
+                )
+              )});
 document.getElementById('chapter-selector').onchange = function() {
   location.href = this.value + location.search;
 };""",

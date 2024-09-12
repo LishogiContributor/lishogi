@@ -1,9 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { spinner, bind, numberRow, playerName, dataIcon, player as renderPlayer } from './util';
-import { teamName } from './battle';
+import { bind, dataIcon } from 'common/snabbdom';
+import spinner from 'common/spinner';
 import * as status from 'game/status';
+import { VNode, h } from 'snabbdom';
 import TournamentController from '../ctrl';
+import { teamName } from './battle';
+import { numberRow, playerName, player as renderPlayer } from './util';
 
 function result(win, stat): string {
   switch (win) {

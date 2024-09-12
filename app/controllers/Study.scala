@@ -3,17 +3,18 @@ package controllers
 import play.api.libs.json._
 import play.api.mvc._
 import scala.concurrent.duration._
+import java.nio.charset.StandardCharsets.UTF_8
 
 import lila.api.Context
 import lila.app._
 import lila.chat.Chat
 import lila.common.paginator.{ Paginator, PaginatorJson }
 import lila.common.{ HTTPRequest, IpAddress }
+import lila.common.String.getBytesShiftJis
 import lila.study.actorApi.Who
 import lila.study.JsonView.JsData
 import lila.study.Study.WithChapter
 import lila.study.{ Chapter, Order, Study => StudyModel }
-import lila.tree.Node.partitionTreeJsonWriter
 import views._
 
 final class Study(
@@ -129,6 +130,28 @@ final class Study(
       }
     }
 
+  def minePostGameStudies(order: String, page: Int) =
+    Auth { implicit ctx => me =>
+      env.study.pager.minePostGameStudies(me, Order(order), page) flatMap { pag =>
+        negotiate(
+          html = Ok(html.study.list.minePostGameStudies(pag, Order(order))).fuccess,
+          api = _ => apiStudies(pag)
+        )
+      }
+    }
+
+  def postGameStudiesOfDefault(gameId: String, page: Int) = postGameStudiesOf(gameId, Order.default.key, page)
+
+  def postGameStudiesOf(gameId: String, order: String, page: Int) =
+    Open { implicit ctx =>
+      env.study.pager.postGameStudiesOf(gameId.take(8), ctx.me, Order(order), page) flatMap { pag =>
+        negotiate(
+          html = Ok(html.study.list.postGameStudiesOf(gameId.take(8), pag, Order(order))).fuccess,
+          api = _ => apiStudies(pag)
+        )
+      }
+    }
+
   def byTopic(name: String, order: String, page: Int) =
     Open { implicit ctx =>
       lila.study.StudyTopic fromStr name match {
@@ -152,20 +175,6 @@ final class Study(
     ).fuccess
   }
 
-  private def orRelay(id: String, chapterId: Option[String] = None)(
-      f: => Fu[Result]
-  )(implicit ctx: Context): Fu[Result] =
-    if (HTTPRequest isRedirectable ctx.req) env.relay.api.getOngoing(lila.relay.Relay.Id(id)) flatMap {
-      _.fold(f) { relay =>
-        fuccess(Redirect {
-          chapterId.fold(routes.Relay.show(relay.slug, relay.id.value)) { c =>
-            routes.Relay.chapter(relay.slug, relay.id.value, c)
-          }
-        })
-      }
-    }
-    else f
-
   private def showQuery(query: Fu[Option[WithChapter]])(implicit ctx: Context): Fu[Result] =
     OptionFuResult(query) { oldSc =>
       CanViewResult(oldSc.study) {
@@ -176,7 +185,7 @@ final class Study(
               chat     <- chatOf(sc.study)
               sVersion <- env.study.version(sc.study.id)
               streams  <- streamsOf(sc.study)
-            } yield EnableSharedArrayBuffer(Ok(html.study.show(sc.study, data, chat, sVersion, streams))),
+            } yield Ok(html.study.show(sc, data, chat, sVersion, streams)).enableSharedArrayBuffer,
             api = _ =>
               chatOf(sc.study).map { chatOpt =>
                 Ok(
@@ -194,7 +203,7 @@ final class Study(
           )
         } yield res
       }
-    } map NoCache
+    } dmap (_.noCache)
 
   private[controllers] def getJsonData(sc: WithChapter)(implicit ctx: Context): Fu[(WithChapter, JsData)] =
     for {
@@ -203,13 +212,22 @@ final class Study(
       chapter = resetToChapter | sc.chapter
       _ <- env.user.lightUserApi preloadMany study.members.ids.toList
       _   = if (HTTPRequest isSynchronousHttp ctx.req) env.study.studyRepo.incViews(study)
-      pov = userAnalysisC.makePov(chapter.root.fen.some, chapter.setup.variant)
-      analysis <- chapter.serverEval.exists(_.done) ?? env.analyse.analyser.byId(chapter.id.value)
+      pov = userAnalysisC.makePov(chapter.root.sfen.some, chapter.setup.variant, chapter.setup.fromNotation)
+      analysis <- chapter.serverEval.exists(_.done) ?? {
+        chapter.setup.gameId
+          .ifTrue(chapter.isFirstGameRootChapter)
+          .fold(
+            env.analyse.analyser.byId(chapter.id.value)
+          ) { gameId =>
+            env.analyse.analyser
+              .byId(gameId)
+              .map2(_.copy(id = chapter.id.value, studyId = sc.study.id.value.some))
+          }
+      }
       division = analysis.isDefined option env.study.serverEvalMerger.divisionOf(chapter)
       baseData = env.round.jsonView.userAnalysisJson(
         pov,
         ctx.pref,
-        chapter.root.fen.some,
         chapter.setup.orientation,
         owner = false,
         me = ctx.me,
@@ -220,25 +238,28 @@ final class Study(
       study = studyJson,
       analysis = baseData
         .add(
-          "treeParts" -> partitionTreeJsonWriter.writes {
-            lila.study.TreeBuilder(chapter.root, chapter.setup.variant)
-          }.some
+          "treeParts" -> lila.study.JsonView.partitionTreeJsonWriter
+            .writes(
+              chapter.root
+            )
+            .some
         )
         .add("analysis" -> analysis.map { lila.study.ServerEval.toJson(chapter, _) })
     )
 
   def show(id: String) =
     Open { implicit ctx =>
-      orRelay(id) {
-        showQuery(env.study.api byIdWithChapter id)
+      showQuery {
+        if (HTTPRequest isCrawler ctx.req)
+          env.study.api byIdWithFirstChapter id
+        else
+          env.study.api byIdWithChapter id
       }
     }
 
   def chapter(id: String, chapterId: String) =
     Open { implicit ctx =>
-      orRelay(id, chapterId.some) {
-        showQuery(env.study.api.byIdWithChapter(id, chapterId))
-      }
+      showQuery(env.study.api.byIdWithChapter(id, chapterId))
     }
 
   def chapterMeta(id: String, chapterId: String) =
@@ -293,9 +314,60 @@ final class Study(
       ctx: Context
   ) =
     env.study.api.importGame(lila.study.StudyMaker.ImportGame(data), me) flatMap {
-      _.fold(notFound) { sc =>
-        Redirect(routes.Study.show(sc.study.id.value)).fuccess
+      _.fold(notFound) { s =>
+        Redirect(routes.Study.show(s.id.value)).fuccess
       }
+    }
+
+  def postGameStudyWithOpponent(gameId: String) =
+    AuthBody { _ => me =>
+      env.study.postGameStudyApi.getGameOfUser(gameId, me) flatMap {
+        _.fold(
+          BadRequest(
+            jsonError("Game doesn't exist, isn't finished yet or you are not a player in this game")
+          ).fuccess
+        ) { g =>
+          env.study.postGameStudyApi.studyWithOpponent(g) map { sid =>
+            Redirect(routes.Study.show(sid.value))
+          }
+        }
+      }
+    }
+
+  private val PostGameStudyPerUser = new lila.memo.RateLimit[lila.user.User.ID](
+    credits = 10,
+    duration = 30.minute,
+    key = "study.post_game_study.user"
+  )
+
+  def postGameStudy =
+    AuthBody { implicit ctx => me =>
+      PostGameStudyPerUser(me.id) {
+        implicit val req = ctx.body
+        lila.study.StudyForm.postGameStudy.form
+          .bindFromRequest()
+          .fold(
+            err => BadRequest(err.toString).fuccess,
+            data =>
+              for {
+                gameOpt  <- env.study.postGameStudyApi.getGame(data.gameId)
+                invitedV <- env.study.postGameStudyApi.getInvitedUser(data.invitedUsername, me)
+                res <- gameOpt.fold(
+                  BadRequest(jsonError("Game doesn't exists or isn't finished yet")).fuccess
+                ) { game =>
+                  invitedV.fold(
+                    e => BadRequest(jsonError(e.take(64))).fuccess,
+                    invited =>
+                      env.study.postGameStudyApi
+                        .study(game, data.orientation, invited, me)
+                        .map(sid =>
+                          Ok(Json.obj("redirect" -> routes.Study.show(sid.value).url))
+                        ) // I want to handle the redirect myself
+                  )
+                }
+              } yield (res)
+          )
+      }(rateLimitedFu)
     }
 
   def delete(id: String) =
@@ -312,16 +384,16 @@ final class Study(
       } inject Redirect(routes.Study.show(id))
     }
 
-  def importPgn(id: String) =
+  def importNotation(id: String) =
     AuthBody { implicit ctx => me =>
       implicit val req = ctx.body
       get("sri") ?? { sri =>
-        lila.study.StudyForm.importPgn.form
+        lila.study.StudyForm.importNotation.form
           .bindFromRequest()
           .fold(
             jsonFormError,
             data =>
-              env.study.api.importPgns(
+              env.study.api.importNotations(
                 StudyModel.Id(id),
                 data.toChapterDatas,
                 sticky = data.sticky
@@ -349,21 +421,20 @@ final class Study(
               chapter,
               none
             )
-            setup      = chapter.setup
-            initialFen = chapter.root.fen.some
-            pov        = userAnalysisC.makePov(initialFen, setup.variant)
+            setup       = chapter.setup
+            initialSfen = chapter.root.sfen.some
+            pov         = userAnalysisC.makePov(initialSfen, setup.variant)
             baseData = env.round.jsonView.userAnalysisJson(
               pov,
               lila.pref.Pref.default,
-              initialFen,
               setup.orientation,
               owner = false,
               me = none
             )
             analysis = baseData ++ Json.obj(
-              "treeParts" -> partitionTreeJsonWriter.writes {
-                lila.study.TreeBuilder.makeRoot(chapter.root, setup.variant)
-              }
+              "treeParts" -> lila.study.JsonView.partitionTreeJsonWriter.writes(
+                chapter.root
+              )
             )
             data = lila.study.JsonView.JsData(study = studyJson, analysis = analysis)
             result <- negotiate(
@@ -372,7 +443,7 @@ final class Study(
             )
           } yield result
         }
-      } map NoCache
+      } dmap (_.noCache)
     }
 
   private def embedNotFound(implicit req: RequestHeader): Fu[Result] =
@@ -415,51 +486,61 @@ final class Study(
       }(rateLimitedFu)
     }
 
-  private val PgnRateLimitPerIp = new lila.memo.RateLimit[IpAddress](
+  private val NotationRateLimitPerIp = new lila.memo.RateLimit[IpAddress](
     credits = 30,
     duration = 1.minute,
-    key = "export.study.pgn.ip"
+    key = "export.study.notation.ip"
   )
 
-  def pgn(id: String) =
+  def notation(id: String, csa: Boolean = false) =
     Open { implicit ctx =>
-      PgnRateLimitPerIp(HTTPRequest lastRemoteAddress ctx.req) {
+      NotationRateLimitPerIp(HTTPRequest lastRemoteAddress ctx.req) {
         OptionFuResult(env.study.api byId id) { study =>
           CanViewResult(study) {
-            lila.mon.export.pgn.study.increment()
-            Ok.chunked(env.study.pgnDump(study, requestPgnFlags(ctx.req)))
+            lila.mon.notation.study.increment()
+            val flags = requestNotationFlags(ctx.req, csa)
+            Ok.chunked(env.study.notationDump(study, flags))
               .withHeaders(
                 noProxyBufferHeader,
-                CONTENT_DISPOSITION -> s"attachment; filename=${env.study.pgnDump filename study}.pgn"
+                CONTENT_DISPOSITION -> s"attachment; filename=${env.study.notationDump filename study}${fileType(flags)}"
               )
-              .as(pgnContentType)
+              .as(notationContentType)
               .fuccess
           }
         }
       }(rateLimitedFu)
     }
 
-  def chapterPgn(id: String, chapterId: String) =
+  def chapterNotation(id: String, chapterId: String, csa: Boolean = false) =
     Open { implicit ctx =>
       env.study.api.byIdWithChapter(id, chapterId) flatMap {
         _.fold(notFound) { case WithChapter(study, chapter) =>
           CanViewResult(study) {
-            lila.mon.export.pgn.studyChapter.increment()
-            Ok(env.study.pgnDump.ofChapter(study, requestPgnFlags(ctx.req))(chapter).toString)
+            lila.mon.notation.studyChapter.increment()
+            val flags          = requestNotationFlags(ctx.req, csa)
+            val content        = env.study.notationDump.ofChapter(study, flags)(chapter).toString
+            val contentEncoded = if (flags.shiftJis) getBytesShiftJis(content) else content.getBytes(UTF_8)
+            Ok(contentEncoded)
               .withHeaders(
-                CONTENT_DISPOSITION -> s"attachment; filename=${env.study.pgnDump.filename(study, chapter)}.pgn"
+                CONTENT_DISPOSITION -> s"attachment; filename=${env.study.notationDump
+                    .filename(study, chapter)}${fileType(flags)}"
               )
-              .as(pgnContentType)
+              .as(notationContentType)
               .fuccess
           }
         }
       }
     }
 
-  private def requestPgnFlags(req: RequestHeader) =
-    lila.study.PgnDump.WithFlags(
+  private def fileType(flags: lila.study.NotationDump.WithFlags): String =
+    if (flags.csa) ".csa" else ".kif"
+
+  private def requestNotationFlags(req: RequestHeader, csa: Boolean) =
+    lila.study.NotationDump.WithFlags(
+      csa = getBoolOpt("csa", req) | csa,
       comments = getBoolOpt("comments", req) | true,
       variations = getBoolOpt("variations", req) | true,
+      shiftJis = getBoolOpt("shiftJis", req) | false,
       clocks = getBoolOpt("clocks", req) | true
     )
 
@@ -468,13 +549,15 @@ final class Study(
       env.study.api.byIdWithChapter(id, chapterId) flatMap {
         _.fold(notFound) { case WithChapter(study, chapter) =>
           CanViewResult(study) {
-            env.study.gifExport.ofChapter(chapter) map { stream =>
-              Ok.chunked(stream)
-                .withHeaders(
-                  noProxyBufferHeader,
-                  CONTENT_DISPOSITION -> s"attachment; filename=${env.study.pgnDump.filename(study, chapter)}.gif"
-                ) as "image/gif"
-            }
+            if (chapter.setup.variant.standard) {
+              env.study.gifExport.ofChapter(chapter) map { stream =>
+                Ok.chunked(stream)
+                  .withHeaders(
+                    noProxyBufferHeader,
+                    CONTENT_DISPOSITION -> s"attachment; filename=${env.study.notationDump.filename(study, chapter)}.gif"
+                  ) as "image/gif"
+              }
+            } else notFound
           }
         }
       }

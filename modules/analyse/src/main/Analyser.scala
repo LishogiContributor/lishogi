@@ -1,6 +1,5 @@
 package lila.analyse
 
-import shogi.format.FEN
 import lila.common.Bus
 import lila.game.actorApi.InsertGame
 import lila.game.{ Game, GameRepo }
@@ -27,38 +26,39 @@ final class Analyser(
               sendAnalysisProgress(analysis, complete = true) >>- {
                 Bus.publish(actorApi.AnalysisReady(game, analysis), "analysisReady")
                 Bus.publish(InsertGame(game), "gameSearchInsert")
-                requesterApi save analysis
+                requesterApi.save(analysis).unit
               }
           }
         }
       case Some(_) =>
         analysisRepo.save(analysis) >>
-          sendAnalysisProgress(analysis, complete = true) >>- {
-            requesterApi save analysis
-          }
+          sendAnalysisProgress(analysis, complete = true) >>-
+          requesterApi.save(analysis).unit
     }
 
   def progress(analysis: Analysis): Funit = sendAnalysisProgress(analysis, complete = false)
 
   private def sendAnalysisProgress(analysis: Analysis, complete: Boolean): Funit =
     analysis.studyId match {
-      case None =>
-        gameRepo gameWithInitialFen analysis.id map {
-          _ ?? { case (game, initialFen) =>
+      case None => {
+        if (analysis.postGameStudies.nonEmpty)
+          Bus.publish(actorApi.PostGameStudyAnalysisProgress(analysis, complete), "studyAnalysisProgress")
+        gameRepo game analysis.id map {
+          _ ?? { game =>
             Bus.publish(
               TellIfExists(
                 analysis.id,
                 actorApi.AnalysisProgress(
-                  analysis = analysis,
                   game = game,
                   variant = game.variant,
-                  initialFen = initialFen | FEN(game.variant.initialFen)
+                  analysis = analysis
                 )
               ),
               "roundSocket"
             )
           }
         }
+      }
       case Some(_) =>
         fuccess {
           Bus.publish(actorApi.StudyAnalysisProgress(analysis, complete), "studyAnalysisProgress")

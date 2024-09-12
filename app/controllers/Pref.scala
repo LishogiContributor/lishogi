@@ -33,19 +33,12 @@ final class Pref(env: Env) extends LilaController(env) {
 
   def formApply =
     AuthBody { implicit ctx => _ =>
-      def onSuccess(data: lila.pref.DataForm.PrefData) = api.setPref(data(ctx.pref)) inject Ok("saved")
-      implicit val req                                 = ctx.body
+      implicit val req = ctx.body
       forms.pref
         .bindFromRequest()
         .fold(
-          _ =>
-            forms.pref
-              .bindFromRequest(lila.pref.FormCompatLayer(ctx.pref, ctx.body))
-              .fold(
-                err => BadRequest(err.toString).fuccess,
-                onSuccess
-              ),
-          onSuccess
+          err => BadRequest(err.toString).fuccess,
+          data => api.setPref(data(ctx.pref)) inject Ok("saved")
         )
     }
 
@@ -53,6 +46,13 @@ final class Pref(env: Env) extends LilaController(env) {
     OpenBody { implicit ctx =>
       if (name == "zoom") {
         Ok.withCookies(env.lilaCookie.session("zoom2", (getInt("v") | 185).toString)).fuccess
+      } else if (name == "customTheme") {
+        implicit val req = ctx.body
+        FormResult(forms.customTheme) { v =>
+          saveCustomTheme(v, ctx) map { cookie =>
+            Ok(()).withCookies(cookie)
+          }
+        }
       } else {
         implicit val req = ctx.body
         (setters get name) ?? { case (form, fn) =>
@@ -75,26 +75,40 @@ final class Pref(env: Env) extends LilaController(env) {
           _ => fuccess(Redirect(routes.User.show(me.username))),
           v =>
             api.saveTag(me, _.verifyTitle, if (v) "1" else "0") inject Redirect {
-              if (v) routes.Page.notSupported() else routes.User.show(me.username) // master
+              if (v) routes.Main.contact else routes.User.show(me.username)
             }
         )
     }
 
   private lazy val setters = Map(
-    "theme"         -> (forms.theme         -> save("theme") _),
-    "pieceSet"      -> (forms.pieceSet      -> save("pieceSet") _),
-    "theme3d"       -> (forms.theme3d       -> save("theme3d") _),
-    "pieceSet3d"    -> (forms.pieceSet3d    -> save("pieceSet3d") _),
-    "soundSet"      -> (forms.soundSet      -> save("soundSet") _),
-    "bg"            -> (forms.bg            -> save("bg") _),
-    "bgImg"         -> (forms.bgImg         -> save("bgImg") _),
-    "is3d"          -> (forms.is3d          -> save("is3d") _),
-    "zen"           -> (forms.zen           -> save("zen") _),
-    "pieceNotation" -> (forms.pieceNotation -> save("pieceNotation") _)
+    "theme"       -> (forms.theme       -> save("theme") _),
+    "pieceSet"    -> (forms.pieceSet    -> save("pieceSet") _),
+    "chuPieceSet" -> (forms.chuPieceSet -> save("chuPieceSet") _),
+    "kyoPieceSet" -> (forms.kyoPieceSet -> save("kyoPieceSet") _),
+    "soundSet"    -> (forms.soundSet    -> save("soundSet") _),
+    "bg"          -> (forms.bg          -> save("bg") _),
+    "thickGrid"   -> (forms.thickGrid   -> save("thickGrid") _),
+    "bgImg"       -> (forms.bgImg       -> save("bgImg") _),
+    "zen"         -> (forms.zen         -> save("zen") _),
+    "notation"    -> (forms.notation    -> save("notation") _)
   )
 
   private def save(name: String)(value: String, ctx: Context): Fu[Cookie] =
     ctx.me ?? {
       api.setPrefString(_, name, value)
     } inject env.lilaCookie.session(name, value)(ctx.req)
+
+  private def saveCustomTheme(ct: lila.pref.CustomTheme, ctx: Context): Fu[Cookie] =
+    ctx.me ?? {
+      api.setPref(_, p => p.copy(customTheme = ct.some))
+    } inject env.lilaCookie.session(
+      List(
+        ("boardColor" -> ct.boardColor),
+        ("boardImg"   -> ct.boardImg),
+        ("gridColor"  -> ct.gridColor),
+        ("gridWidth"  -> ct.gridWidth.toString),
+        ("handsColor" -> ct.handsColor),
+        ("handsImg"   -> ct.handsImg)
+      )
+    )(ctx.req)
 }

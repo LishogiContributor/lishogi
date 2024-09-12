@@ -6,7 +6,7 @@ import scala.util.chaining._
 
 import lila.db.dsl._
 import lila.memo.CacheApi
-import lila.user.{ User, UserRepo }
+import lila.user.User
 
 private case class PuzzleSession(
     difficulty: PuzzleDifficulty,
@@ -27,8 +27,7 @@ private case class PuzzleSession(
 final class PuzzleSessionApi(
     colls: PuzzleColls,
     pathApi: PuzzlePathApi,
-    cacheApi: CacheApi,
-    userRepo: UserRepo
+    cacheApi: CacheApi
 )(implicit ec: ExecutionContext) {
 
   import BsonHandlers._
@@ -63,14 +62,14 @@ final class PuzzleSessionApi(
             .ratingDiff(theme.value, session.difficulty.key)
             .record(math.abs(puzzle.glicko.intRating - user.perfs.puzzle.intRating))
           mon.ratingDev(theme.value).record(puzzle.glicko.intDeviation)
-          mon.tier(session.path.tier.key, theme.value, session.difficulty.key).increment()
+          mon.tier(session.path.tier.key, theme.value, session.difficulty.key).increment().unit
           puzzle
         }
 
         nextPuzzleResult(user, session)
           .flatMap {
             case PathMissing | PathEnded if retries < 10 => switchPath(session.path.tier)
-            case PathMissing | PathEnded                 => fufail(s"Puzzle path missing or ended for ${user.id}")
+            case PathMissing | PathEnded => fufail(s"Puzzle path missing or ended for ${user.id}")
             case PuzzleMissing(id) =>
               logger.warn(s"Puzzle missing: $id")
               sessions.put(user.id, fuccess(session.next))

@@ -1,7 +1,7 @@
 $(function () {
   $('#trainer').each(function () {
     var $trainer = $(this);
-    var $board = $('.coord-trainer__board .cg-wrap');
+    var $board = $('.coord-trainer__board .sg-wrap');
     var ground;
     var $side = $('.coord-trainer__side');
     var $right = $('.coord-trainer__table');
@@ -19,21 +19,27 @@ $(function () {
     var color;
     var startAt, score;
     var wrongTimeout;
-    const notation = $('.notation-0')[0] ? 0 : $('.notation-1')[0] ? 1 : $('.notation-2')[0] ? 2 : 3;
+    var notationPref = parseInt(document.body.dataset.notation || '0');
 
+    $board.removeClass('preload');
     var showColor = function () {
       color = colorPref == 'random' ? ['sente', 'gote'][Math.round(Math.random())] : colorPref;
       if (!ground)
-        ground = Shogiground($board[0], {
-          coordinates: false,
-          drawable: { enabled: false },
-          movable: {
-            free: false,
-            color: null,
+        ground = Shogiground(
+          {
+            activeColor: null,
+            coordinates: { enabled: false },
+            blockTouchScroll: true,
+            drawable: { enabled: false },
+            movable: {
+              free: false,
+            },
+            orientation: color,
           },
-          orientation: color,
-          addPieceZIndex: $('#main-wrap').hasClass('is3d'),
-        });
+          {
+            board: $board[0],
+          }
+        );
       else if (color !== ground.state.orientation) ground.toggleOrientation();
       $trainer.removeClass('sente gote').addClass(color);
     };
@@ -144,32 +150,6 @@ $(function () {
       else stop();
     };
 
-    function getShogiCoords(key) {
-      const fileMap = {
-        a: '9',
-        b: '8',
-        c: '7',
-        d: '6',
-        e: '5',
-        f: '4',
-        g: '3',
-        h: '2',
-        i: '1',
-      };
-      const rankMap = {
-        9: '1',
-        8: '2',
-        7: '3',
-        6: '4',
-        5: '5',
-        4: '6',
-        3: '7',
-        2: '8',
-        1: '9',
-      };
-      return fileMap[key[0]] + rankMap[key[1]];
-    }
-
     function codeCoords(key) {
       const rankMap1 = {
         1: '一',
@@ -193,7 +173,7 @@ $(function () {
         8: 'h',
         9: 'i',
       };
-      switch (notation) {
+      switch (notationPref) {
         // 11
         case 0:
         case 1:
@@ -221,7 +201,7 @@ $(function () {
         ground.set({
           events: {
             select: function (key) {
-              var hit = codeCoords(getShogiCoords(key)) == $coords[0].text();
+              var hit = codeCoords(key[0] + (key.charCodeAt(1) - 96).toString()) == $coords[0].text();
               if (hit) {
                 score++;
                 $score.text(score);

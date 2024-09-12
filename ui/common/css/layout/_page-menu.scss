@@ -13,12 +13,17 @@
   }
 
   &.page-small {
-    max-width: 1000px;
-    margin: inherit;
+    @include breakpoint($mq-col3-uniboard) {
+      grid-template-columns: max-content 1fr minmax(100px, max-content);
+      grid-template-areas: 'menu content .';
+      max-width: unset;
+    }
+    margin: unset;
   }
 
   &__menu {
     grid-area: menu;
+    min-width: 100px;
   }
   &__content {
     grid-area: content;

@@ -2,6 +2,7 @@ package lila.api
 
 import play.api.libs.json.{ JsArray, JsObject, Json }
 
+import lila.common.Json._
 import lila.game.Pov
 import lila.lobby.SeekApi
 
@@ -16,12 +17,16 @@ final class LobbyApi(
       (ctx.me ?? gameProxyRepo.urgentGames).mon(_.lobby segment "urgentGames") flatMap { case (seeks, povs) =>
         val displayedPovs = povs take 9
         lightUserApi.preloadMany(displayedPovs.flatMap(_.opponent.userId)) inject {
-          implicit val lang = ctx.lang
           Json.obj(
             "me" -> ctx.me.map { u =>
-              Json.obj("username" -> u.username).add("isBot" -> u.isBot)
+              Json
+                .obj("username" -> u.username)
+                .add("isBot" -> u.isBot)
+                .add("rating" -> u.perfs.standard.some.withFilter(r => !r.clueless).map(_.intRating))
+                .add("aiLevel" -> u.perfs.aiLevels.standard)
+                .add("isNewPlayer" -> !u.hasGames)
             },
-            "seeks"        -> JsArray(seeks map (_.render)),
+            "seeks"        -> JsArray(seeks.map(_.render)),
             "nowPlaying"   -> JsArray(displayedPovs map nowPlaying),
             "nbNowPlaying" -> povs.size
           ) -> displayedPovs
@@ -33,10 +38,9 @@ final class LobbyApi(
       .obj(
         "fullId"   -> pov.fullId,
         "gameId"   -> pov.gameId,
-        "fen"      -> (shogi.format.Forsyth exportSituation pov.game.situation),
-        "pockets"  -> (shogi.format.Forsyth exportCrazyPocket pov.game.board),
+        "sfen"     -> pov.game.situation.toSfen,
         "color"    -> pov.color.name,
-        "lastMove" -> ~pov.game.lastMoveKeys,
+        "lastMove" -> ~pov.game.lastUsiStr,
         "variant" -> Json.obj(
           "key"  -> pov.game.variant.key,
           "name" -> pov.game.variant.name
@@ -52,7 +56,8 @@ final class LobbyApi(
               .playerTextBlocking(pov.opponent, withRating = false)(lightUserApi.sync)
           )
           .add("rating" -> pov.opponent.rating)
-          .add("ai" -> pov.opponent.aiLevel),
+          .add("ai" -> pov.opponent.aiLevel)
+          .add("aiCode" -> pov.opponent.aiCode),
         "isMyTurn" -> pov.isMyTurn
       )
       .add("secondsLeft" -> pov.remainingSeconds)

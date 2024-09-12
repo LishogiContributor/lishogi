@@ -1,6 +1,6 @@
 package lila.game
 
-import shogi.{ CheckCount, Clock, Color, Data, Gote, Sente }
+import shogi.{ Clock, Color, ConsecutiveAttacks, Gote, Hands, Pos, Sente }
 import Game.BSONFields._
 import reactivemongo.api.bson._
 import scala.util.Try
@@ -74,32 +74,30 @@ object GameDiff {
         ByteArrayBSONHandler.writeOpt(BinaryFormat.periodEntries.writeSide(x))
       }
 
-    // if (false) dTry(huffmanPgn, _.pgnMoves, writeBytes compose PgnStorage.Huffman.encode)
-    // else {
-    val f = PgnStorage.OldBin
-    dTry(oldPgn, _.pgnMoves, writeBytes compose f.encode)
-    dTry(binaryPieces, _.board.pieces, writeBytes compose BinaryFormat.piece.write)
+    d(
+      usis,
+      _.usis,
+      (usis: Usis) => w.bytes(BinaryFormat.usi.write(usis, a.variant).value)
+    )
     d(positionHashes, _.history.positionHashes, w.bytes)
-    d(historyLastMove, _.history.lastMove.map(_.uci) | "", w.str)
-    // since variants are always OldBin
-    if (a.variant.standard || a.variant.fromPosition)
-      dOpt(
-        checkCount,
-        _.history.checkCount,
-        (o: CheckCount) => o.nonEmpty ?? { BSONHandlers.checkCountWriter writeOpt o }
-      )
-    if (a.variant.standard || a.variant.fromPosition)
-      dOpt(
-        crazyData,
-        _.board.crazyData,
-        (o: Option[Data]) => o map BSONHandlers.crazyhouseDataBSONHandler.write
-      )
-    d(turns, _.turns, w.int)
+    d(
+      hands,
+      _.hands,
+      (hs: Hands) => w.str(shogi.format.forsyth.Sfen.handsToString(hs, a.variant))
+    )
+    d(plies, _.plies, w.int)
     dOpt(moveTimes, _.binaryMoveTimes, (o: Option[ByteArray]) => o flatMap ByteArrayBSONHandler.writeOpt)
     dOpt(senteClockHistory, getClockHistory(Sente), clockHistoryToBytes)
     dOpt(goteClockHistory, getClockHistory(Gote), clockHistoryToBytes)
     dOpt(periodsSente, getPeriodEntries(Sente), periodEntriesToBytes)
     dOpt(periodsGote, getPeriodEntries(Gote), periodEntriesToBytes)
+    dOpt(lastLionCapture, _.history.lastLionCapture, (op: Option[Pos]) => op map { p => w.str(p.key) })
+    dOpt(
+      consecutiveAttacks,
+      _.history.consecutiveAttacks,
+      (ca: ConsecutiveAttacks) =>
+        (ca.sente > 0 || ca.gote > 0) ?? { BSONHandlers.consecutiveAttacksWriter writeOpt ca }
+    )
     dOpt(
       clock,
       _.clock,
@@ -114,6 +112,7 @@ object GameDiff {
       val player: Game => Player = if (i == 0) (_.sentePlayer) else (_.gotePlayer)
       dOpt(s"$name$lastDrawOffer", player(_).lastDrawOffer, (l: Option[Int]) => l flatMap w.intO)
       dOpt(s"$name$isOfferingDraw", player(_).isOfferingDraw, w.boolO)
+      dOpt(s"$name$isOfferingPause", player(_).isOfferingPause, w.boolO)
       dOpt(s"$name$proposeTakebackAt", player(_).proposeTakebackAt, w.intO)
       dTry(s"$name$blursBits", player(_).blurs, Blurs.BlursBSONHandler.writeTry)
     }
@@ -124,5 +123,4 @@ object GameDiff {
 
   private val bTrue = BSONBoolean(true)
 
-  private val writeBytes = ByteArrayBSONHandler.writeTry _
 }

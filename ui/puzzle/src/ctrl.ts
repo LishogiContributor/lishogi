@@ -1,59 +1,52 @@
-import * as speech from './speech';
-import * as xhr from './xhr';
-import computeAutoShapes from './autoShape';
-import keyboard from './keyboard';
-import makePromotion from './promotion';
-import moveTest from './moveTest';
-import PuzzleSession from './session';
-import throttle from 'common/throttle';
-import { Api as CgApi } from 'shogiground/api';
-import { build as treeBuild, ops as treeOps, path as treePath, TreeWrapper } from 'tree';
-import { Shogi } from 'shogiops/shogi';
-import {
-  parseChessSquare,
-  shogigroundDests,
-  scalashogiCharPair,
-  makeLishogiUci,
-  makeChessSquare,
-  parseLishogiUci,
-  assureLishogiUci,
-  shogigroundDropDests,
-} from 'shogiops/compat';
-import { Config as CgConfig } from 'shogiground/config';
-import { Piece } from 'shogiground/types';
-import { ctrl as cevalCtrl, CevalCtrl } from 'ceval';
+import { CevalCtrl, ctrl as cevalCtrl } from 'ceval';
+import { prop } from 'common/common';
 import { defer } from 'common/defer';
-import { defined, prop, Prop } from 'common';
-import { makeSanAndPlay } from 'shogiops/san';
-import { parseFen, makeFen } from 'shogiops/fen';
-import { pgnToTree, mergeSolution, fenToTree } from './moveTree';
-import { Redraw, Vm, Controller, PuzzleOpts, PuzzleData, PuzzleResult, MoveTest, ThemeKey } from './interfaces';
-import { Move, Outcome, PocketRole } from 'shogiops/types';
+import { isImpasse as impasse } from 'common/impasse';
+import { makeNotationWithPosition } from 'common/notation';
 import { storedProp } from 'common/storage';
-import { cancelDropMode } from 'shogiground/drop';
-import { valid as crazyValid } from './crazy/crazyCtrl';
-import { plyColor } from './util';
+import throttle from 'common/throttle';
+import { Shogiground } from 'shogiground';
+import { Config as SgConfig } from 'shogiground/config';
+import { shogigroundDropDests, shogigroundMoveDests, usiToSquareNames } from 'shogiops/compat';
+import { makeSfen, parseSfen } from 'shogiops/sfen';
+import { MoveOrDrop, Outcome, Piece, Role } from 'shogiops/types';
+import { makeUsi, parseSquareName, parseUsi } from 'shogiops/util';
+import { Shogi } from 'shogiops/variant/shogi';
+import { TreeWrapper, build as treeBuild, ops as treeOps, path as treePath } from 'tree';
+import computeAutoShapes from './autoShape';
+import { Controller, MoveTest, PuzzleData, PuzzleOpts, PuzzleResult, Redraw, ThemeKey, Vm } from './interfaces';
+import keyboard from './keyboard';
+import moveTest from './moveTest';
+import { mergeSolution, sfenToTree, usiToTree } from './moveTree';
+import PuzzleSession from './session';
+import * as speech from './speech';
+import { plyColor, scalashogiCharPair } from './util';
+import * as xhr from './xhr';
+import { ctrl as makeKeyboardMove, KeyboardMove } from 'keyboardMove';
+import { last } from 'tree/dist/ops';
+import { fromNodeList } from 'tree/dist/path';
 
 export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
   let vm: Vm = {
     next: defer<PuzzleData>(),
   } as Vm;
   let data: PuzzleData, tree: TreeWrapper, ceval: CevalCtrl;
-  const autoNext = storedProp('puzzle.autoNext', false);
-  const ground = prop<CgApi | undefined>(undefined) as Prop<CgApi>;
-  const threatMode = prop(false);
-  const session = new PuzzleSession(opts.data.theme.key, $('body').data('user'));
+  const autoNext = storedProp('puzzle.autoNext', false),
+    shogiground = Shogiground(),
+    threatMode = prop(false),
+    session = new PuzzleSession(opts.data.theme.key, opts.data.user?.id),
+    trans = window.lishogi.trans(opts.i18n);
 
   // required by ceval
   vm.showComputer = () => vm.mode === 'view';
   vm.showAutoShapes = () => true;
 
-  const throttleSound = (name: string) => throttle(100, () => window.lishogi.sound[name]());
-  const sound = {
-    move: throttleSound('move'),
-    capture: throttleSound('capture'),
-    check: throttleSound('check'),
-  };
+  const throttleSound = (name: string) => throttle(100, () => window.lishogi.sound[name]()),
+    sound = {
+      move: throttleSound('move'),
+      capture: throttleSound('capture'),
+      check: throttleSound('check'),
+    };
 
   function setPath(path: Tree.Path): void {
     vm.path = path;
@@ -62,26 +55,21 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
     vm.mainline = treeOps.mainlineNodeList(tree.root);
   }
 
-  function withGround<A>(f: (cg: CgApi) => A): A | undefined {
-    const g = ground();
-    return g && f(g);
-  }
+  let keyboardMove: KeyboardMove | undefined;
 
   function initiate(fromData: PuzzleData): void {
     data = fromData;
-    tree = data.game.pgn ? treeBuild(pgnToTree(data.game.pgn.split(' '))) : treeBuild(fenToTree(data.game.fen!));
+    tree = data.game.moves ? treeBuild(usiToTree(data.game.moves.split(' '))) : treeBuild(sfenToTree(data.game.sfen!));
     const initialPath = treePath.fromNodeList(treeOps.mainlineNodeList(tree.root));
     vm.mode = 'play';
     vm.next = defer();
     vm.round = undefined;
-    vm.justPlayed = undefined;
-    vm.justDropped = undefined;
-    vm.dropmodeActive = false;
     vm.resultSent = false;
     vm.lastFeedback = 'init';
     vm.initialPath = initialPath;
     vm.initialNode = tree.nodeAtPath(initialPath);
     vm.pov = plyColor(vm.initialNode.ply);
+    data.player = { color: vm.pov };
 
     setPath(treePath.init(initialPath));
     if (data.game.id)
@@ -97,152 +85,126 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
       redraw();
     }, 4000);
 
-    withGround(g => {
-      g.setAutoShapes([]);
-      g.setShapes([]);
-      showGround(g);
-    });
+    shogiground.setAutoShapes([]);
+    shogiground.setShapes([]);
+    shogiground.set(makeSgOpts());
 
+    if (opts.pref.keyboardMove) instanciateKeyboard();
     instanciateCeval();
   }
 
   function position(): Shogi {
-    const setup = parseFen(vm.node.fen).unwrap();
-    return Shogi.fromSetup(setup, false).unwrap();
+    return parseSfen('standard', vm.node.sfen, false).unwrap();
   }
 
-  function makeCgOpts(): CgConfig {
-    const node = vm.node;
-    const color = plyColor(node.ply);
-    const dests = shogigroundDests(position());
-    const dropDests = shogigroundDropDests(position());
-    const isCheck = position().isCheck();
-    const nextNode = vm.node.children[0];
-    const canMove = vm.mode === 'view' || (color === vm.pov && (!nextNode || nextNode.puzzle == 'fail'));
-    const movable = canMove
-      ? {
-          color: dests.size > 0 || dropDests.size > 0 ? color : undefined,
-          dests,
-        }
-      : {
-          color: undefined,
-          dests: new Map(),
-        };
-    const dropmode = canMove
-      ? {
-          dropDests: dropDests,
-        }
-      : {
-          dropDests: new Map(),
-        };
-    const config = {
-      fen: node.fen,
-      orientation: vm.pov,
-      turnColor: color,
-      movable: movable,
-      premovable: {
-        enabled: false,
-      },
-      predroppable: {
-        enabled: false,
-      },
-      dropmode: dropmode,
-      check: isCheck,
-      lastMove: uciToLastMove(node.uci),
-    };
+  function makeSgOpts(): SgConfig {
+    const node = vm.node,
+      color = plyColor(node.ply),
+      pos = position(),
+      dests = shogigroundMoveDests(pos),
+      dropDests = shogigroundDropDests(pos),
+      nextNode = vm.node.children[0],
+      canMove = vm.mode === 'view' || (color === vm.pov && (!nextNode || nextNode.puzzle == 'fail')),
+      splitSfen = node.sfen.split(' '),
+      config: SgConfig = {
+        sfen: {
+          board: splitSfen[0],
+          hands: splitSfen[2],
+        },
+        orientation: vm.pov,
+        turnColor: color,
+        activeColor: canMove && (dests.size > 0 || dropDests.size > 0) ? color : undefined,
+        movable: {
+          dests: canMove ? dests : new Map(),
+        },
+        droppable: {
+          dests: canMove ? dropDests : new Map(),
+        },
+        premovable: {
+          enabled: false,
+        },
+        predroppable: {
+          enabled: false,
+        },
+        checks: pos.isCheck(),
+        lastDests: node.usi ? usiToSquareNames(node.usi) : undefined,
+      };
     if (node.ply >= vm.initialNode.ply) {
       if (vm.mode !== 'view' && color !== vm.pov && !nextNode) {
-        config.movable.color = vm.pov;
-        config.premovable.enabled = true;
+        config.activeColor = vm.pov;
+        config.premovable!.enabled = true;
       }
     }
-    vm.cgConfig = config;
     return config;
   }
 
-  function showGround(g: CgApi): void {
-    g.set(makeCgOpts());
+  function userMove(orig: Key, dest: Key, prom: boolean): void {
+    playUserMove(orig, dest, prom);
   }
 
-  function tsumeLength(): number {
-    return data.puzzle.themes.includes('tsume') ? data.puzzle.solution.length - vm.node.ply : 0;
+  function userDrop(piece: Piece, dest: Key, _prom: boolean): void {
+    playUserDrop(piece, dest);
   }
 
-  function userMove(orig: Key, dest: Key): void {
-    vm.justPlayed = orig;
-    if (!promotion.start(orig, dest, playUserMove)) playUserMove(orig, dest);
+  function playUsi(usi: Usi): void {
+    sendMoveOrDrop(parseUsi(usi)!);
   }
 
-  function userDrop(piece: Piece, dest: Key): void {
-    if (crazyValid(vm.node.fen, piece, dest)) {
-      vm.justDropped = piece;
-      playUserDrop(piece, dest);
-    } else {
-      jump(vm.path);
-      redraw();
-    }
-    cancelDropMode(ground()!.state);
-    vm.dropmodeActive = false;
+  function playUsiList(usiList: Usi[]): void {
+    usiList.forEach(playUsi);
   }
 
-  function playUci(uci: Uci): void {
-    sendMove(parseLishogiUci(assureLishogiUci(uci)!)!);
-  }
-
-  function playUserMove(orig: Key, dest: Key, promotion?: boolean): void {
-    sendMove({
-      from: parseChessSquare(orig)!,
-      to: parseChessSquare(dest)!,
+  function playUserMove(orig: Key, dest: Key, promotion: boolean): void {
+    sendMoveOrDrop({
+      from: parseSquareName(orig)!,
+      to: parseSquareName(dest)!,
       promotion,
     });
   }
 
   function playUserDrop(piece: Piece, dest: Key): void {
-    sendMove({
-      role: piece.role as PocketRole,
-      to: parseChessSquare(dest)!,
+    sendMoveOrDrop({
+      role: piece.role as Role,
+      to: parseSquareName(dest)!,
     });
   }
 
-  function sendMove(move: Move): void {
-    sendMoveAt(vm.path, position(), move);
+  function sendMoveOrDrop(md: MoveOrDrop): void {
+    sendMoveOrDropAt(vm.path, position(), md);
   }
 
-  function sendMoveAt(path: Tree.Path, pos: Shogi, move: Move): void {
-    const san = makeSanAndPlay(pos, move);
-    const check = pos.isCheck() ? pos.board.kingOf(pos.turn) : undefined;
+  function sendMoveOrDropAt(path: Tree.Path, pos: Shogi, md: MoveOrDrop): void {
+    const parent = tree.nodeAtPath(path),
+      lastUsi = parent.usi ? parseUsi(parent.usi) : undefined,
+      capture = pos.board.get(md.to),
+      notationMove = makeNotationWithPosition(pos, md, lastUsi);
+    pos.play(md);
     addNode(
       {
-        ply: pos.fullmoves - 1,
-        fen: makeFen(pos.toSetup()),
-        id: scalashogiCharPair(move),
-        uci: makeLishogiUci(move),
-        san,
-        check: defined(check) ? makeChessSquare(check) : undefined,
+        ply: pos.moveNumber - 1,
+        sfen: makeSfen(pos),
+        id: scalashogiCharPair(md),
+        usi: makeUsi(md),
+        notation: notationMove,
+        check: pos.isCheck(),
+        capture: !!capture,
         children: [],
       },
       path
     );
   }
 
-  function uciToLastMove(uci: string | undefined): [Key, Key] | [Key] | undefined {
-    return defined(uci)
-      ? uci[1] === '*'
-        ? [uci.substr(2, 2) as Key]
-        : [uci.substr(0, 2) as Key, uci.substr(2, 2) as Key]
-      : undefined;
-  }
-
   function addNode(node: Tree.Node, path: Tree.Path): void {
     const newPath = tree.addNode(node, path)!;
     jump(newPath);
-    withGround(g => g.playPremove());
+    shogiground.playPremove();
 
     const progress = moveTest(vm, data.puzzle);
     if (progress) applyProgress(progress);
     reorderChildren(path);
     redraw();
-    speech.node(node, false);
+    if (progress === 'fail') speech.failure();
+    else speech.node(node, false);
   }
 
   function reorderChildren(path: Tree.Path, recursive?: boolean): void {
@@ -258,7 +220,7 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
 
   function revertUserMove(): void {
     setTimeout(() => {
-      withGround(g => g.cancelPremove());
+      shogiground.cancelPremove();
       userJump(treePath.init(vm.path));
       redraw();
     }, 100);
@@ -278,15 +240,18 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
       if (vm.mode != 'view') {
         const sent = vm.mode == 'play' ? sendResult(true) : Promise.resolve();
         vm.mode = 'view';
-        withGround(showGround);
+        shogiground.set(makeSgOpts());
         sent.then(_ => (autoNext() ? nextPuzzle() : startCeval()));
       }
     } else if (progress) {
       vm.lastFeedback = 'good';
-      setTimeout(() => {
-        const pos = Shogi.fromSetup(parseFen(progress.fen).unwrap(), false).unwrap();
-        sendMoveAt(progress.path, pos, progress.move);
-      }, opts.pref.animation.duration * (autoNext() ? 1 : 1.5));
+      setTimeout(
+        () => {
+          const pos = parseSfen('standard', progress.sfen, false).unwrap() as Shogi;
+          sendMoveOrDropAt(progress.path, pos, progress.move);
+        },
+        opts.pref.animation.duration * (autoNext() ? 1 : 1.5)
+      );
     }
   }
 
@@ -295,7 +260,6 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
     vm.resultSent = true;
     session.complete(data.puzzle.id, win);
     return xhr.complete(data.puzzle.id, data.theme.key, win, data.replay).then((res: PuzzleResult) => {
-      if (res?.replayComplete && data.replay) return window.lishogi.redirect(`/training/dashboard/${data.replay.days}`);
       if (res?.next.user && data.user) {
         data.user.rating = res.next.user.rating;
         data.user.provisional = res.next.user.provisional;
@@ -303,18 +267,49 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
         if (res.round?.ratingDiff) session.setRatingDiff(data.puzzle.id, res.round.ratingDiff);
       }
       if (win) speech.success();
-      vm.next.resolve(res.next);
+      if (res.replayComplete) vm.next.reject('replay complete');
+      else vm.next.resolve(res.next);
       redraw();
     });
   }
 
   function nextPuzzle(): void {
     ceval.stop();
-    vm.next.promise.then(initiate).then(redraw);
+    vm.next.promise.then(initiate).then(redraw).catch(redirectToDashboard);
 
     if (!data.replay) {
       const path = `/training/${data.theme.key}`;
       if (location.pathname != path) history.replaceState(null, '', path);
+    }
+  }
+
+  function redirectToDashboard() {
+    if (data.replay) window.lishogi.redirect(`/training/dashboard/${data.replay.days}`);
+  }
+
+  function instanciateKeyboard(): void {
+    const parent = tree.parentNode(vm.path),
+      lastMove = parent.usi ? parseUsi(parent.usi) : undefined;
+
+    if (!keyboardMove) {
+      keyboardMove = makeKeyboardMove(
+        {
+          data: {
+            game: { variant: { key: 'standard' } },
+            player: { color: vm.pov },
+          },
+          shogiground,
+          redraw: redraw,
+          userJumpPlyDelta,
+          next: nextPuzzle,
+          vote,
+          trans,
+        },
+        { sfen: vm.node.sfen, lastSquare: lastMove?.to }
+      );
+      requestAnimationFrame(() => redraw());
+    } else {
+      keyboardMove.update({ sfen: vm.node.sfen, lastSquare: lastMove?.to });
     }
   }
 
@@ -325,16 +320,19 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
       storageKeyPrefix: 'puzzle',
       multiPvDefault: 3,
       variant: {
-        short: 'Std',
         name: 'Standard',
         key: 'standard',
       },
+      initialSfen: data.game.sfen,
       possible: true,
       emit: function (ev, work) {
         tree.updateAt(work.path, function (node) {
           if (work.threatMode) {
-            if (!node.threat || node.threat.depth <= ev.depth || node.threat.maxDepth < ev.maxDepth) node.threat = ev;
-          } else if (!node.ceval || node.ceval.depth <= ev.depth || node.ceval.maxDepth < ev.maxDepth) node.ceval = ev;
+            const threat = ev as Tree.LocalEval;
+            if (!node.threat || node.threat.depth <= threat.depth || node.threat.maxDepth < threat.maxDepth)
+              node.threat = threat;
+          } else if (!node.ceval || node.ceval.depth <= ev.depth || node.ceval.maxDepth! < ev.maxDepth!)
+            node.ceval = ev;
           if (work.path === vm.path) {
             setAutoShapes();
             redraw();
@@ -346,17 +344,15 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
   }
 
   function setAutoShapes(): void {
-    withGround(g => {
-      g.setAutoShapes(
-        computeAutoShapes({
-          vm: vm,
-          ceval: ceval,
-          ground: g,
-          threatMode: threatMode(),
-          nextNodeBest: nextNodeBest(),
-        })
-      );
-    });
+    shogiground.setAutoShapes(
+      computeAutoShapes({
+        vm: vm,
+        ceval: ceval,
+        ground: shogiground,
+        threatMode: threatMode(),
+        nextNodeBest: nextNodeBest(),
+      })
+    );
   }
 
   function canUseCeval(): boolean {
@@ -404,17 +400,21 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
     return position().outcome();
   }
 
+  function isImpasse(): boolean {
+    return impasse('standard', vm.node.sfen, data.game.sfen);
+  }
+
   function jump(path: Tree.Path): void {
     const pathChanged = path !== vm.path,
       isForwardStep = pathChanged && path.length === vm.path.length + 2;
     setPath(path);
-    withGround(showGround);
+    shogiground.set(makeSgOpts());
     if (pathChanged) {
       if (isForwardStep) {
-        if (!vm.node.uci) sound.move();
+        if (!vm.node.usi) sound.move();
         // initial position
-        else if (!vm.justPlayed || vm.node.uci.includes(vm.justPlayed)) {
-          if (vm.node.san!.includes('x')) sound.capture();
+        else {
+          if (vm.node.capture) sound.capture();
           else sound.move();
         }
         if (vm.node.check) sound.check();
@@ -423,18 +423,28 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
       ceval.stop();
       startCeval();
     }
-    promotion.cancel();
-    vm.justPlayed = undefined;
-    vm.justDropped = undefined;
     vm.autoScrollRequested = true;
+    if (keyboardMove) {
+      const parent = tree.parentNode(vm.path),
+        lastMove = parent.usi ? parseUsi(parent.usi) : undefined;
+      keyboardMove.update({ sfen: vm.node.sfen, lastSquare: lastMove?.to });
+    }
     window.lishogi.pubsub.emit('ply', vm.node.ply);
   }
 
   function userJump(path: Tree.Path): void {
     if (tree.nodeAtPath(path)?.puzzle == 'fail' && vm.mode != 'view') return;
-    withGround(g => g.selectSquare(null));
+    shogiground.selectSquare(null);
     jump(path);
-    speech.node(vm.node, true);
+    if (path) speech.node(vm.node, true);
+  }
+
+  function userJumpPlyDelta(plyDelta: Ply) {
+    // ensure we are jumping to a valid ply
+    let maxValidPly = vm.mainline.length - 1;
+    if (last(vm.mainline)?.puzzle == 'fail' && vm.mode != 'view') maxValidPly -= 1;
+    const newPly = Math.min(Math.max(vm.node.ply + plyDelta, 0), maxValidPly);
+    userJump(fromNodeList(vm.mainline.slice(0, newPly + 1)));
   }
 
   function viewSolution(): void {
@@ -484,11 +494,9 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
   };
   initiate(opts.data);
 
-  const promotion = makePromotion(vm, ground, redraw);
-
   function playBestMove(): void {
-    const uci = nextNodeBest() || (vm.node.ceval && vm.node.ceval.pvs[0].moves[0]);
-    if (uci) playUci(uci);
+    const usi = nextNodeBest() || (vm.node.ceval && vm.node.ceval.pvs[0].moves[0]);
+    if (usi) playUsi(usi);
   }
 
   keyboard({
@@ -522,12 +530,12 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
     getData() {
       return data;
     },
-    data: opts, // for ceval
     getTree() {
       return tree;
     },
-    ground,
-    makeCgOpts,
+    shogiground,
+    makeSgOpts,
+    keyboardMove,
     userJump,
     viewSolution,
     nextPuzzle,
@@ -536,11 +544,11 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
     getCeval,
     pref: opts.pref,
     difficulty: opts.difficulty,
-    trans: window.lishogi.trans(opts.i18n),
-    tsumeLength,
+    trans,
     autoNext,
     autoNexting: () => vm.lastFeedback == 'win' && autoNext(),
     outcome,
+    isImpasse,
     toggleCeval,
     toggleThreatMode,
     threatMode,
@@ -550,22 +558,19 @@ export default function (opts: PuzzleOpts, redraw: Redraw): Controller {
     nextNodeBest,
     userMove,
     userDrop,
-    playUci,
+    playUsi,
+    playUsiList,
     showEvalGauge() {
       return vm.showComputer() && ceval.enabled();
     },
     getOrientation() {
-      return withGround(g => g.state.orientation)!;
-    },
-    getDropmodeActive() {
-      return withGround(g => g.state.dropmode.active)!;
+      return shogiground.state.orientation;
     },
     getNode() {
       return vm.node;
     },
     position,
     showComputer: vm.showComputer,
-    promotion,
     redraw,
     ongoing: false,
     playBestMove,

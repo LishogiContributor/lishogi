@@ -1,10 +1,9 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import spinner from 'common/spinner';
+import { VNode, h } from 'snabbdom';
 import MsgCtrl from '../ctrl';
-import renderConvo from './convo';
 import renderContact from './contact';
+import renderConvo from './convo';
 import * as search from './search';
-import { spinner } from './util';
 
 export default function (ctrl: MsgCtrl): VNode {
   const activeId = ctrl.data.convo?.user.id;
@@ -28,8 +27,8 @@ export default function (ctrl: MsgCtrl): VNode {
       ctrl.data.convo
         ? renderConvo(ctrl, ctrl.data.convo)
         : ctrl.loading
-        ? h('div.msg-app__convo', { key: ':' }, [h('div.msg-app__convo__head'), spinner()])
-        : '',
+          ? h('div.msg-app__convo', { key: ':' }, [h('div.msg-app__convo__head'), spinner()])
+          : '',
     ]
   );
 }

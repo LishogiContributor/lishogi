@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import ornicar.scalalib.Zero
 import scala.collection.BuildFrom
 import scala.concurrent.duration._
-import scala.concurrent.{ ExecutionContext => EC, Future, Await }
+import scala.concurrent.{ Await, ExecutionContext => EC, Future }
 import scala.util.Try
 
 import lila.common.Chronometer
@@ -215,13 +215,6 @@ final class PimpedFutureOption[A](private val fua: Fu[Option[A]]) extends AnyVal
   def map2[B](f: A => B)(implicit ec: EC): Fu[Option[B]] = fua.map(_ map f)
   def dmap2[B](f: A => B): Fu[Option[B]]                 = fua.map(_ map f)(EC.parasitic)
 }
-
-// final class PimpedFutureValid[A](private val fua: Fu[Valid[A]]) extends AnyVal {
-
-//   def flatten: Fu[A] = fua.flatMap {
-//     _.fold[Fu[A]](fufail(_), fuccess(_))
-//   }(EC.parasitic)
-// }
 
 final class PimpedIterableFuture[A, M[X] <: IterableOnce[X]](private val t: M[Fu[A]]) extends AnyVal {
   def sequenceFu(implicit bf: BuildFrom[M[Fu[A]], A, M[A]], ec: EC): Fu[M[A]] = Future.sequence(t)

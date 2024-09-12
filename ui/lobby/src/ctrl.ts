@@ -1,19 +1,21 @@
-import variantConfirm from './variant';
-import * as hookRepo from './hookRepo';
-import * as seekRepo from './seekRepo';
-import { make as makeStores, Stores } from './store';
-import * as xhr from './xhr';
-import * as poolRangeStorage from './poolRangeStorage';
-import { LobbyOpts, LobbyData, Tab, Mode, Sort, Hook, Seek, Pool, PoolMember } from './interfaces';
-import LobbySocket from './socket';
+import throttle from 'common/throttle';
 import Filter from './filter';
+import * as hookRepo from './hookRepo';
+import { Hook, LobbyData, LobbyOpts, Mode, Preset, PresetOpts, Seek, Sort, Tab } from './interfaces';
+import * as seekRepo from './seekRepo';
 import Setup from './setup';
+import LobbySocket from './socket';
+import { Stores, make as makeStores } from './store';
+import { action } from './util';
+import variantConfirm from './variant';
+import * as xhr from './xhr';
 
 const li = window.lishogi;
 
 export default class LobbyController {
   data: LobbyData;
   playban: any;
+  isAnon: boolean;
   isBot: boolean;
   socket: LobbySocket;
   stores: Stores;
@@ -22,28 +24,38 @@ export default class LobbyController {
   sort: Sort;
   stepHooks: Hook[] = [];
   stepping: boolean = false;
+  reloadSeeks: boolean = false;
   redirecting: boolean = false;
-  poolMember?: PoolMember;
   trans: Trans;
-  pools: Pool[];
   filter: Filter;
   setup: Setup;
+  presetOpts: PresetOpts;
+  allPresets: Preset[];
+  currentPresetId: string | undefined; // real time only
 
-  private poolInStorage: LishogiStorage;
   private flushHooksTimeout?: number;
   private alreadyWatching: string[] = [];
 
-  constructor(readonly opts: LobbyOpts, readonly redraw: () => void) {
+  constructor(
+    readonly opts: LobbyOpts,
+    readonly redraw: () => void
+  ) {
     this.data = opts.data;
     this.data.hooks = [];
-    this.pools = opts.pools;
     this.playban = opts.playban;
     this.isBot = opts.data.me && opts.data.me.isBot;
-    this.filter = new Filter(li.storage.make('lobby.filter'), this);
+    this.isAnon = !opts.data.me;
+    this.presetOpts = {
+      isAnon: this.isAnon,
+      isNewPlayer: !!opts.data.me?.isNewPlayer,
+      aiLevel: opts.data.me?.aiLevel && parseInt(opts.data.me.aiLevel),
+      rating: opts.data.me?.rating && parseInt(opts.data.me.rating),
+      ratingDiff: 300,
+    };
+    this.filter = new Filter(li.storage.make('lobby.filter2'), this);
     this.setup = new Setup(li.storage.make, this);
+    this.initAllPresets();
 
-    hookRepo.initAll(this);
-    seekRepo.initAll(this);
     this.socket = new LobbySocket(opts.socketSend, this);
 
     this.stores = makeStores(this.data.me ? this.data.me.username.toLowerCase() : null);
@@ -52,12 +64,6 @@ export default class LobbyController {
       (this.sort = this.stores.sort.get()),
       (this.trans = opts.trans);
 
-    this.poolInStorage = li.storage.make('lobby.pool-in');
-    this.poolInStorage.listen(_ => {
-      // when another tab joins a pool
-      this.leavePool();
-      redraw();
-    });
     this.flushHooksSchedule();
 
     this.startWatching();
@@ -66,21 +72,15 @@ export default class LobbyController {
       if (this.playban.remainingSecond < 86400) setTimeout(li.reload, this.playban.remainingSeconds * 1000);
     } else {
       setInterval(() => {
-        if (this.poolMember) this.poolIn();
-        else if (this.tab === 'real_time' && !this.data.hooks.length) this.socket.realTimeIn();
-      }, 10 * 1000);
-      this.joinPoolFromLocationHash();
+        if (hookRepo.tabs.includes(this.tab) && !this.data.hooks.length) this.socket.realTimeIn();
+      }, 15 * 1000);
     }
 
     li.pubsub.on('socket.open', () => {
-      if (this.tab === 'real_time') {
+      if (hookRepo.tabs.includes(this.tab)) {
         this.data.hooks = [];
         this.socket.realTimeIn();
-      } //else if (this.tab === "pools" && this.poolMember) this.poolIn();
-    });
-
-    window.addEventListener('beforeunload', () => {
-      if (this.poolMember) this.socket.poolOut(this.poolMember);
+      }
     });
   }
 
@@ -105,15 +105,46 @@ export default class LobbyController {
 
   private flushHooksSchedule = (): number => setTimeout(this.flushHooks, 8000);
 
-  setTab = (tab: Tab) => {
+  initAllPresets = () => {
+    const highestDefeatedAi = this.presetOpts.aiLevel || 1,
+      level = Math.min(Math.max(highestDefeatedAi, 2), 7); // the middle level
+    this.allPresets = [
+      { lim: 3, byo: 0 },
+      { lim: 0, byo: 10 },
+      { lim: 5, byo: 0 },
+      { lim: 10, byo: 0 },
+      { lim: 10, byo: 30 },
+      { lim: 15, byo: 60 },
+      { lim: 30, ai: level - 1 },
+      { lim: 30, ai: level },
+      { lim: 30, ai: level + 1 },
+      { days: 3 },
+      { days: 5 },
+    ].map((p, i) => {
+      return {
+        id: 'pid-' + i,
+        lim: p.lim || 0,
+        byo: p.byo || 0,
+        inc: 0,
+        per: 1,
+        ai: p.ai,
+        days: p.days || 1,
+        timeMode: p.days ? 2 : 1,
+      };
+    });
+  };
+
+  setTab = (tab: Tab, store = true) => {
     if (tab !== this.tab) {
-      if (tab === 'seeks') xhr.seeks().then(this.setSeeks);
-      else if (tab === 'real_time') this.socket.realTimeIn();
-      else if (this.tab === 'real_time') {
+      if (tab === 'seeks') this.seeksNow();
+      else if (hookRepo.tabs.includes(tab) && !hookRepo.tabs.includes(this.tab)) this.socket.realTimeIn();
+      else if (hookRepo.tabs.includes(this.tab) && !hookRepo.tabs.includes(tab)) {
         this.socket.realTimeOut();
         this.data.hooks = [];
       }
-      this.tab = this.stores.tab.set(tab);
+      if (tab === 'presets' && this.reloadSeeks) this.seeksEventually();
+      if (store) this.tab = this.stores.tab.set(tab);
+      else this.tab = tab;
     }
     this.filter.open = false;
   };
@@ -123,8 +154,9 @@ export default class LobbyController {
     this.filter.open = false;
   };
 
-  setSort = (sort: Sort) => {
-    this.sort = this.stores.sort.set(sort);
+  setSort = (sort: Extract<'rating' | 'time', Sort>) => {
+    if (sort === this.sort) this.sort = this.stores.sort.set(sort + '-reverse');
+    else this.sort = this.stores.sort.set(sort);
   };
 
   onSetFilter = () => {
@@ -135,54 +167,40 @@ export default class LobbyController {
   clickHook = (id: string) => {
     const hook = hookRepo.find(this, id);
     if (!hook || hook.disabled || this.stepping || this.redirecting) return;
-    if (hook.action === 'cancel' || variantConfirm(hook.variant)) this.socket.send(hook.action, hook.id);
+    const act = action(hook);
+    if (act === 'cancel' || variantConfirm(hook.variant || 'standard', this.trans.noarg))
+      this.socket.send(act, hook.id);
   };
 
   clickSeek = (id: string) => {
     const seek = seekRepo.find(this, id);
     if (!seek || this.redirecting) return;
-    if (seek.action === 'cancelSeek' || variantConfirm(seek.variant)) this.socket.send(seek.action, seek.id);
+    const act = action(seek);
+    if (this.isAnon) window.location.href = '/signup';
+    else if (act === 'cancel' || variantConfirm(seek.variant || 'standard', this.trans.noarg))
+      this.socket.send(act + 'Seek', seek.id);
   };
+
+  seeksNow = throttle(100, () => xhr.seeks().then(this.setSeeks));
+  seeksEventually = throttle(7000, () => xhr.seeks().then(this.setSeeks));
 
   setSeeks = (seeks: Seek[]) => {
+    this.reloadSeeks = false;
     this.data.seeks = seeks;
-    seekRepo.initAll(this);
     this.redraw();
   };
 
-  clickPool = (id: string) => {
-    if (!this.data.me) {
-      xhr.anonPoolSeek(
-        this.pools.find(function (p) {
-          return p.id === id;
-        })
-      );
-      this.setTab('real_time');
-    } else if (this.poolMember && this.poolMember.id === id) this.leavePool();
-    else {
-      this.enterPool({ id });
-      this.redraw();
+  clickPreset = preset => {
+    xhr.seekFromPreset(preset, this.presetOpts);
+    if (preset.ai) {
+      this.setRedirecting();
+    } else {
+      if (preset.timeMode === 2) this.setTab('seeks', false);
+      else {
+        this.currentPresetId = preset.id;
+        this.setTab('real_time', false);
+      }
     }
-  };
-
-  enterPool = (member: PoolMember) => {
-    poolRangeStorage.set(member.id, member.range);
-    this.setTab('pools');
-    this.poolMember = member;
-    this.poolIn();
-  };
-
-  leavePool = () => {
-    if (!this.poolMember) return;
-    this.socket.poolOut(this.poolMember);
-    this.poolMember = undefined;
-    this.redraw();
-  };
-
-  poolIn = () => {
-    if (!this.poolMember) return;
-    this.poolInStorage.fire();
-    this.socket.poolIn(this.poolMember);
   };
 
   gameActivity = gameId => {
@@ -213,31 +231,18 @@ export default class LobbyController {
 
   awake = () => {
     switch (this.tab) {
+      case 'presets':
+        this.data.hooks = [];
+        this.socket.realTimeIn();
+        this.seeksNow();
+        break;
       case 'real_time':
         this.data.hooks = [];
         this.socket.realTimeIn();
         break;
       case 'seeks':
-        xhr.seeks().then(this.setSeeks);
+        this.seeksNow();
         break;
     }
   };
-
-  // after click on round "new opponent" button
-  // also handles onboardink link for anon users
-  private joinPoolFromLocationHash() {
-    if (location.hash.startsWith('#pool/')) {
-      const regex = /^#pool\/(\d+\+\d+)(?:\/(.+))?$/,
-        match = regex.exec(location.hash),
-        member: any = { id: match![1], blocking: match![2] },
-        range = poolRangeStorage.get(member.id);
-      if (range) member.range = range;
-      if (match) {
-        //this.setTab("pools");
-        if (this.data.me) this.enterPool(member);
-        else setTimeout(() => this.clickPool(member.id), 1500);
-        history.replaceState(null, '', '/');
-      }
-    }
-  }
 }

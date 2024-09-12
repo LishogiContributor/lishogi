@@ -1,14 +1,14 @@
 package lila.report
 
-import com.softwaremill.macwire._
-import org.joda.time.DateTime
-import reactivemongo.api.ReadPreference
 import scala.concurrent.duration._
 
+import com.softwaremill.macwire._
+import lila.common.Bus
 import lila.db.dsl._
 import lila.memo.CacheApi._
-import lila.common.Bus
 import lila.user.{ User, UserRepo }
+import org.joda.time.DateTime
+import reactivemongo.api.ReadPreference
 
 final class ReportApi(
     val coll: Coll,
@@ -17,7 +17,6 @@ final class ReportApi(
     securityApi: lila.security.SecurityApi,
     userSpyApi: lila.security.UserSpyApi,
     playbanApi: lila.playban.PlaybanApi,
-    slackApi: lila.slack.SlackApi,
     isOnline: lila.socket.IsOnline,
     cacheApi: lila.memo.CacheApi,
     thresholds: Thresholds
@@ -63,11 +62,6 @@ final class ReportApi(
           .flatMap { prev =>
             val report = Report.make(scored, prev)
             lila.mon.mod.report.create(report.reason.key).increment()
-            if (
-              report.isRecentComm &&
-              report.score.value >= thresholds.slack() &&
-              prev.exists(_.score.value < thresholds.slack())
-            ) slackApi.commReportBurst(c.suspect.user)
             coll.update.one($id(report.id), report, upsert = true).void >>
               autoAnalysis(candidate) >>- {
                 if (report.isCheat)
@@ -148,7 +142,7 @@ final class ReportApi(
     getSuspect(userId) zip
       getLishogiReporter zip
       findRecent(1, selectRecent(SuspectId(userId), Reason.Cheat)).map(_.flatMap(_.atoms.toList)) flatMap {
-        case Some(suspect) ~ reporter ~ atoms if atoms.forall(_.byHuman) =>
+        case ((Some(suspect), reporter), atoms) if atoms.forall(_.byHuman) =>
           lila.mon.cheat.autoReport.increment()
           create(
             Candidate(
@@ -176,13 +170,13 @@ final class ReportApi(
     }
 
   def maybeAutoPlaybanReport(userId: String): Funit =
-    userSpyApi.getUserIdsWithSameIpAndPrint(userId) map { ids =>
-      playbanApi.bans(ids.toList ::: List(userId)) map { bans =>
+    userSpyApi.getUserIdsWithSameIpAndPrint(userId) flatMap { ids =>
+      playbanApi.bans(ids.toList ::: List(userId)) flatMap { bans =>
         (bans.values.sum >= 80) ?? {
           userRepo.byId(userId) zip
             getLishogiReporter zip
             findRecent(1, selectRecent(SuspectId(userId), Reason.Playbans)) flatMap {
-              case Some(abuser) ~ reporter ~ past if past.size < 1 =>
+              case ((Some(abuser), reporter), past) if past.sizeIs < 1 =>
                 create(
                   Candidate(
                     reporter = reporter,
@@ -221,7 +215,7 @@ final class ReportApi(
   def autoBoostReport(winnerId: User.ID, loserId: User.ID): Funit =
     securityApi.shareIpOrPrint(winnerId, loserId) zip
       userRepo.byId(winnerId) zip userRepo.byId(loserId) zip getLishogiReporter flatMap {
-        case isSame ~ Some(winner) ~ Some(loser) ~ reporter =>
+        case (((isSame, Some(winner)), Some(loser)), reporter) if !winner.lame && !loser.lame =>
           create(
             Candidate(
               reporter = reporter,
@@ -259,10 +253,9 @@ final class ReportApi(
           $or($id(id), relatedSelector)
         }
         accuracy.invalidate(reportSelector) >>
-          doProcessReport(reportSelector, mod.id).void >>- {
-            nbOpenCache.invalidateUnit()
-            lila.mon.mod.report.close.increment()
-          }
+          doProcessReport(reportSelector, mod.id).void >>-
+          nbOpenCache.invalidateUnit() >>-
+          lila.mon.mod.report.close.increment().unit
       }
 
   private def doProcessReport(selector: Bdoc, by: ModId): Funit =
@@ -320,7 +313,7 @@ final class ReportApi(
       .buildAsyncFuture { _ =>
         coll
           .countSel(selectOpenAvailableInRoom(none))
-          .addEffect(lila.mon.mod.report.unprocessed.update(_))
+          .addEffect(lila.mon.mod.report.unprocessed.update(_).unit)
       }
   }
 
@@ -427,7 +420,7 @@ final class ReportApi(
               .sort(sortLastAtomAt)
               .cursor[Report](ReadPreference.secondaryPreferred)
               .list(20) flatMap { reports =>
-              if (reports.size < 4) fuccess(none) // not enough data to know
+              if (reports.sizeIs < 4) fuccess(none) // not enough data to know
               else {
                 val userIds = reports.map(_.user).distinct
                 userRepo countEngines userIds map { nbEngines =>
@@ -497,9 +490,21 @@ final class ReportApi(
         name = "report.inquiries"
       )
 
-    def all: Fu[List[Report]] = coll.list[Report]($doc("inquiry.mod" $exists true))
+    def allBySuspect: Fu[Map[User.ID, Report.Inquiry]] =
+      coll.list[Report]($doc("inquiry.mod" $exists true)) map {
+        _.view
+          .flatMap { r =>
+            r.inquiry map { i =>
+              r.user -> i
+            }
+          }
+          .toMap
+      }
 
     def ofModId(modId: User.ID): Fu[Option[Report]] = coll.one[Report]($doc("inquiry.mod" -> modId))
+
+    def ofSuspectId(suspectId: User.ID): Fu[Option[Report.Inquiry]] =
+      coll.primitiveOne[Report.Inquiry]($doc("inquiry.mod" $exists true, "user" -> suspectId), "inquiry")
 
     /*
      * If the mod has no current inquiry, just start this one.
@@ -513,7 +518,9 @@ final class ReportApi(
 
     private def doToggle(mod: Mod, id: Report.ID): Fu[Option[Report]] =
       for {
-        report  <- coll.byId[Report](id) orFail s"No report $id found"
+        report <- coll.byId[Report](id) orElse coll.one[Report](
+          $doc("user" -> id, "inquiry.mod" $exists true)
+        ) orFail s"No report $id found"
         current <- ofModId(mod.user.id)
         _       <- current ?? cancel(mod)
         _ <-
@@ -547,6 +554,12 @@ final class ReportApi(
           .void
 
     def spontaneous(mod: Mod, sus: Suspect): Fu[Report] =
+      openOther(mod, sus, Report.spontaneousText)
+
+    def appeal(mod: Mod, sus: Suspect): Fu[Report] =
+      openOther(mod, sus, Report.appealText)
+
+    private def openOther(mod: Mod, sus: Suspect, name: String): Fu[Report] =
       ofModId(mod.user.id) flatMap { current =>
         current.??(cancel(mod)) >> {
           val report = Report
@@ -555,7 +568,7 @@ final class ReportApi(
                 Reporter(mod.user),
                 sus,
                 Reason.Other,
-                Report.spontaneousText
+                name
               ) scored Report.Score(0),
               none
             )

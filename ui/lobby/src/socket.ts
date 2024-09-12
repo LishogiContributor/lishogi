@@ -1,7 +1,7 @@
-import * as xhr from './xhr';
-import * as hookRepo from './hookRepo';
 import LobbyController from './ctrl';
-import { Hook, PoolMember } from './interfaces';
+import * as hookRepo from './hookRepo';
+import { Hook } from './interfaces';
+import { action } from './util';
 
 interface Handlers {
   [key: string]: (data: any) => void;
@@ -12,13 +12,16 @@ const li = window.lishogi;
 export default class LobbySocket {
   handlers: Handlers;
 
-  constructor(readonly send: SocketSend, ctrl: LobbyController) {
+  constructor(
+    readonly send: SocketSend,
+    ctrl: LobbyController
+  ) {
     this.send = send;
 
     this.handlers = {
       had(hook: Hook) {
         hookRepo.add(ctrl, hook);
-        if (hook.action === 'cancel') ctrl.flushHooks(true);
+        if (action(hook) === 'cancel') ctrl.flushHooks(true);
         ctrl.redraw();
       },
       hrm(ids: string) {
@@ -33,11 +36,13 @@ export default class LobbySocket {
         ctrl.redraw();
       },
       hli(ids: string) {
-        hookRepo.syncIds(ctrl, ids.match(/.{8}/g));
+        hookRepo.syncIds(ctrl, ids.match(/.{8}/g) || []);
         ctrl.redraw();
       },
       reload_seeks() {
-        if (ctrl.tab === 'seeks') xhr.seeks().then(ctrl.setSeeks);
+        if (ctrl.tab === 'seeks') ctrl.seeksNow();
+        else if (ctrl.tab === 'presets') ctrl.seeksEventually();
+        else ctrl.reloadSeeks = true;
       },
     };
 
@@ -56,19 +61,6 @@ export default class LobbySocket {
   }
   realTimeOut() {
     this.send('hookOut');
-  }
-
-  poolIn(member: PoolMember) {
-    // last arg=true: must not retry
-    // because if poolIn is sent before socket opens,
-    // then poolOut is sent,
-    // then poolIn shouldn't be sent again after socket opens.
-    // poolIn is sent anyway on socket open event.
-    this.send('poolIn', member, {}, true);
-  }
-
-  poolOut(member: PoolMember) {
-    this.send('poolOut', member.id);
   }
 
   receive = (type: string, data: any): boolean => {

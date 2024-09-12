@@ -1,32 +1,37 @@
 package lila.puzzle
 
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
 
-import lila.common.ThreadLocalRandom
 import lila.db.dsl._
-import lila.memo.CacheApi
-import lila.rating.{ Perf, PerfType }
-import lila.user.{ User, UserRepo }
+import lila.user.User
 
-// mobile app BC
+// mobile app
 final class PuzzleBatch(colls: PuzzleColls, anonApi: PuzzleAnon, pathApi: PuzzlePathApi)(implicit
     ec: ExecutionContext
 ) {
 
   import BsonHandlers._
 
-  def nextFor(user: Option[User], nb: Int): Fu[Vector[Puzzle]] = (nb > 0) ?? {
+  def calculateMax(user: Option[User], theme: PuzzleTheme): Int =
+    user.fold(3) { u =>
+      val base =
+        if (u.perfs.puzzle.established) 16
+        else 6
+      if (theme == PuzzleTheme.mix) base else base / 2
+    }
+
+  def nextFor(user: Option[User], theme: PuzzleTheme): Fu[Vector[Puzzle]] = {
+    val nb = calculateMax(user, theme)
     user match {
       case None => anonApi.getBatchFor(nb)
       case Some(user) =>
         {
           val tier =
-            if (user.perfs.puzzle.nb > 5000) PuzzleTier.Good
+            if (user.perfs.puzzle.nb > 500) PuzzleTier.Good
             else PuzzleTier.Top
           pathApi.nextFor(
             user,
-            PuzzleTheme.mix.key,
+            theme.key,
             tier,
             PuzzleDifficulty.Normal,
             Set.empty
@@ -56,7 +61,7 @@ final class PuzzleBatch(colls: PuzzleColls, anonApi: PuzzleAnon, pathApi: Puzzle
                     )
                   )
                 }.map {
-                  _.view.flatMap(PuzzleBSONReader.readOpt).toVector
+                  _.view.flatMap(PuzzleBSONHandler.readOpt).toVector
                 }
               }
             }

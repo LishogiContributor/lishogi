@@ -6,7 +6,7 @@
   "main": "dist/main.js",
   "types": "dist/main",
   "keywords": [
-    "chess",
+    "shogi",
     "lishogi"
   ],
   "author": "Thibault Duplessis",
@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@types/lishogi": "2.0.0",
-    "typescript": "^4.1.3"
+    "typescript": "^5"
   },
   "dependencies": {
     "common": "2.0.0"

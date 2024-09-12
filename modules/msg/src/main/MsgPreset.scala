@@ -43,6 +43,12 @@ In order to report players for bad behavior, please visit https://lishogi.org/re
 
 """, /* ---------------------------------------------------------------*/ """
 
+Use /appeal
+
+Your account has been restricted due to continuous violation of Lishogi's Terms of Service. If you would like to contest this mark or apologize for your wrongdoings, please appeal to Lishogi at https://lishogi.org/appeal and we might lift the mark.
+
+""", /* ---------------------------------------------------------------*/ """
+
 Warning: Accusations
 
 Accusing other players of using computer assistance or otherwise cheating is not acceptable on Lishogi. If you are confident that a player is cheating, use the report button on their profile page to report them to the moderators.
@@ -64,15 +70,22 @@ Please also remember that, over the long run, ratings tend to gravitate towards 
 
 """, /* ---------------------------------------------------------------*/ """
 
+Warning: Inappropriate username
+
+Due to the fact that your username is either an inappropriate word/phrase that could be offensive to someone or is impersonating someone that you aren't, your account will be terminated within the next 24 hours.
+Once this is done, you will be permitted to create a new lishogi account with a username that follows our Username policy (https://github.com/lichess-org/lila/wiki/Username-policy).
+
+""", /* ---------------------------------------------------------------*/ """
+
 Warning: Username or profile that implies you are a titled player
 
-The username policy (https://github.com/ornicar/lila/wiki/Username-policy) for Lishogi states that you can't have a username that implies that you have a JSA title or the Lishogi Master title, or impersonating a specific titled player. Actual titled players can verify using the form here (https://lishogi.org/verify-title) with evidence that documents their identity, e.g. a scanned ID card, driving license, passport or similar. We will then verify your identity and title, and your title will be shown in front of your username and on your Lishogi user profile. Since your username or profile implies that you have a title, we reserve the right to close your account within two weeks, if you have not verified your title within that time.
+The username policy (https://github.com/lichess-org/lila/wiki/Username-policy) for Lishogi states that you can't have a username that implies that you have a JSA title or the Lishogi Master title, or impersonating a specific titled player. Actual titled players can verify by contacting us at contact@lishogi.org with evidence that documents their identity, e.g. a scanned ID card, driving license, passport or similar. We will then verify your identity and title, and your title will be shown in front of your username and on your Lishogi user profile. Since your username or profile implies that you have a title, we reserve the right to close your account within two weeks, if you have not verified your title within that time.
 
 """, /* ---------------------------------------------------------------*/ """
 
 Account marked for computer assistance
 
-Our cheating detection algorithms have marked your account for using computer assistance. If you want to contest the mark, please send an email to Lishogi Contact contact@lishogi.org. If you are a titled player, we will need a proof of your identity. It can be a picture of a document, like an ID card or a driving license. You can verify your title using the form at lishogi.org/help/master .
+Our cheating detection algorithms have marked your account for using computer assistance. If you want to contest the mark or apologize for your wrongdoings, please appeal to Lishogi at https://lishogi.org/appeal and we might lift the mark. If you are a very strong player, like a high-ranking amateur or professional player, we will need a proof of your identity. It can be a picture of a document, like an ID card or a driving license. The proof of identity can also happen through Shogi Club 24, if you have an active account there. You can verify your playing strength by contacting us at contact@lishogi.org.
 
 """, /* ---------------------------------------------------------------*/ """
 
@@ -80,6 +93,12 @@ Warning: leaving games / stalling on time
 
 In your game history, you have several games where you have left the game or just let the time run out instead of playing or resigning.
 This can be very annoying for your opponents. If this behavior continues to happen, we may be forced to terminate your account.
+
+""", /* ---------------------------------------------------------------*/ """
+
+Warning: Others
+
+If you continue to violate Lishogi's Terms of Service (https://lishogi.org/terms-of-service) in any manner, your account will be restricted. Please refrain from doing so.
 
 """, /* ---------------------------------------------------------------*/ """
 

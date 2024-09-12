@@ -1,16 +1,12 @@
-const variantConfirms = {};
-
 function storageKey(key) {
   return 'lobby.variant.' + key;
 }
 
-export default function (variant: string) {
-  return Object.keys(variantConfirms).every(function (key) {
-    const v = variantConfirms[key];
-    if (variant === key && !window.lishogi.storage.get(storageKey(key))) {
-      const c = confirm(v);
-      if (c) window.lishogi.storage.set(storageKey(key), '1');
-      return c;
-    } else return true;
-  });
+export default function (variant: VariantKey, trans: TransNoArg) {
+  if (variant !== 'standard' && !window.lishogi.storage.get(storageKey(variant))) {
+    const txt = `${trans('variant')} - ${trans(variant)}`,
+      c = confirm(txt);
+    if (c) window.lishogi.storage.set(storageKey(variant), '1');
+    return c;
+  } else return true;
 }

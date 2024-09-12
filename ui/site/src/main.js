@@ -156,7 +156,7 @@
   });
 
   lishogi.reverse = s => s.split('').reverse().join('');
-  lishogi.readServerFen = t => atob(lishogi.reverse(t));
+  lishogi.readServerSfen = t => atob(lishogi.reverse(t));
 
   lishogi.userAutocomplete = ($input, opts) => {
     opts = opts || {};
@@ -173,13 +173,12 @@
             source: function (query, _, runAsync) {
               if (query.trim().match(/^[a-z0-9][\w-]{2,29}$/i))
                 $.ajax({
-                  url: '/player/autocomplete',
+                  url: '/api/player/autocomplete',
                   cache: true,
                   data: {
                     term: query,
                     friend: opts.friend ? 1 : 0,
                     tour: opts.tour,
-                    swiss: opts.swiss,
                     object: 1,
                   },
                   success(res) {
@@ -231,36 +230,171 @@
     });
   };
 
-  lishogi.parseFen = function ($elem) {
+  // Copied from shogiops
+  // todo - refactor and rewrite site in ts and get rid of this
+  function chushogiForsythToRole(str) {
+    switch (str.toLowerCase()) {
+      case 'l':
+        return 'lance';
+      case '+l':
+        return 'whitehorse';
+      case 'f':
+        return 'leopard';
+      case '+f':
+        return 'bishoppromoted';
+      case 'c':
+        return 'copper';
+      case '+c':
+        return 'sidemoverpromoted';
+      case 's':
+        return 'silver';
+      case '+s':
+        return 'verticalmoverpromoted';
+      case 'g':
+        return 'gold';
+      case '+g':
+        return 'rookpromoted';
+      case 'k':
+        return 'king';
+      case 'e':
+        return 'elephant';
+      case '+e':
+        return 'prince';
+      case 'a':
+        return 'chariot';
+      case '+a':
+        return 'whale';
+      case 'b':
+        return 'bishop';
+      case '+b':
+        return 'horsepromoted';
+      case 't':
+        return 'tiger';
+      case '+t':
+        return 'stag';
+      case 'o':
+        return 'kirin';
+      case '+o':
+        return 'lionpromoted';
+      case 'x':
+        return 'phoenix';
+      case '+x':
+        return 'queenpromoted';
+      case 'm':
+        return 'sidemover';
+      case '+m':
+        return 'boar';
+      case 'v':
+        return 'verticalmover';
+      case '+v':
+        return 'ox';
+      case 'r':
+        return 'rook';
+      case '+r':
+        return 'dragonpromoted';
+      case 'h':
+        return 'horse';
+      case '+h':
+        return 'falcon';
+      case 'd':
+        return 'dragon';
+      case '+d':
+        return 'eagle';
+      case 'n':
+        return 'lion';
+      case 'q':
+        return 'queen';
+      case 'p':
+        return 'pawn';
+      case '+p':
+        return 'promotedpawn';
+      case 'i':
+        return 'gobetween';
+      case '+i':
+        return 'elephantpromoted';
+      default:
+        return;
+    }
+  }
+
+  function kyotoshogiForsythToRole(str) {
+    switch (str.toLowerCase()) {
+      case 'k':
+        return 'king';
+      case 'p':
+        return 'pawn';
+      case 'r':
+        return 'rook';
+      case 's':
+        return 'silver';
+      case 'b':
+        return 'bishop';
+      case 'g':
+        return 'gold';
+      case 'n':
+        return 'knight';
+      case 't':
+        return 'tokin';
+      case 'l':
+        return 'lance';
+      default:
+        return;
+    }
+  }
+
+  lishogi.parseSfen = function ($elem) {
     if (!window.Shogiground)
       return setTimeout(function () {
-        lishogi.parseFen($elem);
+        lishogi.parseSfen($elem);
       }, 500); // if not loaded yet
     // sometimes $elem is not a jQuery, can happen when content_loaded is triggered with random args
-    if (!$elem || !$elem.each) $elem = $('.parse-fen');
+    if (!$elem || !$elem.each) $elem = $('.parse-sfen');
+    if (document.body.querySelector('.v-chushogi')) lishogi.loadChushogiPieceSprite();
+    if (document.body.querySelector('.v-kyotoshogi')) lishogi.loadKyotoshogiPieceSprite();
     $elem.each(function () {
-      var $this = $(this).removeClass('parse-fen');
+      var $this = $(this).removeClass('parse-sfen');
+      var sgWrap = this.firstChild;
       var lm = $this.data('lastmove');
-      var lastMove = lm && (lm[1] === '*' ? [lm.slice(2)] : [lm[0] + lm[1], lm[2] + lm[3]]);
-      var color = $this.data('color') || lishogi.readServerFen($(this).data('y'));
+      var lastDests = lm && (lm[1] === '*' ? [lm.slice(2)] : lm.match(/..?/g));
+      var color = $this.data('color') || lishogi.readServerSfen($(this).data('y'));
       var ground = $this.data('shogiground');
       var playable = !!$this.data('playable');
       var resizable = !!$this.data('resizable');
-      var fen = $this.data('fen');
-      var pocketFromFen = fen && fen.split(' ').length > 2 ? fen.split(' ')[2] : undefined;
+      var variant = $this.data('variant') || 'standard';
+      var sfen = $this.data('sfen') || lishogi.readServerSfen($this.data('z'));
+      var splitSfen = sfen.split(' ');
+      var handRoles =
+        variant === 'chushogi'
+          ? []
+          : variant === 'minishogi'
+            ? ['rook', 'bishop', 'gold', 'silver', 'pawn']
+            : variant === 'kyotoshogi'
+              ? ['tokin', 'gold', 'silver', 'pawn']
+              : ['rook', 'bishop', 'gold', 'silver', 'knight', 'lance', 'pawn'];
       var config = {
         coordinates: false,
         viewOnly: !playable,
         resizable: resizable,
-        fen: fen || lishogi.readServerFen($this.data('z')),
-        hasPockets: true,
-        pockets: $this.data('pocket') || pocketFromFen,
-        lastMove: lastMove,
+        sfen: { board: splitSfen[0], hands: splitSfen[2] },
+        hands: {
+          inlined: variant !== 'chushogi',
+          roles: handRoles,
+        },
+        lastDests: lastDests,
         drawable: { enabled: false, visible: false },
+        forsyth: {
+          fromForsyth:
+            variant === 'chushogi'
+              ? chushogiForsythToRole
+              : variant === 'kyotoshogi'
+                ? kyotoshogiForsythToRole
+                : undefined,
+        },
       };
+      sgWrap.classList.remove('preload');
       if (color) config.orientation = color;
       if (ground) ground.set(config);
-      else $this.data('shogiground', Shogiground(this, config));
+      else $this.data('shogiground', Shogiground(config, { board: sgWrap }));
     });
   };
 
@@ -269,7 +403,6 @@
     else if (lishogi.user_analysis) startUserAnalysis(lishogi.user_analysis);
     else if (lishogi.study) startStudy(lishogi.study);
     else if (lishogi.practice) startPractice(lishogi.practice);
-    else if (lishogi.relay) startRelay(lishogi.relay);
     else if (lishogi.puzzle) startPuzzle(lishogi.puzzle);
     else if (lishogi.tournament) startTournament(lishogi.tournament);
     else if (lishogi.simul) startSimul(lishogi.simul);
@@ -546,7 +679,7 @@
         lishogi.pubsub.emit('top.toggle.' + $(this).attr('id'));
         setTimeout(function () {
           var handler = function (e) {
-            if ($.contains($p[0], e.target)) return;
+            if ($.contains($p[0], e.target) || !!$('.sp-container:not(.sp-hidden)').length) return;
             $p.removeClass('shown');
             $('html').off('click', handler);
           };
@@ -598,6 +731,9 @@
         setTimeout(function () {
           const sprite = $('#piece-sprite');
           sprite.attr('href', sprite.attr('href').replace('.css', '.external.css'));
+
+          const chuSprite = $('#chu-piece-sprite');
+          if (chuSprite.length) chuSprite.attr('href', sprite.attr('href').replace('.css', '.external.css'));
         }, 1000);
 
       // prevent zoom when keyboard shows on iOS
@@ -654,9 +790,6 @@
       error: 'Error',
       tick: 'Tick',
       period: 'Period',
-      stormGood: 'StormGood',
-      stormWrong: 'StormWrong',
-      stormEnd: 'StormEnd',
     };
     for (var i = 0; i <= 10; i++) names['countDown' + i] = 'CountDown' + i;
 
@@ -672,7 +805,7 @@
           return {
             play: $.noop,
           };
-        set = 'standard';
+        set = 'shogi';
       }
       var baseUrl = lishogi.assetUrl('sound', { noVersion: true });
       return new Howl({
@@ -688,7 +821,7 @@
     Object.keys(names).forEach(function (name) {
       api[name] = function (text) {
         if (!enabled()) return;
-        if (!text || !api.say(text)) {
+        if (!text || !api.say({ en: text })) {
           Howler.volume(api.getVolume());
           var sound = collection(name);
           if (Howler.ctx && Howler.ctx.state == 'suspended') {
@@ -699,11 +832,14 @@
         }
       };
     });
-    api.say = function (text, cut, force) {
+    api.say = function (texts, cut, force) {
       if (!speechStorage.get() && !force) return false;
-      var msg = text.text ? text : new SpeechSynthesisUtterance(text);
+      var useJp = !!texts.jp && document.documentElement.lang === 'ja-JP';
+      var text = useJp ? texts.jp : texts.en;
+      var lang = useJp ? 'ja-JP' : 'en-US';
+      var msg = new SpeechSynthesisUtterance(text);
       msg.volume = api.getVolume();
-      msg.lang = 'en-US';
+      msg.lang = lang;
       if (cut) speechSynthesis.cancel();
       speechSynthesis.speak(msg);
       console.log(`%c${msg.text}`, 'color: blue');
@@ -922,7 +1058,7 @@
   });
 
   $(function () {
-    lishogi.pubsub.on('content_loaded', lishogi.parseFen);
+    lishogi.pubsub.on('content_loaded', lishogi.parseSfen);
 
     var socketOpened = false;
 
@@ -943,7 +1079,7 @@
     });
 
     lishogi.requestIdleCallback(function () {
-      lishogi.parseFen();
+      lishogi.parseSfen();
       $('.chat__members').watchers();
       if (location.hash === '#blind' && !$('body').hasClass('blind-mode'))
         $.post('/toggle-blind-mode', { enable: 1, redirect: '/' }, lishogi.reload);
@@ -983,6 +1119,14 @@
   function startTeam(cfg) {
     lishogi.socket = lishogi.StrongSocket('/team/' + cfg.id, cfg.socketVersion);
     cfg.chat && lishogi.makeChat(cfg.chat);
+    $('#team-subscribe').on('change', function () {
+      const v = this.checked;
+      $(this)
+        .parents('form')
+        .each(function () {
+          $.post($(this).attr('action'), { v: v });
+        });
+    });
   }
 
   ////////////////
@@ -1037,23 +1181,6 @@
   }
 
   ////////////////
-  // relay.js //
-  ////////////////
-
-  function startRelay(cfg) {
-    var analyse;
-    cfg.initialPly = 'url';
-    lishogi.socket = lishogi.StrongSocket(cfg.socketUrl, cfg.socketVersion, {
-      receive: function (t, d) {
-        analyse.socketReceive(t, d);
-      },
-    });
-    cfg.socketSend = lishogi.socket.send;
-    cfg.trans = lishogi.trans(cfg.i18n);
-    analyse = LishogiAnalyse.start(cfg);
-  }
-
-  ////////////////
   // puzzle.js //
   ////////////////
 
@@ -1077,38 +1204,44 @@
     if (document.body.getAttribute('data-dev')) workerUrl.searchParams.set('dev', '1');
     const updateViaCache = document.body.getAttribute('data-dev') ? 'none' : 'all';
     navigator.serviceWorker.register(workerUrl.href, { scope: '/', updateViaCache }).then(reg => {
-      const storage = lishogi.storage.make('push-subscribed');
+      const storage = lishogi.storage.make('push-subscribed2');
       const vapid = document.body.getAttribute('data-vapid');
-      if (vapid && Notification.permission == 'granted')
-        return reg.pushManager.getSubscription().then(sub => {
-          const resub = parseInt(storage.get() || '0', 10) + 43200000 < Date.now(); // 12 hours
-          const applicationServerKey = Uint8Array.from(atob(vapid), c => c.charCodeAt(0));
+      if (vapid && Notification.permission == 'granted') {
+        reg.pushManager.getSubscription().then(sub => {
+          const curKey = sub && sub.options.applicationServerKey;
+          const isNewKey = curKey && btoa(String.fromCharCode.apply(null, new Uint8Array(curKey))) !== vapid;
+          const resub = isNewKey || parseInt(storage.get() || '0', 10) + 43200000 < Date.now(); // 12 hours
           if (!sub || resub) {
-            return reg.pushManager
-              .subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: applicationServerKey,
-              })
-              .then(
-                sub =>
-                  fetch('/push/subscribe', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(sub),
-                  }).then(res => {
-                    if (res.ok) storage.set('' + Date.now());
-                    else console.log('submitting push subscription failed', response.statusText);
-                  }),
-                err => {
-                  console.log('push subscribe failed', err.message);
-                  if (sub) sub.unsubscribe();
-                }
-              );
+            const subscribeOptions = {
+              userVisibleOnly: true,
+              applicationServerKey: Uint8Array.from(atob(vapid), c => c.charCodeAt(0)),
+            };
+            (isNewKey
+              ? sub.unsubscribe().then(() => reg.pushManager.subscribe(subscribeOptions))
+              : reg.pushManager.subscribe(subscribeOptions)
+            ).then(
+              sub =>
+                fetch('/push/subscribe', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(sub),
+                }).then(res => {
+                  if (res.ok && !res.redirected) storage.set('' + Date.now());
+                  else sub.unsubscribe();
+                }),
+              err => {
+                console.log('push subscribe failed', err.message);
+                if (sub) sub.unsubscribe();
+              }
+            );
           }
         });
-      else storage.remove();
+      } else {
+        storage.remove();
+        reg.pushManager.getSubscription().then(sub => sub?.unsubscribe());
+      }
     });
   }
 })();

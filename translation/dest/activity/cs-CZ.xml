@@ -15,10 +15,10 @@
     <item quantity="other">Procvičeno %1$s pozic v %2$s</item>
   </plurals>
   <plurals name="solvedNbPuzzles">
-    <item quantity="one">Vyřešena %s taktická úloha</item>
-    <item quantity="few">Vyřešeny %s taktické úlohy</item>
-    <item quantity="many">Vyřešeno %s taktických úloh</item>
-    <item quantity="other">Vyřešeno %s taktických úloh</item>
+    <item quantity="one">Vyřešil %s taktické puzzle</item>
+    <item quantity="few">Vyřešil %s taktické puzzle</item>
+    <item quantity="many">Vyřešil %s taktických puzzle</item>
+    <item quantity="other">Vyřešil %s taktických puzzle</item>
   </plurals>
   <plurals name="playedNbGames">
     <item quantity="one">Odehrána %1$s %2$s hra</item>
@@ -45,9 +45,9 @@
     <item quantity="other">v %1$s korespondenčních partiích</item>
   </plurals>
   <plurals name="completedNbGames">
-    <item quantity="one">Dokončena %s korespondenční partii</item>
+    <item quantity="one">Dokončena %s korespondenční partie</item>
     <item quantity="few">Dokončeny %s korespondenční partie</item>
-    <item quantity="many">Dokončeno %s korespondenčních partií</item>
+    <item quantity="many">Dokončeno %s korespondenční partie</item>
     <item quantity="other">Dokončeno %s korespondenčních partií</item>
   </plurals>
   <plurals name="followedNbPlayers">

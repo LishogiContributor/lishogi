@@ -1,11 +1,28 @@
 $clock-height: 20px;
 
-.analyse__clock {
-  @extend %metal, %box-shadow;
+.analyse.has-clocks {
+  sg-board {
+    border-radius: 0;
+  }
+  @include breakpoint($mq-col2) {
+    .analyse__underboard {
+      margin-top: calc(#{$clock-height / 2} + 3vmin);
+    }
+  }
+  @include breakpoint($mq-col1) {
+    .analyse__board {
+      margin: 16px 0 20px 0;
+    }
+  }
+}
 
+.analyse__clock {
+  @extend %metal;
+
+  display: flex;
   position: absolute;
-  right: 3px; // 100/9 isn't as nice as 100/8
-  padding: 0 0.5em;
+  right: 0;
+  text-shadow: none;
 
   height: $clock-height;
 
@@ -16,20 +33,48 @@ $clock-height: 20px;
     @extend %box-radius-top;
     top: #{-$clock-height};
     z-index: 2; // over the board coords
+    .time {
+      border-top-right-radius: $box-radius-size;
+    }
   }
   &.bottom {
+    @extend %box-shadow;
     @extend %box-radius-bottom;
     bottom: #{-$clock-height};
+    .time {
+      border-bottom-right-radius: $box-radius-size;
+    }
   }
-  &.active {
-    background: mix($c-primary, $c-bg-box, 30%);
+  & > div {
+    padding: 0 0.8rem;
+  }
+  .name i {
+    margin-right: 0.4em;
+  }
+
+  &.active .time {
+    background: $c-secondary;
+    color: $c-secondary-over;
   }
   tenths {
     font-size: 80%;
   }
 
-  /* Where to put them in col1 layout? It moves the entire board and controls down for little benefit */
   @include breakpoint($mq-col1) {
-    display: none;
+    background: none;
+    &.top {
+      left: 0;
+      right: unset;
+    }
+    &.bottom {
+      box-shadow: none;
+    }
+    .time {
+      border-radius: $box-radius-size;
+    }
+  }
+  @include breakpoint($mq-col2) {
+    @include hand-width(right);
+    margin-right: 1px;
   }
 }

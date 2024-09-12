@@ -1,6 +1,6 @@
+import { form, json } from 'common/xhr';
 import MsgCtrl from './ctrl';
-import { MsgData, Contact, User, Msg, Convo, SearchResult } from './interfaces';
-import { json, form } from 'common/xhr';
+import { Contact, Convo, Msg, MsgData, SearchResult, User } from './interfaces';
 
 export function loadConvo(userId: string): Promise<MsgData> {
   return json(`/inbox/${userId}`).then(upgradeData);
@@ -20,7 +20,7 @@ export function search(q: string): Promise<SearchResult> {
       ({
         ...res,
         contacts: res.contacts.map(upgradeContact),
-      } as SearchResult)
+      }) as SearchResult
   );
 }
 

@@ -1,11 +1,11 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { hookMobileMousedown } from 'common/mobile';
+import { VNode, h } from 'snabbdom';
+import MsgCtrl from '../ctrl';
 import { Convo } from '../interfaces';
-import { userName, bindMobileMousedown } from './util';
-import renderMsgs from './msgs';
 import renderActions from './actions';
 import renderInteract from './interact';
-import MsgCtrl from '../ctrl';
+import renderMsgs from './msgs';
+import { userName } from './util';
 
 export default function renderConvo(ctrl: MsgCtrl, convo: Convo): VNode {
   const user = convo.user;
@@ -19,7 +19,7 @@ export default function renderConvo(ctrl: MsgCtrl, convo: Convo): VNode {
         h('div.msg-app__convo__head__left', [
           h('span.msg-app__convo__head__back', {
             attrs: { 'data-icon': 'I' },
-            hook: bindMobileMousedown(ctrl.showSide),
+            hook: hookMobileMousedown(ctrl.showSide),
           }),
           h(
             'a.user-link.ulpt',
@@ -46,14 +46,14 @@ export default function renderConvo(ctrl: MsgCtrl, convo: Convo): VNode {
               'This conversation is blocked.'
             )
           : convo.postable
-          ? renderInteract(ctrl, user)
-          : h(
-              'div.msg-app__convo__reply__block.text',
-              {
-                attrs: { 'data-icon': 'k' },
-              },
-              `${user.name} doesn't accept new messages.`
-            ),
+            ? renderInteract(ctrl, user)
+            : h(
+                'div.msg-app__convo__reply__block.text',
+                {
+                  attrs: { 'data-icon': 'k' },
+                },
+                `${user.name} doesn't accept new messages.`
+              ),
       ]),
     ]
   );

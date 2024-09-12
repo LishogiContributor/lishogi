@@ -3,6 +3,7 @@ package lila.app
 import akka.actor.CoordinatedShutdown
 import com.softwaremill.macwire._
 import play.api._
+import play.api.http.HttpRequestHandler
 import play.api.libs.crypto.CookieSignerProvider
 import scala.annotation.nowarn
 import play.api.mvc._
@@ -50,11 +51,26 @@ final class LilaComponents(ctx: ApplicationLoader.Context)
 
   lazy val httpFilters = Seq(wire[lila.app.http.HttpFilter])
 
-  override lazy val httpErrorHandler = {
-    @nowarn def someRouter = router.some
-    @nowarn def mapper     = devContext.map(_.sourceMapper)
-    wire[lila.app.http.ErrorHandler]
-  }
+  override lazy val httpErrorHandler =
+    new lila.app.http.ErrorHandler(
+      environment = ctx.environment,
+      config = configuration,
+      sourceMapper = devContext.map(_.sourceMapper),
+      router = router,
+      mainC = main,
+      lobbyC = lobby
+    )
+
+  override lazy val httpRequestHandler: HttpRequestHandler =
+    new lila.app.http.LilaHttpRequestHandler(
+      webCommands,
+      devContext,
+      router,
+      httpErrorHandler,
+      httpConfiguration,
+      httpFilters,
+      controllerComponents
+    )
 
   implicit def system = actorSystem
   implicit def ws     = wsClient
@@ -71,6 +87,7 @@ final class LilaComponents(ctx: ApplicationLoader.Context)
   lazy val account: Account               = wire[Account]
   lazy val analyse: Analyse               = wire[Analyse]
   lazy val api: Api                       = wire[Api]
+  lazy val appeal: Appeal                 = wire[Appeal]
   lazy val auth: Auth                     = wire[Auth]
   lazy val blog: Blog                     = wire[Blog]
   lazy val bookmark: Bookmark             = wire[Bookmark]
@@ -83,7 +100,7 @@ final class LilaComponents(ctx: ApplicationLoader.Context)
   lazy val dev: Dev                       = wire[Dev]
   lazy val editor: Editor                 = wire[Editor]
   lazy val event: Event                   = wire[Event]
-  lazy val export: Export                 = wire[Export]
+  lazy val `export`: Export               = wire[Export]
   lazy val fishnet: Fishnet               = wire[Fishnet]
   lazy val forumCateg: ForumCateg         = wire[ForumCateg]
   lazy val forumPost: ForumPost           = wire[ForumPost]
@@ -91,17 +108,15 @@ final class LilaComponents(ctx: ApplicationLoader.Context)
   lazy val game: Game                     = wire[Game]
   lazy val i18n: I18n                     = wire[I18n]
   lazy val importer: Importer             = wire[Importer]
-  lazy val insight: Insight               = wire[Insight]
-  lazy val irwin: Irwin                   = wire[Irwin]
+  lazy val insights: Insights             = wire[Insights]
   lazy val learn: Learn                   = wire[Learn]
   lazy val lobby: Lobby                   = wire[Lobby]
   lazy val main: Main                     = wire[Main]
   lazy val msg: Msg                       = wire[Msg]
   lazy val mod: Mod                       = wire[Mod]
   lazy val notifyC: Notify                = wire[Notify]
-  lazy val oAuthApp: OAuthApp             = wire[OAuthApp]
+  lazy val oAuth: OAuth                   = wire[OAuth]
   lazy val oAuthToken: OAuthToken         = wire[OAuthToken]
-  lazy val options: Options               = wire[Options]
   lazy val page: Page                     = wire[Page]
   lazy val plan: Plan                     = wire[Plan]
   lazy val practice: Practice             = wire[Practice]
@@ -110,7 +125,6 @@ final class LilaComponents(ctx: ApplicationLoader.Context)
   lazy val push: Push                     = wire[Push]
   lazy val puzzle: Puzzle                 = wire[Puzzle]
   lazy val relation: Relation             = wire[Relation]
-  lazy val relay: Relay                   = wire[Relay]
   lazy val report: Report                 = wire[Report]
   lazy val round: Round                   = wire[Round]
   lazy val search: Search                 = wire[Search]
@@ -128,7 +142,6 @@ final class LilaComponents(ctx: ApplicationLoader.Context)
   lazy val userAnalysis: UserAnalysis     = wire[UserAnalysis]
   lazy val userTournament: UserTournament = wire[UserTournament]
   lazy val video: Video                   = wire[Video]
-  lazy val swiss: Swiss                   = wire[Swiss]
   lazy val storm: Storm                   = wire[Storm]
 
   // eagerly wire up all controllers

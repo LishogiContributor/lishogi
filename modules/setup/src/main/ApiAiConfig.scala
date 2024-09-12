@@ -1,11 +1,13 @@
 package lila.setup
 
 import shogi.Clock
-import shogi.format.{ FEN, Forsyth }
-import shogi.variant.{ FromPosition, Variant }
-import lila.game.{ Game, Player, Pov, Source }
+import shogi.format.forsyth.Sfen
+import shogi.variant.Variant
+import lila.game.{ EngineConfig, Game, Player, Pov, Source }
 import lila.lobby.Color
 import lila.user.User
+
+import scala.util.chaining._
 
 final case class ApiAiConfig(
     variant: Variant,
@@ -13,18 +15,18 @@ final case class ApiAiConfig(
     daysO: Option[Int],
     color: Color,
     level: Int,
-    fen: Option[FEN] = None
+    sfen: Option[Sfen] = None
 ) extends Config
     with Positional {
 
-  val strictFen = false
+  val strictSfen = false
 
-  def >> = (level, variant.key.some, clock, daysO, color.name.some, fen.map(_.value)).some
+  def >> = (level, variant.key.some, clock, daysO, color.name.some, sfen.map(_.value)).some
 
   val days      = ~daysO
   val increment = clock.??(_.increment.roundSeconds)
   val byoyomi   = clock.??(_.byoyomi.roundSeconds)
-  val periods   = clock.??(_.periods)
+  val periods   = clock.??(_.periodsTotal)
   val time      = clock.??(_.limit.roundSeconds / 60)
   val timeMode =
     if (clock.isDefined) TimeMode.RealTime
@@ -32,41 +34,37 @@ final case class ApiAiConfig(
     else TimeMode.Unlimited
 
   def game(user: Option[User]) =
-    fenGame { shogiGame =>
+    makeGame pipe { shogiGame =>
       val perfPicker = lila.game.PerfPicker.mainOrDefault(
         shogi.Speed(shogiGame.clock.map(_.config)),
-        shogiGame.situation.board.variant,
+        shogiGame.variant,
         makeDaysPerTurn
       )
       Game
         .make(
           shogi = shogiGame,
+          initialSfen = sfen,
           sentePlayer = creatorColor.fold(
             Player.make(shogi.Sente, user, perfPicker),
-            Player.make(shogi.Sente, level.some)
+            Player.make(shogi.Sente, EngineConfig(sfen, shogiGame.variant, level).some)
           ),
           gotePlayer = creatorColor.fold(
-            Player.make(shogi.Gote, level.some),
+            Player.make(shogi.Gote, EngineConfig(sfen, shogiGame.variant, level).some),
             Player.make(shogi.Gote, user, perfPicker)
           ),
           mode = shogi.Mode.Casual,
-          source = if (shogiGame.board.variant.fromPosition) Source.Position else Source.Ai,
+          source = if (sfen.filterNot(_.initialOf(variant)).isDefined) Source.Position else Source.Ai,
           daysPerTurn = makeDaysPerTurn,
-          pgnImport = None
+          notationImport = None
         )
         .sloppy
     } start
 
   def pov(user: Option[User]) = Pov(game(user), creatorColor)
 
-  def autoVariant =
-    if (variant.standard && fen.exists(_.value != Forsyth.initial)) copy(variant = FromPosition)
-    else this
 }
 
 object ApiAiConfig extends BaseConfig {
-
-  // lazy val clockLimitSeconds: Set[Int] = Set(0, 15, 30, 45, 60, 90) ++ (2 to 180).view.map(60 *).toSet
 
   def from(
       l: Int,
@@ -74,14 +72,14 @@ object ApiAiConfig extends BaseConfig {
       cl: Option[Clock.Config],
       d: Option[Int],
       c: Option[String],
-      pos: Option[String]
+      sf: Option[String]
   ) =
     new ApiAiConfig(
       variant = shogi.variant.Variant.orDefault(~v),
-      clock = cl,
+      clock = cl.filter(c => c.limitSeconds > 0 || c.hasIncrement || c.hasByoyomi),
       daysO = d,
       color = Color.orDefault(~c),
       level = l,
-      fen = pos map FEN
-    ).autoVariant
+      sfen = sf map Sfen.clean
+    )
 }

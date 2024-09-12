@@ -1,16 +1,16 @@
-import { h, thunk } from 'snabbdom';
-import { VNode, VNodeData } from 'snabbdom/vnode';
+import { defined } from 'common/common';
+import { engineNameFromCode } from 'common/engineName';
+import { bind, dataIcon } from 'common/snabbdom';
+import * as game from 'game';
+import { VNode, VNodeData, h, thunk } from 'snabbdom';
 import AnalyseCtrl from './ctrl';
 import { findTag } from './study/studyChapters';
-import * as game from 'game';
-import { defined } from 'common';
-// import { bind, dataIcon } from "./util";
 
 type AdviceKind = 'inaccuracy' | 'mistake' | 'blunder';
 
 interface Advice {
   kind: AdviceKind;
-  plural: string;
+  plural: I18nKey;
   symbol: string;
 }
 
@@ -34,8 +34,7 @@ function renderPlayer(ctrl: AnalyseCtrl, color: Color): VNode {
   return h(
     'span',
     p.name ||
-      (ctrl.data.game.variant.key == 'standard' && p.ai && 'YaneuraOu level ' + p.ai) ||
-      (p.ai && 'Fairy-Stockfish level ' + p.ai) ||
+      (p.ai && engineNameFromCode(p.aiCode, p.ai, ctrl.trans)) ||
       (ctrl.study && findTag(ctrl.study.data.chapter.tags, color)) ||
       'Anonymous'
   );
@@ -66,14 +65,15 @@ function playerTable(ctrl: AnalyseCtrl, color: Color): VNode {
         'tbody',
         advices
           .map(a => {
-            const nb: number = d.analysis![color][a.kind];
-            const attrs: VNodeData = nb
-              ? {
-                  'data-color': color,
-                  'data-symbol': a.symbol,
-                }
-              : {};
-            return h('tr' + (nb ? '.symbol' : ''), { attrs }, [h('td', '' + nb), h('th', trans(a.plural))]);
+            const nb: number = d.analysis![color][a.kind],
+              style = nb ? `.symbol.${a.kind}` : '',
+              attrs: VNodeData = nb
+                ? {
+                    'data-color': color,
+                    'data-symbol': a.symbol,
+                  }
+                : {};
+            return h('tr' + (nb ? `.symbol${style}` : ''), { attrs }, [h('td', '' + nb), h('th', trans(a.plural))]);
           })
           .concat(h('tr', [h('td', '' + (defined(acpl) ? acpl : '?')), h('th', trans('averageCentipawnLoss'))]))
       ),
@@ -96,20 +96,17 @@ function doRender(ctrl: AnalyseCtrl): VNode {
     [
       playerTable(ctrl, 'sente'),
       h('div.hidden', '-'),
-      // i don't think it's worth it considering the current browser engine
-      /*
       ctrl.study
         ? null
         : h(
-            "a.button.text",
+            'a.button.text',
             {
               class: { active: !!ctrl.retro },
-              attrs: dataIcon("G"),
-              hook: bind("click", ctrl.toggleRetro, ctrl.redraw),
+              attrs: dataIcon('G'),
+              hook: bind('click', ctrl.toggleRetro, ctrl.redraw),
             },
-            ctrl.trans.noarg("learnFromYourMistakes")
+            ctrl.trans.noarg('learnFromYourMistakes')
           ),
-          */
       playerTable(ctrl, 'gote'),
     ]
   );

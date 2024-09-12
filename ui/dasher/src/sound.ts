@@ -1,48 +1,46 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { VNode, h } from 'snabbdom';
+import { Close, Redraw, bind, header } from './util';
 
-import { Redraw, Close, bind, header } from './util';
+type SoundKey = string;
 
-type Key = string;
-
-export type Sound = string[];
+interface Sound {
+  key: SoundKey;
+  name: string;
+}
 
 export interface SoundData {
-  current: Key;
   list: Sound[];
 }
 
 export interface SoundCtrl {
   makeList(): Sound[];
   api: any;
-  set(k: Key): void;
+  set(k: SoundKey): void;
   volume(v: number): void;
   redraw: Redraw;
   trans: Trans;
   close: Close;
 }
 
-export function ctrl(raw: string[], trans: Trans, redraw: Redraw, close: Close): SoundCtrl {
-  const list: Sound[] = raw.map(s => s.split(' '));
-
+export function ctrl(soundData: SoundData, trans: Trans, redraw: Redraw, close: Close): SoundCtrl {
   const api = window.lishogi.sound;
 
   return {
     makeList() {
       const canSpeech = window.speechSynthesis?.getVoices().length;
-      return list.filter(s => s[0] != 'speech' || canSpeech);
+      return soundData.list.filter(s => s.key != 'speech' || canSpeech);
     },
     api,
-    set(k: Key) {
-      api.speech(k == 'speech');
+    set(key: SoundKey) {
+      api.speech(key == 'speech');
       window.lishogi.pubsub.emit('speech.enabled', api.speech());
-      if (api.speech()) api.say('Speech synthesis ready');
+      if (api.speech()) api.say({ en: 'Speech synthesis ready' });
       else {
-        api.changeSet(k);
+        api.changeSet(key);
         // If we want to play move for all sets we need to get move sound for pentatonic
-        if (k.includes('shogi')) api.move();
-        else api.genericNotify();
-        $.post('/pref/soundSet', { set: k }).fail(() =>
+        if (key === 'music') api.genericNotify();
+        else api.move();
+        $.post('/pref/soundSet', { set: key }).fail(() =>
           window.lishogi.announce({ msg: 'Failed to save sound preference' })
         );
       }
@@ -51,7 +49,7 @@ export function ctrl(raw: string[], trans: Trans, redraw: Redraw, close: Close):
     volume(v: number) {
       api.setVolume(v);
       // plays a move sound if speech is off
-      api.move('knight F 7');
+      api.move('pawn 7 F');
     },
     redraw,
     trans,
@@ -72,7 +70,7 @@ export function view(ctrl: SoundCtrl): VNode {
       },
     },
     [
-      header(ctrl.trans('sound'), ctrl.close),
+      header(ctrl.trans.noarg('sound'), ctrl.close),
       h('div.content', [
         h('div.slider', { hook: { insert: vn => makeSlider(ctrl, vn) } }),
         h('div.selector', ctrl.makeList().map(soundView(ctrl, current))),
@@ -96,15 +94,15 @@ function makeSlider(ctrl: SoundCtrl, vnode: VNode) {
   });
 }
 
-function soundView(ctrl: SoundCtrl, current: Key) {
+function soundView(ctrl: SoundCtrl, current: SoundKey) {
   return (s: Sound) =>
     h(
       'a.text',
       {
-        hook: bind('click', () => ctrl.set(s[0])),
-        class: { active: current === s[0] },
+        hook: bind('click', () => ctrl.set(s.key)),
+        class: { active: current === s.key },
         attrs: { 'data-icon': 'E' },
       },
-      s[1]
+      s.name
     );
 }

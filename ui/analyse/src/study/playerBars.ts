@@ -1,10 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { defined } from 'common/common';
+import { VNode, h } from 'snabbdom';
 import { ops as treeOps } from 'tree';
-import { TagArray } from './interfaces';
 import renderClocks from '../clocks';
 import AnalyseCtrl from '../ctrl';
-import { isFinished, findTag, resultOf } from './studyChapters';
+import { TagArray } from './interfaces';
+import { findTag, isFinished } from './studyChapters';
 
 interface PlayerNames {
   sente: string;
@@ -19,8 +19,8 @@ export default function (ctrl: AnalyseCtrl): VNode[] | undefined {
       sente: findTag(tags, 'sente')!,
       gote: findTag(tags, 'gote')!,
     };
-  if (!playerNames.sente && !playerNames.gote && !treeOps.findInMainline(ctrl.tree.root, n => !!n.clock)) return;
-  const clocks = renderClocks(ctrl),
+  if (!playerNames.sente && !playerNames.gote && !treeOps.findInMainline(ctrl.tree.root, n => defined(n.clock))) return;
+  const clocks = renderClocks(ctrl, false),
     ticking = !isFinished(study.data.chapter) && ctrl.turnColor();
   return (['sente', 'gote'] as Color[]).map(color =>
     renderPlayer(tags, clocks, playerNames, color, ticking === color, ctrl.bottomColor() !== color)
@@ -36,8 +36,7 @@ function renderPlayer(
   top: boolean
 ): VNode {
   const title = findTag(tags, `${color}title`),
-    elo = findTag(tags, `${color}elo`),
-    result = resultOf(tags, color === 'sente');
+    elo = findTag(tags, `${color}elo`);
   return h(
     `div.study__player.study__player-${top ? 'top' : 'bot'}`,
     {
@@ -45,8 +44,8 @@ function renderPlayer(
     },
     [
       h('div.left', [
-        result && h('span.result', result),
         h('span.info', [
+          h('i.color-icon.' + color),
           title && h('span.title', title + ' '),
           h('span.name', playerNames[color]),
           elo && h('span.elo', elo),

@@ -50,7 +50,7 @@ object Streamer {
         lastGrantedAt = none
       ),
       picturePath = none,
-      name = Name(s"${user.title.??(t => s"$t ")}${user.realNameOrUsername}"),
+      name = Name(user.realNameOrUsername),
       headline = none,
       description = none,
       twitch = none,
@@ -93,8 +93,8 @@ object Streamer {
   }
 
   case class YouTube(channelId: String) {
-    def fullUrl = s"https://www.youtube.com/channel/$channelId"
-    def minUrl  = s"youtube.com/channel/$channelId"
+    def fullUrl = s"https://www.youtube.com/channel/$channelId/live"
+    def minUrl  = s"youtube.com/channel/$channelId/live"
   }
   object YouTube {
     private val ChannelIdRegex = """^([\w-]{24})$""".r
@@ -114,7 +114,6 @@ object Streamer {
     def withoutStream = WithUser(streamer, user)
     def titleName     = withoutStream.titleName
 
-
     def redirectToLiveUrl: Option[String] =
       stream ?? { s =>
         streamer.twitch.ifTrue(s.twitch).map(_.fullUrl) orElse
@@ -122,9 +121,11 @@ object Streamer {
       }
   }
 
-  case class ModChange(list: Option[Boolean], tier: Option[Int])
+  case class ModChange(list: Option[Boolean], tier: Option[Int], decline: Boolean)
 
   val maxTier = 10
 
   val tierChoices = (0 to maxTier).map(t => t -> t.toString)
+
+  def canApply(u: User) = (u.count.game >= 3 && u.createdSinceDays(1)) || u.hasTitle || u.isVerified
 }

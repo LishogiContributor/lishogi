@@ -1,13 +1,11 @@
-import { VNode } from 'snabbdom/vnode';
+import { ChatPlugin } from 'chat';
 import { GameData, Status } from 'game';
-import { ClockData, Seconds, Centis } from './clock/clockCtrl';
+import { MoveMetadata as SgMoveMetadata } from 'shogiground/types';
+import { Role } from 'shogiops/types';
+import { VNode } from 'snabbdom';
+import { Centis, ClockData, Seconds } from './clock/clockCtrl';
 import { CorresClockData } from './corresClock/corresClockCtrl';
 import RoundController from './ctrl';
-import { ChatPlugin } from 'chat';
-import * as cg from 'shogiground/types';
-
-export type MaybeVNode = VNode | null | undefined;
-export type MaybeVNodes = MaybeVNode[];
 
 export type Redraw = () => void;
 
@@ -25,31 +23,16 @@ export interface SocketOpts {
   millis?: number;
 }
 
-export interface SocketMove {
-  u: Uci;
+export interface SocketUsi {
+  u: Usi;
   b?: 1;
 }
-export interface SocketDrop {
-  role: cg.Role;
-  pos: cg.Key;
-  b?: 1;
-}
-
-export type EncodedDests =
-  | string
-  | {
-      [key: string]: string;
-    };
-export type Dests = cg.Dests;
 
 export interface RoundData extends GameData {
   clock?: ClockData;
   pref: Pref;
   steps: Step[];
-  possibleMoves?: EncodedDests;
-  possibleDrops?: string;
   forecastCount?: number;
-  crazyhouse?: CrazyData;
   correspondence: CorresClockData;
   url: {
     socket: string;
@@ -73,20 +56,13 @@ export interface Tv {
   flip: boolean;
 }
 
-interface CrazyData {
-  pockets: [CrazyPocket, CrazyPocket];
-}
-
-interface CrazyPocket {
-  [role: string]: number;
-}
-
 export interface RoundOpts {
   data: RoundData;
   userId?: string;
   socketSend: SocketSend;
   onChange(d: RoundData): void;
   element: HTMLElement;
+  klasses: string[];
   crosstableEl: HTMLElement;
   i18n: any;
   chat?: Chat;
@@ -104,15 +80,13 @@ export interface Chat {
 
 export interface Step {
   ply: Ply;
-  fen: Fen;
-  san: San;
-  uci: Uci;
+  sfen: Sfen;
+  usi?: Usi;
+  notation?: string;
   check?: boolean;
-  crazy?: StepCrazy;
 }
 
 export interface ApiMove extends Step {
-  dests: EncodedDests;
   clock?: {
     sente: Seconds;
     gote: Seconds;
@@ -123,11 +97,9 @@ export interface ApiMove extends Step {
   status: Status;
   winner?: Color;
   check: boolean;
-  threefold: boolean;
   sDraw: boolean;
   gDraw: boolean;
-  crazyhouse?: CrazyData;
-  role?: cg.Role;
+  role?: Role;
   drops?: string;
   promotion?: boolean;
   isMove?: true;
@@ -150,12 +122,9 @@ export interface ApiEnd {
   };
 }
 
-export interface StepCrazy extends Untyped {}
-
 export interface Pref {
   animationDuration: number;
   blindfold: boolean;
-  clockBar: boolean;
   clockSound: boolean;
   clockTenths: 0 | 1 | 2;
   clockCountdown: 0 | 3 | 5 | 10;
@@ -164,22 +133,17 @@ export interface Pref {
   destination: boolean;
   dropDestination: boolean;
   enablePremove: boolean;
-  highlight: boolean;
-  is3d: boolean;
+  highlightLastDests: boolean;
+  highlightCheck: boolean;
+  squareOverlay: boolean;
   keyboardMove: boolean;
   moveEvent: 0 | 1 | 2;
   replay: 0 | 1 | 2;
-  showCaptured: boolean;
   submitMove: boolean;
   resizeHandle: 0 | 1 | 2;
-  pieceNotation: number;
 }
 
-export interface MoveMetadata {
-  premove?: boolean;
-  justDropped?: cg.Role;
-  justCaptured?: cg.Piece;
-}
+export type MoveMetadata = Partial<SgMoveMetadata>;
 
 export type Position = 'top' | 'bottom';
 
@@ -189,8 +153,4 @@ export interface MaterialDiffSide {
 export interface MaterialDiff {
   sente: MaterialDiffSide;
   gote: MaterialDiffSide;
-}
-export interface CheckCount {
-  sente: number;
-  gote: number;
 }

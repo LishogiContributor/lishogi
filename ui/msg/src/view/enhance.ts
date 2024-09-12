@@ -12,7 +12,8 @@ const expandMentions = (html: string) =>
   );
 
 // ported from https://github.com/bryanwoods/autolink-js/blob/master/autolink.js
-const urlRegex = /(^|[\s\n]|<[A-Za-z]*\/?>)((?:(?:https?|ftp):\/\/|lishogi\.org)[\-A-Z0-9+\u0026\u2019@#\/%?=()~_|!:,.;]*[\-A-Z0-9+\u0026@#\/%=~()_|])/gi;
+const urlRegex =
+  /(^|[\s\n]|<[A-Za-z]*\/?>)((?:(?:https?|ftp):\/\/|lishogi\.org)[\-A-Z0-9+\u0026\u2019@#\/%?=()~_|!:,.;]*[\-A-Z0-9+\u0026@#\/%=~()_|])/gi;
 const expandUrls = (html: string) =>
   html.replace(urlRegex, (_, space: string, url: string) => `${space}${expandUrl(url)}`);
 
@@ -111,32 +112,26 @@ function parseLink(a: HTMLAnchorElement): Link | undefined {
 }
 
 const themes = [
-  'solid-orange',
-  'solid-natural',
+  'orange',
+  'natural',
+  'wood',
   'wood1',
   'kaya1',
   'kaya2',
-  'kaya-light',
   'oak',
-  'solid-brown1',
-  'solid-wood1',
   'blue',
-  'dark-blue',
   'gray',
-  'Painting1',
-  'Painting2',
-  'Kinkaku',
-  'space1',
-  'space2',
-  'whiteBoard',
-  'darkBoard',
+  'painting1',
+  'painting2',
+  'kinkaku',
+  'space',
   'doubutsu',
 ];
 
 function configureSrc(url: string): string {
   if (url.includes('://')) return url;
   const parsed = new URL(url, window.location.href);
-  parsed.searchParams.append('theme', themes.find(theme => document.body.classList.contains(theme)) ?? 'wood1');
+  parsed.searchParams.append('theme', themes.find(theme => document.body.classList.contains(theme)) ?? 'wood');
   parsed.searchParams.append('bg', document.body.getAttribute('data-theme')!);
   return parsed.href;
 }

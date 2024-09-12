@@ -2,9 +2,9 @@ package lila.fishnet
 
 import akka.actor._
 import com.softwaremill.macwire._
-import io.lettuce.core._
 import io.methvin.play.autoconfig._
 import play.api.Configuration
+import lila.db.dsl._
 
 import lila.common.Bus
 import lila.common.config._
@@ -13,6 +13,7 @@ import lila.game.Game
 @Module
 private class FishnetConfig(
     @ConfigName("collection.analysis") val analysisColl: CollName,
+    @ConfigName("collection.puzzle") val puzzleColl: CollName,
     @ConfigName("collection.client") val clientColl: CollName,
     @ConfigName("actor.name") val actorName: String,
     @ConfigName("offline_mode") val offlineMode: Boolean,
@@ -21,10 +22,15 @@ private class FishnetConfig(
     @ConfigName("client_min_version") val clientMinVersion: String
 )
 
+case class FishnetColls(
+    analysis: Coll,
+    puzzle: Coll,
+    client: Coll
+)
+
 @Module
 final class Env(
     appConfig: Configuration,
-    uciMemo: lila.game.UciMemo,
     requesterApi: lila.analyse.RequesterApi,
     evalCacheApi: lila.evalCache.EvalCacheApi,
     gameRepo: lila.game.GameRepo,
@@ -32,7 +38,7 @@ final class Env(
     db: lila.db.Db,
     cacheApi: lila.memo.CacheApi,
     sink: lila.analyse.Analyser,
-    shutdown: akka.actor.CoordinatedShutdown
+    puzzle: lila.puzzle.PuzzleApi
 )(implicit
     ec: scala.concurrent.ExecutionContext,
     system: ActorSystem
@@ -40,13 +46,16 @@ final class Env(
 
   private val config = appConfig.get[FishnetConfig]("fishnet")(AutoConfig.loader)
 
-  private lazy val analysisColl = db(config.analysisColl)
+  private val analysisColl = db(config.analysisColl)
 
-  private lazy val clientVersion = new Client.ClientVersion(config.clientMinVersion)
+  private lazy val colls = FishnetColls(
+    analysis = analysisColl,
+    puzzle = db(config.puzzleColl),
+    client = db(config.clientColl)
+  )
 
   private lazy val repo = new FishnetRepo(
-    analysisColl = analysisColl,
-    clientColl = db(config.clientColl),
+    colls = colls,
     cacheApi = cacheApi
   )
 
@@ -60,7 +69,8 @@ final class Env(
 
   private lazy val apiConfig = FishnetApi.Config(
     offlineMode = config.offlineMode,
-    analysisNodes = config.analysisNodes
+    analysisNodes = config.analysisNodes,
+    clientVersion = new Client.ClientVersion(config.clientMinVersion)
   )
 
   private lazy val socketExists: Game.ID => Fu[Boolean] = id =>
@@ -77,8 +87,6 @@ final class Env(
 
   lazy val analyser = wire[Analyser]
 
-  lazy val aiPerfApi = wire[AiPerfApi]
-
   wire[Cleaner]
 
   wire[MainWatcher]
@@ -88,8 +96,24 @@ final class Env(
     Props(new Actor {
       def receive = {
         case lila.hub.actorApi.fishnet.AutoAnalyse(gameId) =>
-          analyser(gameId, Work.Sender(userId = none, ip = none, mod = false, system = true))
-        case req: lila.hub.actorApi.fishnet.StudyChapterRequest => analyser study req
+          analyser(
+            gameId,
+            Work.Sender(userId = none, postGameStudy = none, ip = none, mod = false, system = true)
+          ).unit
+        case lila.hub.actorApi.fishnet.PostGameStudyRequest(userId, gameId, studyId, chapterId) =>
+          analyser
+            .postGameStudy(
+              gameId,
+              Work.Sender(
+                userId = userId.some,
+                postGameStudy = lila.analyse.Analysis.PostGameStudy(studyId, chapterId).some,
+                ip = none,
+                mod = false,
+                system = false
+              )
+            )
+            .unit
+        case req: lila.hub.actorApi.fishnet.StudyChapterRequest => analyser.study(req).unit
       }
     }),
     name = config.actorName
@@ -115,8 +139,8 @@ final class Env(
     }
 
   Bus.subscribeFun("adjustCheater", "adjustBooster", "shadowban") {
-    case lila.hub.actorApi.mod.MarkCheater(userId, true) => disable(userId)
-    case lila.hub.actorApi.mod.MarkBooster(userId)       => disable(userId)
-    case lila.hub.actorApi.mod.Shadowban(userId, true)   => disable(userId)
+    case lila.hub.actorApi.mod.MarkCheater(userId, true) => disable(userId).unit
+    case lila.hub.actorApi.mod.MarkBooster(userId)       => disable(userId).unit
+    case lila.hub.actorApi.mod.Shadowban(userId, true)   => disable(userId).unit
   }
 }

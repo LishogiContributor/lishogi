@@ -6,7 +6,7 @@ import scala.annotation.nowarn
 
 import lila.api.Context
 import lila.app._
-import lila.user.{ User => UserModel, TotpSecret }
+import lila.user.{ TotpSecret, User => UserModel }
 import views.html
 
 final class Account(
@@ -31,7 +31,7 @@ final class Account(
         fuccess(html.account.profile(me, err))
       } { profile =>
         env.user.repo.setProfile(me.id, profile) inject
-          Redirect(routes.Account.profile()).flashSuccess
+          Redirect(routes.User show me.username).flashSuccess
       }
     }
 
@@ -59,7 +59,7 @@ final class Account(
             env.round.proxyRepo.urgentGames(me) zip
             env.challenge.api.countInFor.get(me.id) zip
             env.playban.api.currentBan(me.id) map {
-              case nbFollowers ~ prefs ~ povs ~ nbChallenges ~ playban =>
+              case ((((nbFollowers, prefs), povs), nbChallenges), playban) =>
                 Ok {
                   import lila.pref.JsonView._
                   env.user.jsonView(me) ++ Json
@@ -102,23 +102,6 @@ final class Account(
       Ok(Json.obj("nowPlaying" -> JsArray(povs take nb map env.api.lobbyApi.nowPlaying)))
     }
 
-  def dasher =
-    Auth { implicit ctx => me =>
-      negotiate(
-        html = notFound,
-        api = _ =>
-          env.pref.api.getPref(me) map { prefs =>
-            Ok {
-              import lila.pref.JsonView._
-              lila.common.LightUser.lightUserWrites.writes(me.light) ++ Json.obj(
-                "coach" -> isGranted(_.Coach),
-                "prefs" -> prefs
-              )
-            }
-          }
-      )
-    }
-
   def passwd =
     Auth { implicit ctx => me =>
       env.user.forms passwd me map { form =>
@@ -135,9 +118,10 @@ final class Account(
             fuccess(html.account.passwd(err))
           } { data =>
             env.user.authenticator.setPassword(me.id, UserModel.ClearPassword(data.newPasswd1))
-            env.security.store.closeUserExceptSessionId(me.id, ~env.security.api.reqSessionId(ctx.req)) >>
+            env.security.store
+              .closeUserExceptSessionId(me.id, ~lila.common.HTTPRequest.userSessionId(ctx.req)) >>
               env.push.webSubscriptionApi.unsubscribeByUser(me) inject
-              Redirect(routes.Account.passwd()).flashSuccess
+              Redirect(routes.Account.passwd).flashSuccess
           }
         }
       }(rateLimitedFu)
@@ -182,7 +166,7 @@ final class Account(
             val newUserEmail = lila.security.EmailConfirm.UserEmail(me.username, email.acceptable)
             auth.EmailConfirmRateLimit(newUserEmail, ctx.req) {
               env.security.emailChange.send(me, newUserEmail.email) inject
-                Redirect(routes.Account.email()).flashSuccess {
+                Redirect(routes.Account.email).flashSuccess {
                   lila.i18n.I18nKeys.checkYourEmail.txt()
                 }
             }(rateLimitedFu)
@@ -202,7 +186,7 @@ final class Account(
                 if (prevEmail.exists(_.isNoReply))
                   Some(_ => Redirect(routes.User.show(user.username)).flashSuccess)
                 else
-                  Some(_ => Redirect(routes.Account.email()).flashSuccess)
+                  Some(_ => Redirect(routes.Account.email).flashSuccess)
             )
         }
       }
@@ -246,7 +230,7 @@ final class Account(
     AuthBody { implicit ctx => me =>
       auth.HasherRateLimit(me.username, ctx.req) { _ =>
         implicit val req     = ctx.body
-        val currentSessionId = ~env.security.api.reqSessionId(ctx.req)
+        val currentSessionId = ~lila.common.HTTPRequest.userSessionId(ctx.req)
         env.security.forms.setupTwoFactor(me) flatMap { form =>
           FormFuResult(form) { err =>
             fuccess(html.account.twoFactor.setup(me, err))
@@ -254,7 +238,7 @@ final class Account(
             env.user.repo.setupTwoFactor(me.id, TotpSecret(data.secret)) >>
               env.security.store.closeUserExceptSessionId(me.id, currentSessionId) >>
               env.push.webSubscriptionApi.unsubscribeByUserExceptSession(me, currentSessionId) inject
-              Redirect(routes.Account.twoFactor()).flashSuccess
+              Redirect(routes.Account.twoFactor).flashSuccess
           }
         }
       }(rateLimitedFu)
@@ -269,7 +253,7 @@ final class Account(
             fuccess(html.account.twoFactor.disable(me, err))
           } { _ =>
             env.user.repo.disableTwoFactor(me.id) inject
-              Redirect(routes.Account.twoFactor()).flashSuccess
+              Redirect(routes.Account.twoFactor).flashSuccess
           }
         }
       }(rateLimitedFu)
@@ -329,7 +313,7 @@ final class Account(
               _ =>
                 env.user.repo.setKid(me, getBool("v")) >>
                   negotiate(
-                    html = Redirect(routes.Account.kid()).flashSuccess.fuccess,
+                    html = Redirect(routes.Account.kid).flashSuccess.fuccess,
                     api = _ => jsonOkResult.fuccess
                   )
             )
@@ -343,14 +327,25 @@ final class Account(
     }
 
   private def currentSessionId(implicit ctx: Context) =
-    ~env.security.api.reqSessionId(ctx.req)
+    ~lila.common.HTTPRequest.userSessionId(ctx.req)
 
   def security =
     Auth { implicit ctx => me =>
-      env.security.api.dedup(me.id, ctx.req) >>
-        env.security.api.locatedOpenSessions(me.id, 50) map { sessions =>
-          Ok(html.account.security(me, sessions, currentSessionId))
-        }
+      for {
+        _                    <- env.security.api.dedup(me.id, ctx.req)
+        sessions             <- env.security.api.locatedOpenSessions(me.id, 50)
+        clients              <- env.oAuth.tokenApi.listClients(me, 50)
+        personalAccessTokens <- env.oAuth.tokenApi.countPersonal(me)
+      } yield Ok(
+        html.account
+          .security(
+            me,
+            sessions,
+            currentSessionId,
+            clients,
+            personalAccessTokens
+          )
+      )
     }
 
   def signout(sessionId: String) =
@@ -358,7 +353,7 @@ final class Account(
       if (sessionId == "all")
         env.security.store.closeUserExceptSessionId(me.id, currentSessionId) >>
           env.push.webSubscriptionApi.unsubscribeByUserExceptSession(me, currentSessionId) inject
-          Redirect(routes.Account.security()).flashSuccess
+          Redirect(routes.Account.security).flashSuccess
       else
         env.security.store.closeUserAndSessionId(me.id, sessionId) >>
           env.push.webSubscriptionApi.unsubscribeBySession(sessionId)
@@ -419,7 +414,7 @@ final class Account(
         case Some(user) =>
           env.report.api.reopenReports(lila.report.Suspect(user)) >>
             auth.authenticateUser(user) >>-
-            lila.mon.user.auth.reopenConfirm("success").increment()
+            lila.mon.user.auth.reopenConfirm("success").increment().unit
       }
     }
 }

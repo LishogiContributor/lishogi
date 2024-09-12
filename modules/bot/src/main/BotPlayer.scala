@@ -3,8 +3,9 @@ package lila.bot
 import scala.concurrent.duration._
 import scala.concurrent.Promise
 
-import shogi.format.Uci
+import shogi.format.usi.{ UciToUsi, Usi }
 import lila.common.Bus
+import lila.game.FairyConversion.Kyoto
 import lila.game.Game.PlayerId
 import lila.game.{ Game, GameRepo, Pov }
 import lila.hub.actorApi.map.Tell
@@ -23,19 +24,22 @@ final class BotPlayer(
 
   private def clientError[A](msg: String): Fu[A] = fufail(lila.round.ClientError(msg))
 
-  def apply(pov: Pov, me: User, uciStr: String, offeringDraw: Option[Boolean]): Funit =
-    lila.common.Future.delay((pov.game.hasAi ?? 500) millis) {
-      Uci(uciStr).fold(clientError[Unit](s"Invalid UCI: $uciStr")) { uci =>
-        lila.mon.bot.moves(me.username).increment()
-        if (!pov.isMyTurn) clientError("Not your turn, or game already over")
-        else {
-          val promise = Promise[Unit]()
-          if (pov.player.isOfferingDraw && (offeringDraw contains false)) declineDraw(pov)
-          else if (!pov.player.isOfferingDraw && ~offeringDraw) offerDraw(pov)
-          tellRound(pov.gameId, BotPlay(pov.playerId, uci, promise.some))
-          promise.future
+  def apply(pov: Pov, me: User, usiStr: String, offeringDraw: Option[Boolean]): Funit =
+    lila.common.Future.delay((!pov.game.hasHuman ?? 750) millis) {
+      Usi(usiStr)
+        .orElse(UciToUsi(usiStr))
+        .orElse(Kyoto.readFairyUsi(usiStr))
+        .fold(clientError[Unit](s"Invalid USI: $usiStr")) { usi =>
+          lila.mon.bot.moves(me.username).increment()
+          if (!pov.isMyTurn) clientError("Not your turn, or game already over")
+          else {
+            val promise = Promise[Unit]()
+            if (pov.player.isOfferingDraw && (offeringDraw contains false)) declineDraw(pov)
+            else if (!pov.player.isOfferingDraw && ~offeringDraw) offerDraw(pov)
+            tellRound(pov.gameId, BotPlay(pov.playerId, usi, promise.some))
+            promise.future
+          }
         }
-      }
     }
 
   def chat(gameId: Game.ID, me: User, d: BotForm.ChatData) =
@@ -56,11 +60,11 @@ final class BotPlayer(
 
   private def rematch(id: Game.ID, me: User, accept: Boolean): Fu[Boolean] =
     gameRepo game id map {
-      _.flatMap(Pov(_, me)).filter(p => isOfferingRematch(!p)) ?? { pov =>
+      _.flatMap(Pov(_, me)).filter(p => isOfferingRematch(p.gameId, !p.color)) ?? { pov =>
         // delay so it feels more natural
         lila.common.Future.delay(if (accept) 100.millis else 2.seconds) {
           fuccess {
-            tellRound(pov.gameId, (if (accept) RematchYes else RematchNo)(pov.playerId))
+            tellRound(pov.gameId, (if (accept) RematchYes else RematchNo) (pov.playerId))
           }
         }
         true

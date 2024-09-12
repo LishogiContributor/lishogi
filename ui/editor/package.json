@@ -4,7 +4,7 @@
   "private": true,
   "description": "lishogi.org board editor",
   "keywords": [
-    "chess",
+    "shogi",
     "lishogi.org",
     "board",
     "editor"
@@ -12,13 +12,15 @@
   "author": "Thibault Duplessis",
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
-    "@build/rollupProject": "2.0.0"
+    "@build/rollupProject": "2.0.0",
+    "rollup": "^2",
+    "typescript": "^5"
   },
   "dependencies": {
     "common": "2.0.0",
-    "shogiground": "7.8.1",
-    "shogiops": "^0.2.1",
-    "snabbdom": "^0.7.4"
+    "shogiground": "^0.8.6",
+    "shogiops": "^0.16.3",
+    "snabbdom": "^3.5.1"
   },
   "scripts": {
     "dev": "rollup --config",

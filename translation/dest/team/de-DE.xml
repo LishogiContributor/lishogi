@@ -40,4 +40,7 @@
   <string name="youWayWantToLinkOneOfTheseTournaments">Möchtest du eines der kommenden Turniere verlinken?</string>
   <string name="usersWhoCanManageThisTeam">Benutzer, die dieses Team verwalten können</string>
   <string name="leadersChat">Teamleiter-Chat</string>
+  <string name="upcomingTourns">Anstehende Turniere</string>
+  <string name="completedTourns">Beendete Turniere</string>
+  <string name="teamPage">Teamseite</string>
 </resources>

@@ -11,7 +11,6 @@ case class Topic(
     categId: String,
     slug: String,
     name: String,
-    views: Int,
     createdAt: DateTime,
     updatedAt: DateTime,
     nbPosts: Int,
@@ -62,7 +61,7 @@ object Topic {
   def nameToId(name: String) =
     (lila.common.String slugify name) pipe { slug =>
       // if most chars are not latin, go for random slug
-      if (slug.size > (name.size / 2)) slug else ThreadLocalRandom nextString 8
+      if (slug.sizeIs > (name.size / 2)) slug else ThreadLocalRandom nextString 8
     }
 
   val idSize = 8
@@ -80,7 +79,6 @@ object Topic {
       categId = categId,
       slug = slug,
       name = name,
-      views = 0,
       createdAt = DateTime.now,
       updatedAt = DateTime.now,
       nbPosts = 0,

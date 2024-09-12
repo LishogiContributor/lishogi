@@ -1,7 +1,6 @@
 function loadShepherd(f) {
-  var theme = 'shepherd-theme-' + ($('body').hasClass('dark') ? 'default' : 'dark');
+  var theme = 'shepherd-theme-' + ($('body').hasClass('dark') ? 'dark' : 'default');
   lishogi.loadCss('vendor/shepherd/dist/css/' + theme + '.css');
-  lishogi.loadCss('stylesheets/shepherd.css');
   lishogi.loadScript('vendor/shepherd/dist/js/tether.js', { noVersion: true }).done(function () {
     lishogi
       .loadScript('vendor/shepherd/dist/js/shepherd.min.js', {
@@ -62,12 +61,12 @@ lishogi.studyTourChapter = function (study) {
           'Paste a position in SFEN format<br>' +
           '<i>9/3k5/9/9/9/9/9/5K3/9 b</i><br>' +
           'to start the chapter from a position.',
-        attachTo: '.study__modal .tabs-horiz .fen top',
-        when: onTab('fen'),
+        attachTo: '.study__modal .tabs-horiz .sfen top',
+        when: onTab('sfen'),
       },
       {
         title: 'Studies support variants',
-        text: 'Yes, you can study crazyhouse,<br>' + 'and all lishogi variants!',
+        text: 'Yes, you can study all lishogi variants!',
         attachTo: '.study__modal label[for=chapter-variant] left',
         when: onTab('init'),
       },

@@ -28,7 +28,7 @@ object bits {
   }
 
   def newForm()(implicit ctx: Context) =
-    postForm(cls := "new-study", action := routes.Study.create())(
+    postForm(cls       := "new-study", action             := routes.Study.create)(
       submitButton(cls := "button button-green", dataIcon := "O", title := trans.study.createStudy.txt())
     )
 
@@ -43,7 +43,10 @@ object bits {
       a(activeCls("minePrivate"), href := routes.Study.minePrivate(order.key))(
         trans.study.myPrivateStudies()
       ),
-      a(activeCls("mineLikes"), href := routes.Study.mineLikes(order.key))(trans.study.myFavoriteStudies())
+      a(activeCls("mineLikes"), href := routes.Study.mineLikes(order.key))(trans.study.myFavoriteStudies()),
+      a(activeCls("postGameStudies"), href := routes.Study.minePostGameStudies(order.key))(
+        trans.postGameStudies()
+      )
     )
   }
 
@@ -61,9 +64,9 @@ object bits {
             iconTag(if (s.liked) "" else ""),
             " ",
             s.study.likes.value,
-            " • ",
+            " - ",
             usernameOrId(s.study.ownerId),
-            " • ",
+            " - ",
             momentFromNow(s.study.createdAt)
           )
         )
@@ -89,6 +92,21 @@ object bits {
     streams.nonEmpty option div(cls := "streamers none")(
       streams.map { s =>
         views.html.streamer.bits.contextual(s.streamer.userId)
+      }
+    )
+
+  def home(studies: List[lila.study.Study.MiniStudy]) =
+    table(cls := "studies")(
+      studies map { s =>
+        tr(
+          td(cls := "name")(
+            a(cls := "text", href := routes.Study.show(s.id.value))(
+              s.name
+            )
+          ),
+          td(momentFromNow(s.createdAt)),
+          td(dataIcon := "", cls := "text")(s.likes.value)
+        )
       }
     )
 }

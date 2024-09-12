@@ -25,7 +25,7 @@ object header {
         h1(cls := s"user-link ${if (isOnline(u.id)) "online" else "offline"}")(
           if (u.isPatron)
             frag(
-              a(href := routes.Plan.index())(patronIcon),
+              a(href := routes.Plan.index)(patronIcon),
               userSpan(u, withPowerTip = false, withOnline = false)
             )
           else userSpan(u, withPowerTip = false)
@@ -40,8 +40,8 @@ object header {
           otherTrophies(info),
           u.plan.active option
             a(
-              href := routes.Plan.index(),
-              cls := "trophy award patron icon3d",
+              href := routes.Plan.index,
+              cls  := "trophy award patron icon3d",
               ariaTitle(s"Patron since ${showDate(u.plan.sinceDate)}")
             )(patronIconChar)
         ),
@@ -56,8 +56,8 @@ object header {
             a(cls := "nm-item")(splitNumber(s"$nb Blockers"))
           },
           u.noBot option a(
-            href := routes.UserTournament.path(u.username, "recent"),
-            cls := "nm-item tournament_stats",
+            href       := routes.UserTournament.path(u.username, "recent"),
+            cls        := "nm-item tournament_stats",
             dataToints := u.toints
           )(
             splitNumber(trans.nbTournamentPoints.pluralSame(u.toints))
@@ -66,7 +66,7 @@ object header {
             splitNumber(trans.`nbStudies`.pluralSame(info.nbStudies))
           ),
           a(
-            cls := "nm-item",
+            cls  := "nm-item",
             href := ctx.noKid option routes.ForumPost.search("user:" + u.username, 1).url
           )(
             splitNumber(trans.nbForumPosts.pluralSame(info.nbPosts))
@@ -77,13 +77,13 @@ object header {
         div(cls := "user-actions btn-rack")(
           (ctx is u) option frag(
             a(
-              cls := "btn-rack__btn",
-              href := routes.Account.profile(),
+              cls  := "btn-rack__btn",
+              href := routes.Account.profile,
               titleOrText(trans.editProfile.txt()),
               dataIcon := "%"
             ),
             a(
-              cls := "btn-rack__btn",
+              cls  := "btn-rack__btn",
               href := routes.Relation.blocks(),
               titleOrText(trans.listBlockedPlayers.txt()),
               dataIcon := "k"
@@ -91,13 +91,13 @@ object header {
           ),
           isGranted(_.UserSpy) option
             a(
-              cls := "btn-rack__btn mod-zone-toggle",
+              cls  := "btn-rack__btn mod-zone-toggle",
               href := routes.User.mod(u.username),
               titleOrText("Mod zone (Hotkey: m)"),
               dataIcon := ""
             ),
           a(
-            cls := "btn-rack__btn",
+            cls  := "btn-rack__btn",
             href := routes.User.tv(u.username),
             titleOrText(trans.watchGames.txt()),
             dataIcon := "1"
@@ -111,7 +111,7 @@ object header {
             ),
           if (ctx is u)
             a(
-              cls := "btn-rack__btn",
+              cls  := "btn-rack__btn",
               href := routes.Game.exportByUser(u.username),
               titleOrText(trans.exportGames.txt()),
               dataIcon := "x"
@@ -119,8 +119,8 @@ object header {
           else
             (ctx.isAuth && ctx.noKid) option a(
               titleOrText(trans.reportXToModerators.txt(u.username)),
-              cls := "btn-rack__btn",
-              href := s"${routes.Report.form()}?username=${u.username}",
+              cls      := "btn-rack__btn",
+              href     := s"${routes.Report.form}?username=${u.username}",
               dataIcon := "!"
             )
         )
@@ -128,8 +128,8 @@ object header {
       (ctx.noKid && !ctx.is(u)) option div(cls := "note-zone")(
         postForm(action := s"${routes.User.writeNote(u.username)}?note")(
           textarea(
-            name := "text",
-            placeholder := "Write a private note about this user"
+            name        := "text",
+            placeholder := trans.writeAPrivateNoteAboutThisUser.txt()
           ),
           if (isGranted(_.ModNote))
             div(cls := "mod-note")(
@@ -149,7 +149,7 @@ object header {
               submitButton(cls := "button")(trans.send())
             )
         ),
-        social.notes.isEmpty option div("No note yet"),
+        social.notes.isEmpty option div(trans.noNoteYet()),
         social.notes
           .filter { n =>
             ctx.me.exists(n.isFrom) ||
@@ -168,10 +168,10 @@ object header {
                   br,
                   postForm(action := routes.User.deleteNote(note._id))(
                     submitButton(
-                      cls := "button-empty button-red confirm button text",
-                      style := "float:right",
+                      cls      := "button-empty button-red confirm button text",
+                      style    := "float:right",
                       dataIcon := "q"
-                    )("Delete")
+                    )(trans.delete())
                   )
                 )
               )
@@ -194,19 +194,9 @@ object header {
             div(cls := "profile-side")(
               div(cls := "user-infos")(
                 !ctx.is(u) option frag(
-                  u.marks.engine option div(cls := "warning engine_warning")(
-                    span(dataIcon := "j", cls := "is4"),
+                  u.lame option div(cls := "warning tos_warning")(
+                    span(dataIcon       := "j", cls := "is4"),
                     trans.thisAccountViolatedTos()
-                  ),
-                  (u.marks.boost && (u.count.game > 0 || isGranted(_.Hunter))) option div(
-                    cls := "warning engine_warning"
-                  )(
-                    span(dataIcon := "j", cls := "is4"),
-                    trans.thisPlayerArtificiallyIncreasesTheirRating(),
-                    (u.count.game == 0) option """
-Only visible to mods. A booster mark without any games is a way to
-prevent a player from ever playing (except against boosters/cheaters).
-It's useful against spambots. These marks are not visible to the public."""
                   )
                 ),
                 (ctx.noKid && (!u.marks.troll || ctx.is(u))) option frag(
@@ -218,14 +208,11 @@ It's useful against spambots. These marks are not visible to the public."""
                   }
                 ),
                 div(cls := "stats")(
-                  profile.officialRating.map { r =>
-                    div(r.name.toUpperCase, " rating: ", strong(r.rating))
-                  },
                   profile.nonEmptyLocation.ifTrue(ctx.noKid).map { l =>
                     span(cls := "location")(l)
                   },
                   profile.countryInfo.map { c =>
-                    span(cls := "country")(
+                    span(cls  := "country")(
                       img(cls := "flag", src := staticUrl(s"images/flags/${c.code}.png")),
                       " ",
                       c.name
@@ -239,11 +226,11 @@ It's useful against spambots. These marks are not visible to the public."""
                     p(cls := "thin")(trans.gameCompletionRate(s"$c%"))
                   },
                   (ctx is u) option frag(
-                    a(href := routes.Account.profile(), title := trans.editProfile.txt())(
+                    a(href := routes.Account.profile, title := trans.editProfile.txt())(
                       trans.profileCompletion(s"${profile.completionPercent}%")
                     ),
                     br,
-                    a(href := routes.User.opponents())(trans.favoriteOpponents())
+                    a(href := routes.User.opponents)(trans.favoriteOpponents())
                   ),
                   u.playTime.map { playTime =>
                     frag(
@@ -266,14 +253,13 @@ It's useful against spambots. These marks are not visible to the public."""
                     }
                   )
                 )
-              )
-              //info.insightVisible option
-              //  a(cls := "insight", href := routes.Insight.index(u.username), dataIcon := "7")(
-              //    span(
-              //      strong("Chess Insights"),
-              //      em("Analytics from ", if (ctx.is(u)) "your" else s"${u.username}'s", " games")
-              //    )
-              //  )
+              ),
+              (info.insightsVisible || isGranted(_.SeeInsights)) option
+                a(cls := "insights", href := routes.Insights.user(u.username, ""), dataIcon := "7")(
+                  span(
+                    strong(trans.insights.insights())
+                  )
+                )
             )
           )
       },
@@ -297,7 +283,7 @@ It's useful against spambots. These marks are not visible to the public."""
           trans.nbGames.plural(info.user.count.game, info.user.count.game.localize),
           info.nbs.playing > 0 option
             span(
-              cls := "unread",
+              cls   := "unread",
               title := trans.nbPlaying.pluralTxt(info.nbs.playing, info.nbs.playing.localize)
             )(
               info.nbs.playing

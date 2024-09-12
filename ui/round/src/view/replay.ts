@@ -1,16 +1,17 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import * as round from '../round';
+import { notationsWithColor } from 'common/notation';
+import { MaybeVNodes } from 'common/snabbdom';
+import { transWithColorName } from 'common/colorName';
 import throttle from 'common/throttle';
 import * as game from 'game';
-import * as status from 'game/status';
 import { game as gameRoute } from 'game/router';
+import * as status from 'game/status';
 import viewStatus from 'game/view/status';
-import * as util from '../util';
+import { VNode, h } from 'snabbdom';
 import RoundController from '../ctrl';
-import { Step, MaybeVNodes, RoundData } from '../interfaces';
-import { notationStyle } from 'common/notation';
-import { opposite, toBlackWhite, toBW } from 'shogiops/util';
+import { RoundData } from '../interfaces';
+import * as round from '../round';
+import * as util from '../util';
+import { isHandicap } from 'shogiops/handicaps';
 
 const scrollMax = 99999,
   moveTag = 'm2';
@@ -36,97 +37,91 @@ const autoScroll = throttle(100, (movesEl: HTMLElement, ctrl: RoundController) =
   })
 );
 
-function renderMove(step: Step, curPly: number, orEmpty: boolean, color: Color, notation: number) {
-  return step
-    ? h(
-        moveTag,
-        {
-          class: { active: step.ply === curPly },
-        },
-        notationStyle(notation)({
-          san: step.san,
-          uci: step.uci,
-          fen: step.fen.split(' ').length > 1 ? step.fen : step.fen + ' ' + toBW(color),
-        })
-      )
-    : orEmpty
-    ? h(moveTag, '…')
-    : undefined;
+function plyOffset(ctrl: RoundController): number {
+  return (ctrl.data.game.startedAtPly || 0) - ((ctrl.data.game.startedAtStep ?? 1) - 1);
 }
 
 export function renderResult(ctrl: RoundController): VNode | undefined {
-  let result;
-  if (status.finished(ctrl.data))
-    switch (ctrl.data.game.winner) {
-      case 'sente':
-        result = '1-0';
-        break;
-      case 'gote':
-        result = '0-1';
-        break;
-      default:
-        result = '½-½';
-    }
-  if (result || status.aborted(ctrl.data)) {
-    const winner = ctrl.data.game.winner;
-    return h('div.result-wrap', [
-      h('p.result', result || ''),
-      h(
-        'p.status',
-        {
-          hook: util.onInsert(() => {
-            if (ctrl.autoScroll) ctrl.autoScroll();
-            else setTimeout(() => ctrl.autoScroll(), 200);
-          }),
+  if (status.finished(ctrl.data) || status.aborted(ctrl.data) || status.paused(ctrl.data)) {
+    const winner = ctrl.data.game.winner,
+      spectator = !ctrl.data.player.spectator,
+      handicap = isHandicap({ rules: ctrl.data.game.variant.key, sfen: ctrl.data.game.initialSfen });
+
+    return h(
+      'div.result-wrap',
+      {
+        class: {
+          victorious: spectator && !!winner && winner === ctrl.data.player.color,
+          defeated: spectator && !!winner && winner !== ctrl.data.player.color,
         },
-        [viewStatus(ctrl), winner ? ' • ' + ctrl.trans.noarg(toBlackWhite(winner) + 'IsVictorious') : '']
-      ),
-    ]);
+      },
+      [
+        h(
+          'p.status',
+          {
+            hook: util.onInsert(() => {
+              if (ctrl.autoScroll) ctrl.autoScroll();
+              else setTimeout(() => ctrl.autoScroll(), 200);
+            }),
+          },
+          [
+            viewStatus(ctrl.trans, ctrl.data.game.status, ctrl.data.game.winner, handicap),
+            winner ? ' - ' + transWithColorName(ctrl.trans, 'xIsVictorious', winner, handicap) : '',
+          ]
+        ),
+      ]
+    );
   }
   return;
 }
 
 function renderMoves(ctrl: RoundController): MaybeVNodes {
-  const steps = ctrl.data.steps,
-    firstPly = round.firstPly(ctrl.data),
-    lastPly = round.lastPly(ctrl.data);
-  if (typeof lastPly === 'undefined') return [];
-  const color = ctrl.data.game.initialFen?.split(' ')[1] == 'b' ? 'sente' : 'gote';
-  const oppositeColor = opposite(color);
+  const steps = ctrl.data.steps;
+  if (steps.length <= 1) return [];
 
-  const move: Array<any> = [];
-  const els: MaybeVNodes = [],
-    curPly = ctrl.ply;
+  const els: MaybeVNodes = [];
+  const curMove = ctrl.ply - (ctrl.data.game.startedAtPly || 0) + (ctrl.data.game.startedAtStep ?? 1) - 1;
 
-  for (let i = 1; i < steps.length; i++) move.push(steps[i]);
-
-  for (let i = 0; i < move.length; i++) {
-    els.push(h('index', i + firstPly + 1 + ''));
-    els.push(renderMove(move[i], curPly, true, i % 2 ? color : oppositeColor, ctrl.data.pref.pieceNotation));
-  }
+  steps.slice(1).forEach((s, i) => {
+    const moveNumber = i + (ctrl.data.game.startedAtStep ?? 1);
+    els.push(h('index', moveNumber));
+    els.push(
+      h(
+        moveTag +
+          (notationsWithColor()
+            ? '.color-icon.' + ((i + (ctrl.data.game.startedAtPly || 0)) % 2 ? 'gote' : 'sente')
+            : ''),
+        {
+          class: { active: moveNumber === curMove },
+        },
+        s.notation
+      )
+    );
+  });
   els.push(renderResult(ctrl));
 
   return els;
 }
 
-export function analysisButton(ctrl: RoundController): VNode | undefined {
-  const forecastCount = ctrl.data.forecastCount;
-  return game.userAnalysable(ctrl.data)
-    ? h(
-        'a.fbt.analysis',
-        {
-          class: {
-            text: !!forecastCount,
-          },
-          attrs: {
-            title: ctrl.trans.noarg('analysis'),
-            href: gameRoute(ctrl.data, ctrl.data.player.color) + '/analysis#' + ctrl.ply,
-            'data-icon': 'A',
-          },
-        },
-        forecastCount ? ['' + forecastCount] : []
-      )
-    : undefined;
+export function analysisButton(ctrl: RoundController): VNode {
+  const forecastCount = ctrl.data.forecastCount,
+    disabled = !game.userAnalysable(ctrl.data);
+  return h(
+    'a.fbt.analysis',
+    {
+      class: {
+        text: !!forecastCount,
+        disabled: disabled,
+      },
+      attrs: {
+        disabled: disabled,
+        title: ctrl.trans.noarg('analysis'),
+        href: gameRoute(ctrl.data, ctrl.data.player.color) + '/analysis#' + ctrl.ply,
+        'data-icon': 'A',
+      },
+    },
+    forecastCount ? ['' + forecastCount] : []
+  );
 }
 
 function renderButtons(ctrl: RoundController) {
@@ -170,13 +165,14 @@ function renderButtons(ctrl: RoundController) {
         ['X', ctrl.ply + 1],
         ['V', lastPly],
       ].map((b, i) => {
-        const enabled = ctrl.ply !== b[1] && b[1] >= firstPly && b[1] <= lastPly;
+        const ply = b[1] as number,
+          enabled = ctrl.ply !== ply && ply >= firstPly && ply <= lastPly;
         return h('button.fbt', {
           class: { glowing: i === 3 && ctrl.isLate() },
           attrs: {
             disabled: !enabled,
             'data-icon': b[0],
-            'data-ply': enabled ? b[1] : '-',
+            'data-ply': enabled ? ply : '-',
           },
         });
       }),
@@ -185,32 +181,40 @@ function renderButtons(ctrl: RoundController) {
   );
 }
 
-function initMessage(d: RoundData, trans: TransNoArg) {
-  return game.playable(d) && d.game.turns === 0 && !d.player.spectator
+function initMessage(d: RoundData, trans: Trans) {
+  return game.playable(d) && d.game.plies === 0 && !d.player.spectator
     ? h('div.message', util.justIcon(''), [
         h('div', [
-          trans(d.player.color === 'sente' ? 'youPlayTheBlackPieces' : 'youPlayTheWhitePieces'),
-          ...(d.player.color === 'sente' ? [h('br'), h('strong', trans('itsYourTurn'))] : []),
+          transWithColorName(
+            trans,
+            'youPlayAsX',
+            d.player.color,
+            isHandicap({ rules: d.game.variant.key, sfen: d.game.initialSfen })
+          ),
+          ...(d.player.color === 'sente' ? [h('br'), h('strong', trans.noarg('itsYourTurn'))] : []),
         ]),
       ])
     : null;
 }
 
 function col1Button(ctrl: RoundController, dir: number, icon: string, disabled: boolean) {
-  return disabled
-    ? null
-    : h('button.fbt', {
-        attrs: {
-          disabled: disabled,
-          'data-icon': icon,
-          'data-ply': ctrl.ply + dir,
-        },
-        hook: util.bind('mousedown', e => {
-          e.preventDefault();
-          ctrl.userJump(ctrl.ply + dir);
-          ctrl.redraw();
-        }),
-      });
+  return h('button.fbt', {
+    attrs: {
+      disabled: disabled,
+      'data-icon': icon,
+      'data-ply': ctrl.ply + dir,
+    },
+    hook: util.bind(
+      'mousedown',
+      e => {
+        e.preventDefault();
+        ctrl.userJump(ctrl.ply + dir);
+        ctrl.redraw();
+      },
+      undefined,
+      false
+    ),
+  });
 }
 
 export function render(ctrl: RoundController): VNode | undefined {
@@ -227,32 +231,52 @@ export function render(ctrl: RoundController): VNode | undefined {
               if (node.tagName !== moveTag.toUpperCase()) return;
               while ((node = node.previousSibling as HTMLElement)) {
                 if (node.tagName === 'INDEX') {
-                  ctrl.userJump(parseInt(node.textContent || ''));
+                  ctrl.userJump(parseInt(node.textContent || '') + (plyOffset(ctrl) % 2));
                   ctrl.redraw();
                   break;
                 }
               }
             });
-            ctrl.autoScroll = () => autoScroll(el, ctrl);
-            ctrl.autoScroll();
-            window.addEventListener('load', ctrl.autoScroll);
+            if (col1) {
+              ctrl.autoScroll = () => autoScroll(el, ctrl);
+              ctrl.autoScroll();
+              window.addEventListener('load', ctrl.autoScroll);
+            }
           }),
         },
         renderMoves(ctrl)
       );
   return ctrl.nvui
     ? undefined
-    : h('div.rmoves', [
-        renderButtons(ctrl),
-        initMessage(d, ctrl.trans.noarg) ||
-          (moves
-            ? col1
-              ? h('div.col1-moves', [
-                  col1Button(ctrl, -1, 'Y', ctrl.ply == round.firstPly(d)),
-                  moves,
-                  col1Button(ctrl, 1, 'X', ctrl.ply == round.lastPly(d)),
-                ])
-              : moves
-            : renderResult(ctrl)),
-      ]);
+    : h(
+        'div.rmoves',
+        {
+          class: { impasse: ctrl.impasseHelp },
+        },
+        [
+          renderButtons(ctrl),
+          initMessage(d, ctrl.trans) ||
+            (moves
+              ? col1
+                ? h('div.col1-moves', [
+                    col1Button(ctrl, -1, 'Y', ctrl.ply == round.firstPly(d)),
+                    moves,
+                    col1Button(ctrl, 1, 'X', ctrl.ply == round.lastPly(d)),
+                  ])
+                : h(
+                    'div.areplay',
+                    {
+                      hook: util.onInsert(el => {
+                        if (!col1) {
+                          ctrl.autoScroll = () => autoScroll(el, ctrl);
+                          ctrl.autoScroll();
+                          window.addEventListener('load', ctrl.autoScroll);
+                        }
+                      }),
+                    },
+                    moves
+                  )
+              : renderResult(ctrl)),
+        ]
+      );
 }

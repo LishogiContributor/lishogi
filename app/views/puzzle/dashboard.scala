@@ -15,10 +15,9 @@ import lila.user.User
 
 object dashboard {
 
-  private val baseClass      = "puzzle-dashboard"
-  private val metricClass    = s"${baseClass}__metric"
-  private val themeClass     = s"${baseClass}__theme"
-  private val dataWinPercent = attr("data-win-percent")
+  private val baseClass   = "puzzle-dashboard"
+  private val metricClass = s"${baseClass}__metric"
+  private val themeClass  = s"${baseClass}__theme"
 
   def home(user: User, dashOpt: Option[PuzzleDashboard], days: Int)(implicit ctx: Context) =
     dashboardLayout(
@@ -26,39 +25,39 @@ object dashboard {
       days = days,
       path = "dashboard",
       title =
-        if (ctx is user) "Puzzle dashboard"
-        else s"${user.username} puzzle dashboard",
-      subtitle = "Train, analyse, improve",
+        if (ctx is user) trans.puzzle.puzzleDashboard.txt()
+        else s"${user.username} - ${trans.puzzle.puzzleDashboard.txt()}",
+      subtitle = trans.puzzle.puzzleDashboardSubtitle.txt(),
       dashOpt = dashOpt,
       moreJs = dashOpt ?? { dash =>
         val mostPlayed = dash.mostPlayed.sortBy { case (key, _) =>
           PuzzleTheme(key).name.txt()
         }
         frag(
-          jsModule("lishogi.puzzle.dashboard"),
+          jsModule("puzzle.dashboard", true),
           embedJsUnsafe(s"""$$(function() {
             LishogiPuzzleDashboard.renderRadar(${safeJsonValue(
-            Json
-              .obj(
-                "radar" -> Json.obj(
-                  "labels" -> mostPlayed.map { case (key, _) =>
-                    PuzzleTheme(key).name.txt()
-                  },
-                  "datasets" -> Json.arr(
-                    Json.obj(
-                      "label" -> "Performance",
-                      "data" -> mostPlayed.map { case (_, results) =>
-                        results.performance
-                      }
+              Json
+                .obj(
+                  "radar" -> Json.obj(
+                    "labels" -> mostPlayed.map { case (key, _) =>
+                      PuzzleTheme(key).name.txt()
+                    },
+                    "datasets" -> Json.arr(
+                      Json.obj(
+                        "label" -> "Performance",
+                        "data" -> mostPlayed.map { case (_, results) =>
+                          results.performance
+                        }
+                      )
                     )
                   )
                 )
-              )
-          )})})""")
+            )})})""")
         )
       }
     ) { dash =>
-      dash.mostPlayed.size > 2 option
+      dash.mostPlayed.sizeIs > 2 option
         div(cls := s"${baseClass}__global")(
           metricsOf(days, PuzzleTheme.mix.key, dash.global),
           canvas(cls := s"${baseClass}__radar")
@@ -72,8 +71,8 @@ object dashboard {
       "improvementAreas",
       title =
         if (ctx is user) trans.puzzle.improvementAreas.txt()
-        else s"${user.username} improvement areas",
-      subtitle = "Train these to optimize your progress!",
+        else s"${user.username} - ${trans.puzzle.improvementAreas.txt()}",
+      subtitle = trans.puzzle.improvementAreasSubtitle.txt(),
       dashOpt = dashOpt
     ) { dash =>
       dash.weakThemes.nonEmpty option themeSelection(days, dash.weakThemes)
@@ -86,8 +85,8 @@ object dashboard {
       "strengths",
       title =
         if (ctx is user) trans.puzzle.strengths.txt()
-        else s"${user.username} puzzle strengths",
-      subtitle = "You perform the best in these themes",
+        else s"${user.username} - ${trans.puzzle.strengths.txt()}",
+      subtitle = trans.puzzle.strengthsSubtitle.txt(),
       dashOpt = dashOpt
     ) { dash =>
       dash.strongThemes.nonEmpty option themeSelection(days, dash.strongThemes)
@@ -123,7 +122,7 @@ object dashboard {
               span(trans.nbDays.pluralSame(days)),
               PuzzleDashboard.dayChoices map { d =>
                 a(
-                  cls := (d == days).option("current"),
+                  cls  := (d == days).option("current"),
                   href := s"${routes.Puzzle.dashboard(d, path)}${!(ctx is user) ?? s"?u=${user.username}"}"
                 )(trans.nbDays.pluralSame(d))
               }
@@ -165,14 +164,14 @@ object dashboard {
         span("performance")
       ),
       div(
-        cls := s"$metricClass $metricClass--win",
+        cls   := s"$metricClass $metricClass--win",
         style := s"--first:${results.firstWinPercent}%;--win:${results.winPercent}%"
       )(
         strong(s"${results.winPercent}%"),
         span("solved")
       ),
       a(
-        cls := s"$metricClass $metricClass--fix",
+        cls  := s"$metricClass $metricClass--fix",
         href := results.canReplay.option(routes.Puzzle.replay(days, theme.value).url)
       )(
         results.canReplay option span(cls := s"$metricClass--fix__text")(

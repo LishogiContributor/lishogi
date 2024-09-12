@@ -22,7 +22,7 @@ private object BSONHandlers {
   implicit val InvitedToStudyByHandler = stringAnyValHandler[InvitedBy](_.value, InvitedBy.apply)
   implicit val StudyNameHandler        = stringAnyValHandler[StudyName](_.value, StudyName.apply)
   implicit val StudyIdHandler          = stringAnyValHandler[StudyId](_.value, StudyId.apply)
-  implicit val ReadHandler             = booleanAnyValHandler[NotificationRead](_.value, NotificationRead.apply)
+  implicit val ReadHandler = booleanAnyValHandler[NotificationRead](_.value, NotificationRead.apply)
 
   import PrivateMessage._
   implicit val PMSenderIdHandler     = stringAnyValHandler[Sender](_.value, Sender.apply)
@@ -39,6 +39,12 @@ private object BSONHandlers {
   implicit val GameEndWinHandler = booleanAnyValHandler[GameEnd.Win](_.value, GameEnd.Win.apply)
   implicit val GameEndHandler    = Macros.handler[GameEnd]
 
+  implicit val PausedGameGameIdHandler =
+    stringAnyValHandler[PausedGame.GameId](_.value, PausedGame.GameId.apply)
+  implicit val PausedGameOpponentHandler =
+    stringAnyValHandler[PausedGame.OpponentId](_.value, PausedGame.OpponentId.apply)
+  implicit val PausedGameHandler = Macros.handler[PausedGame]
+
   implicit val TitledTournamentInvitationHandler = Macros.handler[TitledTournamentInvitation]
 
   implicit val PlanStartHandler  = Macros.handler[PlanStart]
@@ -46,10 +52,9 @@ private object BSONHandlers {
 
   implicit val RatingRefundHandler = Macros.handler[RatingRefund]
   implicit val CorresAlarmHandler  = Macros.handler[CorresAlarm]
-  implicit val IrwinDoneHandler    = Macros.handler[IrwinDone]
   implicit val GenericLinkHandler  = Macros.handler[GenericLink]
 
-  implicit val ColorBSONHandler = BSONBooleanHandler.as[Color](Color.apply, _.sente)
+  implicit val ColorBSONHandler = BSONBooleanHandler.as[Color](Color.fromSente, _.sente)
 
   implicit val NotificationContentHandler = new BSON[NotificationContent] {
 
@@ -69,13 +74,12 @@ private object BSONHandlers {
         case t: TeamJoined                 => TeamJoinedHandler.writeTry(t).get
         case x: TitledTournamentInvitation => TitledTournamentInvitationHandler.writeTry(x).get
         case x: GameEnd                    => GameEndHandler.writeTry(x).get
+        case x: PausedGame                 => PausedGameHandler.writeTry(x).get
         case x: PlanStart                  => PlanStartHandler.writeTry(x).get
         case x: PlanExpire                 => PlanExpireHandler.writeTry(x).get
         case x: RatingRefund               => RatingRefundHandler.writeTry(x).get
         case ReportedBanned                => $empty
-        case CoachReview                   => $empty
         case x: CorresAlarm                => CorresAlarmHandler.writeTry(x).get
-        case x: IrwinDone                  => IrwinDoneHandler.writeTry(x).get
         case x: GenericLink                => GenericLinkHandler.writeTry(x).get
       }
     } ++ $doc("type" -> notificationContent.key)
@@ -106,13 +110,12 @@ private object BSONHandlers {
         case "teamJoined"     => TeamJoinedHandler.readTry(reader.doc).get
         case "titledTourney"  => TitledTournamentInvitationHandler.readTry(reader.doc).get
         case "gameEnd"        => GameEndHandler.readTry(reader.doc).get
+        case "pausedGame"     => PausedGameHandler.readTry(reader.doc).get
         case "planStart"      => PlanStartHandler.readTry(reader.doc).get
         case "planExpire"     => PlanExpireHandler.readTry(reader.doc).get
         case "ratingRefund"   => RatingRefundHandler.readTry(reader.doc).get
         case "reportedBanned" => ReportedBanned
-        case "coachReview"    => CoachReview
         case "corresAlarm"    => CorresAlarmHandler.readTry(reader.doc).get
-        case "irwinDone"      => IrwinDoneHandler.readTry(reader.doc).get
         case "genericLink"    => GenericLinkHandler.readTry(reader.doc).get
       }
 

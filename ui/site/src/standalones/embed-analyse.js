@@ -74,7 +74,7 @@ $(function () {
     var $iframe = $('<iframe>')
       .addClass('analyse ' + a.type)
       .attr('src', a.src);
-    $(a.element).replaceWith($('<div class="embed"></div>').html($iframe));
+    $(a.element).replaceWith($('<div class="embed embed--game"></div>').html($iframe));
     return $iframe
       .on('load', function () {
         if (this.contentDocument.title.startsWith('404')) this.style.height = '100px';
@@ -133,38 +133,51 @@ $(function () {
   };
 
   var themes = [
-    'solid-orange',
-    'solid-natural',
+    'orange',
+    'natural',
+    'wood',
     'wood1',
     'kaya1',
     'kaya2',
-    'kaya-light',
     'oak',
-    'solid-brown1',
-    'solid-wood1',
     'blue',
-    'dark-blue',
     'gray',
-    'Painting1',
-    'Painting2',
-    'Kinkaku',
-    'space1',
-    'space2',
-    'whiteBoard',
-    'darkBoard',
+    'painting1',
+    'painting2',
+    'kinkaku',
+    'space',
     'doubutsu',
+    // backend doesn't support it yet
+    //    'custom',
   ];
 
   var configureSrc = function (url) {
     if (url.includes('://')) return url; // youtube, img, etc
-    var parsed = new URL(url, window.location.href);
-    parsed.searchParams.append(
-      'theme',
+    const parsed = new URL(url, window.location.href);
+    const theme =
       themes.find(function (theme) {
         return document.body.classList.contains(theme);
-      }) ?? 'wood1'
-    );
-    parsed.searchParams.append('bg', document.body.getAttribute('data-theme'));
+      }) ?? 'wood';
+    parsed.searchParams.append('theme', theme);
+    if (theme === 'custom') {
+      const ct = [
+        ['--c-board-color', 'boardColor'],
+        ['--c-board-url', 'boardImg'],
+        ['--c-grid-color', 'gridColor'],
+        ['--c-hands-color', 'handsColor'],
+        ['--c-hands-url', 'handsImg'],
+      ];
+      ct.forEach(vals => {
+        const cProp = document.body.style.getPropertyValue(vals[0]);
+        if (cProp) parsed.searchParams.append(vals[1], cProp);
+      });
+      const gridWidths = [0, 1, 2, 3],
+        gridWidth = gridWidths.find(gw => document.body.classList.contains(`grid-width-${gw}`));
+      if (gridWidth !== undefined) parsed.searchParams.append('gridWidth', gridWidth);
+    }
+    const pieceSet = document.body.dataset.pieceSet;
+    if (pieceSet) parsed.searchParams.append('pieceSet', pieceSet);
+    parsed.searchParams.append('bg', document.body.dataset.theme);
     return parsed.href;
   };
 

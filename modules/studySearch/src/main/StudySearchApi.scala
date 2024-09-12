@@ -7,7 +7,7 @@ import org.joda.time.format.DateTimeFormat
 import play.api.libs.json._
 import scala.concurrent.duration._
 
-import shogi.format.pgn.Tag
+import shogi.format.Tag
 import lila.hub.LateMultiThrottler
 import lila.search._
 import lila.study.{ Chapter, ChapterRepo, RootOrNode, Study, StudyRepo }
@@ -57,7 +57,7 @@ final class StudySearchApi(
           .collect { case c if !Chapter.isDefaultName(c.name) => c.name.value }
           .mkString(" "),
       Fields.chapterTexts -> noMultiSpace {
-        (s.study.description.toList :+ s.chapters.flatMap(chapterText)).mkString(" ")
+        (s.study.description.toList ++ s.chapters.flatMap(chapterText)).mkString(" ")
       },
       Fields.topics -> s.study.topicsOrEmpty.value.map(_.value),
       // Fields.createdAt -> study.createdAt)
@@ -66,20 +66,21 @@ final class StudySearchApi(
       Fields.public -> s.study.isPublic
     )
 
-  private val relevantPgnTags: Set[shogi.format.pgn.TagType] = Set(
-    Tag.Variant,
+  private val relevantStudyTags: Set[shogi.format.TagType] = Set(
     Tag.Event,
-    Tag.Round,
     Tag.Sente,
     Tag.Gote,
-    Tag.ECO,
     Tag.Opening,
-    Tag.Annotator
+    Tag.Annotator,
+    Tag.Composer,
+    Tag.ProblemName,
+    Tag.Collection,
+    Tag.Publication
   )
 
   private def chapterText(c: Chapter): List[String] = {
     nodeText(c.root) :: c.tags.value.collect {
-      case Tag(name, value) if relevantPgnTags.contains(name) => value
+      case Tag(name, value) if relevantStudyTags.contains(name) => value
     } ::: extraText(c)
   }
 
@@ -88,6 +89,7 @@ final class StudySearchApi(
       c.isPractice option "practice",
       c.isConceal option "conceal puzzle",
       c.isGamebook option "lesson",
+      !c.setup.variant.standard option c.setup.variant.name,
       c.description
     ).flatten
 

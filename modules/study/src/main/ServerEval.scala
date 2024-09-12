@@ -1,15 +1,14 @@
 package lila.study
 
-import shogi.format.pgn.Glyphs
-import shogi.format.{ FEN, Forsyth, Uci, UciCharPair }
+import shogi.format.Glyphs
+import shogi.format.usi.{ UciToUsi, Usi, UsiCharPair }
 import play.api.libs.json._
 import scala.concurrent.duration._
 
 import lila.analyse.{ Analysis, Info }
-import lila.hub.actorApi.fishnet.StudyChapterRequest
+import lila.hub.actorApi.fishnet.{ PostGameStudyRequest, StudyChapterRequest }
 import lila.tree.Node.Comment
 import lila.user.User
-import lila.{ tree => T }
 
 object ServerEval {
 
@@ -25,21 +24,25 @@ object ServerEval {
         !eval.done && onceEvery(chapter.id.value)
       } ?? {
         chapterRepo.startServerEval(chapter) >>- {
-          fishnet ! StudyChapterRequest(
-            studyId = study.id.value,
-            chapterId = chapter.id.value,
-            initialFen = chapter.root.fen.some,
-            variant = chapter.setup.variant,
-            moves = shogi.format
-              .UciDump(
-                moves = chapter.root.mainline.map(_.move.san),
-                initialFen = chapter.root.fen.value.some,
-                variant = chapter.setup.variant
+          chapter.setup.gameId
+            .ifTrue(chapter.isFirstGameRootChapter)
+            .fold {
+              fishnet ! StudyChapterRequest(
+                studyId = study.id.value,
+                chapterId = chapter.id.value,
+                initialSfen = chapter.root.sfen.some,
+                variant = chapter.setup.variant,
+                moves = chapter.root.mainline.map(_.usi).toList,
+                userId = userId
               )
-              .toOption
-              .map(_.flatMap(shogi.format.Uci.apply)) | List.empty,
-            userId = userId
-          )
+            } { gameId =>
+              fishnet ! PostGameStudyRequest(
+                userId = userId,
+                gameId = gameId,
+                studyId = study.id.value,
+                chapterId = chapter.id.value
+              )
+            }
         }
       }
   }
@@ -105,7 +108,7 @@ object ServerEval {
                     studyId,
                     ServerEval.Progress(
                       chapterId = chapter.id,
-                      tree = lila.study.TreeBuilder(chapter.root, chapter.setup.variant),
+                      root = chapter.root,
                       analysis = toJson(chapter, analysis),
                       division = divisionOf(chapter)
                     )
@@ -116,19 +119,26 @@ object ServerEval {
         }
       }
 
+    def postGameStudies(analysis: Analysis, complete: Boolean) =
+      analysis.postGameStudies foreach { pgs =>
+        apply(analysis.copy(id = pgs.chapterId, studyId = pgs.studyId.some), complete)
+      }
+
     def divisionOf(chapter: Chapter) =
       divider(
         id = chapter.id.value,
-        pgnMoves = chapter.root.mainline.map(_.move.san).toVector,
+        usis = chapter.root.mainline.map(_.usi).toVector,
         variant = chapter.setup.variant,
-        initialFen = chapter.root.fen.some
+        initialSfen = chapter.root.sfen.some
       )
 
-    private def analysisLine(root: RootOrNode, variant: shogi.variant.Variant, info: Info): Option[Node] =
-      shogi.Replay.gameMoveWhileValid(info.variation take 20, root.fen.value, variant) match {
-        case (_, games, error) =>
+    private def analysisLine(root: RootOrNode, variant: shogi.variant.Variant, info: Info): Option[Node] = {
+      val variation = info.variation take 15
+      val usis      = ~Usi.readList(variation).orElse(UciToUsi.readList(variation))
+      shogi.Replay.gamesWhileValid(usis, root.sfen.some, variant) match {
+        case (games, error) =>
           error foreach { logger.info(_) }
-          games.reverse match {
+          games.tail.zip(usis).reverse match {
             case Nil => none
             case (g, m) :: rest =>
               rest
@@ -137,22 +147,22 @@ object ServerEval {
                 } some
           }
       }
+    }
 
-    private def makeBranch(g: shogi.Game, m: Uci.WithSan) =
+    private def makeBranch(g: shogi.Game, usi: Usi) =
       Node(
-        id = UciCharPair(m.uci),
-        ply = g.turns,
-        move = m,
-        fen = FEN(Forsyth >> g),
+        id = UsiCharPair(usi, g.variant),
+        ply = g.plies,
+        usi = usi,
+        sfen = g.toSfen,
         check = g.situation.check,
-        crazyData = g.situation.board.crazyData,
         clock = none,
         children = Node.emptyChildren,
         forceVariation = false
       )
   }
 
-  case class Progress(chapterId: Chapter.Id, tree: T.Root, analysis: JsObject, division: shogi.Division)
+  case class Progress(chapterId: Chapter.Id, root: Node.Root, analysis: JsObject, division: shogi.Division)
 
   def toJson(chapter: Chapter, analysis: Analysis) =
     lila.analyse.JsonView.bothPlayers(

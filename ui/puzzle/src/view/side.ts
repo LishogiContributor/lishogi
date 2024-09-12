@@ -1,7 +1,7 @@
-import { Controller, Puzzle, PuzzleGame, MaybeVNode, PuzzleDifficulty, PuzzlePlayer } from '../interfaces';
-import { dataIcon, onInsert } from '../util';
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { MaybeVNode, dataIcon, onInsert } from 'common/snabbdom';
+import { engineNameFromCode } from 'common/engineName';
+import { VNode, h } from 'snabbdom';
+import { Controller, Puzzle, PuzzleDifficulty, PuzzleGame, PuzzlePlayer } from '../interfaces';
 
 export function puzzleBox(ctrl: Controller): VNode {
   var data = ctrl.getData();
@@ -12,16 +12,14 @@ export function puzzleBox(ctrl: Controller): VNode {
 }
 
 function puzzleInfos(ctrl: Controller, puzzle: Puzzle): VNode {
-  const isTsume = puzzle.themes.includes('tsume');
   return h(
     'div.infos.puzzle',
     {
-      attrs: dataIcon(isTsume ? '7' : '-'),
+      attrs: dataIcon('-'),
     },
     [
       h('div', [
         h('p', [
-          isTsume ? ctrl.trans.noarg('tsume') + ' ' : '',
           ...ctrl.trans.vdom(
             'puzzleId',
             h(
@@ -48,20 +46,22 @@ function puzzleInfos(ctrl: Controller, puzzle: Puzzle): VNode {
 
 function sourceInfos(ctrl: Controller, game: PuzzleGame): VNode {
   const authorName =
-    game.author && game.author.startsWith('http')
-      ? h(
-          'a',
-          {
-            attrs: {
-              href: `${game.author}`,
-              target: '_blank',
+    ctrl.vm.mode === 'play'
+      ? h('span.hidden', ctrl.trans.noarg('hidden'))
+      : game.author && game.author.startsWith('http')
+        ? h(
+            'a',
+            {
+              attrs: {
+                href: `${game.author}`,
+                target: '_blank',
+              },
             },
-          },
-          game.author.replace(/(^\w+:|^)\/\//, '')
-        )
-      : game.author
-      ? h('span', game.author)
-      : h('span', 'Unknown author');
+            game.author.replace(/(^\w+:|^)\/\//, '')
+          )
+        : game.author
+          ? h('span', game.author)
+          : h('span', 'Unknown author');
   return h(
     'div.infos',
     {
@@ -77,11 +77,12 @@ function sourceInfos(ctrl: Controller, game: PuzzleGame): VNode {
 }
 
 function gameInfos(ctrl: Controller, game: PuzzleGame, puzzle: Puzzle): VNode {
-  const gameName = game.clock ? `${game.clock} • ${game.perf!.name}` : `${game.perf!.name}`;
+  const perfName = game.perf?.name || game.id,
+    gameName = game.clock ? `${game.clock} - ${perfName}` : `${perfName}`;
   return h(
     'div.infos',
     {
-      attrs: dataIcon(game.perf!.icon),
+      attrs: game.perf ? dataIcon(game.perf.icon) : undefined,
     },
     [
       h('div', [
@@ -108,18 +109,18 @@ function gameInfos(ctrl: Controller, game: PuzzleGame, puzzle: Puzzle): VNode {
             h(
               'div.player.color-icon.is.text.' + p.color,
               p.ai
-                ? "Engine level " + p.ai
+                ? engineNameFromCode(p.aiCode, p.ai, ctrl.trans)
                 : p.userId === 'anon'
                   ? 'Anonymous'
                   : p.userId
-                  ? h(
-                      'a.user-link.ulpt',
-                      {
-                        attrs: { href: '/@/' + p.userId },
-                      },
-                      playerName(p)
-                    )
-                  : p.name
+                    ? h(
+                        'a.user-link.ulpt',
+                        {
+                          attrs: { href: '/@/' + p.userId },
+                        },
+                        playerName(p)
+                      )
+                    : p.name
             )
           )
         ),
@@ -129,7 +130,7 @@ function gameInfos(ctrl: Controller, game: PuzzleGame, puzzle: Puzzle): VNode {
 }
 
 function playerName(p: PuzzlePlayer) {
-  return p.title && p.title != 'BOT' ? [h('span.utitle', p.title), ' ' + p.name] : p.name;
+  return p.title && p.title != 'BOT' ? [h('span.title', p.title), ' ' + p.name] : p.name;
 }
 
 export function userBox(ctrl: Controller): VNode {
@@ -169,7 +170,7 @@ export function replay(ctrl: Controller): MaybeVNode {
           href: `/training/dashboard/${replay.days}`,
         },
       },
-      ['« ', `Replaying ${ctrl.trans.noarg(ctrl.getData().theme.key)} puzzles`]
+      ['« ', `Replaying ${ctrl.trans.noarg(ctrl.getData().theme.key as I18nKey)} puzzles`]
     ),
     h('div.puzzle__side__replay__bar', {
       attrs: {

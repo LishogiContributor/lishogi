@@ -53,7 +53,12 @@ final class RatingChartApi(
             Blitz,
             Rapid,
             Classical,
-            Correspondence, // todo variant
+            Correspondence,
+            Minishogi,
+            Chushogi,
+            Annanshogi,
+            Kyotoshogi,
+            Checkshogi,
             Puzzle,
             UltraBullet
           ) map { pt =>

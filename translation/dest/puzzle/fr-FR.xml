@@ -14,8 +14,7 @@
   <string name="didYouLikeThisPuzzle">Avez-vous aimé ce problème ?</string>
   <string name="voteToLoadNextOne">Votez pour afficher le suivant !</string>
   <string name="yourPuzzleRatingX">Votre classement de problème : %s</string>
-  <string name="findTheBestMoveForWhite">Trouvez le meilleur coup pour gote.</string>
-  <string name="findTheBestMoveForBlack">Trouvez le meilleur coup pour sente.</string>
+  <string name="findTheBestMoveForX" comment="%s - sente(black)/gote(white)">Trouvez le meilleur coup pour %s.</string>
   <string name="toGetPersonalizedPuzzles">Pour obtenir des problèmes personnalisés :</string>
   <string name="puzzleId">Problème %s</string>
   <string name="puzzleOfTheDay">Problème du jour</string>
@@ -50,9 +49,19 @@
   <string name="addAnotherTheme">Ajouter un autre thème</string>
   <string name="jumpToNextPuzzleImmediately">Passer immédiatement au problème suivant</string>
   <string name="puzzleDashboard">Tableau de bord des problèmes</string>
+  <string name="puzzleDashboardSubtitle">S\'entraîner, analyser, s\'améliorer</string>
   <string name="improvementAreas">Aspects à améliorer</string>
+  <string name="improvementAreasSubtitle">Train these to optimize your progress!</string>
   <string name="strengths">Points forts</string>
+  <string name="strengthsSubtitle">Vous réussissez mieux avec ces thèmes</string>
   <string name="history">Historique des problèmes</string>
   <string name="solved">résolu</string>
   <string name="failed">échoué</string>
+  <string name="fromMyGames">De vos parties</string>
+  <string name="lookupOfPlayer">Regarder des puzzles à partir d\'un joueur</string>
+  <string name="fromXGames">Puzzles from %s\' games</string>
+  <string name="submissions">Puzzle submissions</string>
+  <string name="submittedByX">Puzzles submitted by %s</string>
+  <string name="searchPuzzles">Rechercher des problèmes</string>
+  <string name="fromXGamesFound">%1$s Problèmes trouvés dans %2$s parties</string>
 </resources>

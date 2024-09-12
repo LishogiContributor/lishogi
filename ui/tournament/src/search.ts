@@ -1,7 +1,6 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { bind } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import TournamentController from './ctrl';
-import { bind } from './view/util';
 
 export function button(ctrl: TournamentController): VNode {
   return h('button.fbt', {

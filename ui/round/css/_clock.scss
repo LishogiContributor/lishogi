@@ -11,6 +11,7 @@
   /* overflow: hidden; is not possible because of clock bars and shadows */
   @include breakpoint($mq-col2) {
     justify-content: space-between;
+    height: 45px;
     &-bottom {
       /* over the table shadow */
       z-index: 0;
@@ -19,7 +20,7 @@
   &-turn {
     align-self: center;
     line-height: $col1-player-clock-height;
-    @include breakpoint($mq-col1-uniboard) {
+    @include breakpoint($mq-col1) {
       &__text {
         background: $c-bg-box;
         padding: 0 $block-gap;
@@ -28,64 +29,40 @@
       }
     }
     @include breakpoint($mq-col2) {
-      height: 2.2em;
-      line-height: 2.2em;
+      height: 45px;
+      line-height: 45px;
     }
   }
-  .bar {
-    display: none;
-    &.berserk {
-      background: $c-bad;
-    }
-  }
-  @include breakpoint($mq-col2) {
-    .bar {
-      display: block;
-      position: absolute;
-      width: 100%;
-      height: 4px;
-      background: $c-good;
-      transform-origin: left;
-      .with-expiration & {
-        display: none;
-      }
-    }
-    &-top .bar {
-      bottom: -4px;
-    }
-    &-bottom .bar {
-      top: -4px;
-    }
-  }
-  .clockByo {
+  .clock-byo {
     display: flex;
     flex-direction: row-reverse;
-    @include breakpoint($mq-xx-small) {
+    min-width: 3em;
+    z-index: -1;
+    @include breakpoint($mq-col2) {
       flex-direction: row;
     }
-    .byoyomi {
-      display: flex;
-      align-items: center;
-      font-size: 1.2rem;
-      @include breakpoint($mq-xx-small) {
-        font-size: 1.5rem;
-      }
-      padding: 0 0.5rem;
-      opacity: 0.8;
+  }
+  .byoyomi {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    font-size: 1.2rem;
+    padding: 0 0.35rem;
+    opacity: 0.8;
+    @include breakpoint($mq-col2) {
+      font-size: 1.5rem;
+      flex-direction: row;
     }
   }
   .time {
-    @extend %roboto, %box-shadow;
+    @extend %roboto;
     background: $c-bg-box;
-    min-width: 3em;
-    font-size: 2.8em;
-    line-height: $col1-player-clock-height;
+    font-size: 2.5em;
     font-weight: bold;
+    line-height: $col1-player-clock-height;
     padding: 0 $block-gap;
+    padding-top: 3px;
     white-space: nowrap;
-    /* ensure updates don't redraw other parts of the document */
-    will-change: transform;
-    z-index: -1;
     display: flex;
     &.hour {
       font-size: 2.3em;
@@ -93,16 +70,17 @@
     @include breakpoint($mq-col1) {
       border-radius: 0;
       box-shadow: none;
+      background: none;
+      padding-top: 0;
     }
     @include breakpoint($mq-col2) {
       align-items: flex-end;
-      line-height: 1.2em;
     }
-    @include breakpoint($mq-xx-small $mq-tall) {
-      font-size: 3.5em;
-      letter-spacing: 0.12em;
+    @include breakpoint($mq-col2) {
+      font-size: 2.8em;
+      letter-spacing: 0.1em;
       &.hour {
-        font-size: 2.9em;
+        font-size: 2.7em;
         letter-spacing: 0.1em;
       }
     }
@@ -111,7 +89,7 @@
     @extend %box-radius-top;
   }
   &-bottom .time {
-    @extend %box-radius-bottom;
+    @extend %box-radius-bottom, %box-shadow;
   }
   &-correspondence .time {
     font-size: 1.6em;
@@ -144,13 +122,19 @@
     background: mix($c-secondary, $c-bg-box, 30%);
     color: $c-font-clearer;
   }
-  &.emerg .time,
+  &.emerg:not(.byo) .time,
   &.outoftime .time {
     background-color: mix($c-bad, $c-bg-box, 25%);
   }
   &.emerg.running .time {
     background-color: mix($c-bad, $c-bg-box, 50%);
     color: $c-font-clearer;
+  }
+  &.over {
+    .time,
+    .byoyomi {
+      color: $c-font-dimmer;
+    }
   }
   .go-berserk {
     font-size: 2.2em;
@@ -165,7 +149,7 @@
   .berserked {
     @extend %flex-center, %zen;
     display: none;
-    @include breakpoint($mq-xx-small) {
+    @include breakpoint($mq-col2) {
       order: -1;
       display: flex;
       flex: 0 1 auto;

@@ -19,9 +19,13 @@ final class LightUserApi(
   val async = new LightUser.Getter(cache.async)
   val sync  = new LightUser.GetterSync(cache.sync)
 
-  def syncFallback(id: User.ID) = sync(id) | LightUser.fallback(id)
+  def syncFallback(id: User.ID)  = sync(id) | LightUser.fallback(id)
+  def asyncFallback(id: User.ID) = async(id) dmap (_ | LightUser.fallback(id))
 
   def asyncMany = cache.asyncMany _
+
+  def asyncManyFallback(ids: Seq[User.ID]): Fu[Seq[LightUser]] =
+    ids.map(asyncFallback).sequenceFu
 
   def invalidate = cache invalidate _
 
@@ -32,7 +36,7 @@ final class LightUserApi(
 
   private val cache = cacheApi.sync[User.ID, Option[LightUser]](
     name = "user.light",
-    initialCapacity = 131072,
+    initialCapacity = 8192,
     compute = id => repo.coll.find($id(id), projection).one[LightUser],
     default = id => LightUser(id, id, None, false).some,
     strategy = Syncache.WaitAfterUptime(8 millis),

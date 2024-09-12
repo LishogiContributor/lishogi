@@ -16,7 +16,7 @@ case class Query(
     perf: Option[Int] = None,
     source: Option[Int] = None,
     status: Option[Int] = None,
-    turns: Range[Int] = Range.none,
+    plies: Range[Int] = Range.none,
     averageRating: Range[Int] = Range.none,
     hasAi: Option[Boolean] = None,
     aiLevel: Range[Int] = Range.none,
@@ -39,7 +39,7 @@ case class Query(
       perf.nonEmpty ||
       source.nonEmpty ||
       status.nonEmpty ||
-      turns.nonEmpty ||
+      plies.nonEmpty ||
       averageRating.nonEmpty ||
       hasAi.nonEmpty ||
       aiLevel.nonEmpty ||
@@ -112,7 +112,7 @@ object Query {
     mode.id -> mode.name.capitalize
   }
 
-  val turns = options(
+  val plies = options(
     (1 to 5) ++ (10 to 45 by 5) ++ (50 to 90 by 10) ++ (100 to 300 by 25),
     "%d move{s}"
   )
@@ -135,13 +135,18 @@ object Query {
     options(1 to 5, "y", "%d year{s} ago")
 
   val statuses = Status.finishedNotCheated.map {
-    case s if s.is(_.Timeout)        => none
-    case s if s.is(_.NoStart)        => none
-    case s if s.is(_.UnknownFinish)  => none
-    case s if s.is(_.VariantEnd)     => none
-    case s if s.is(_.Draw)           => none
-    case s if s.is(_.Outoftime)      => Some(s.id -> "Clock Flag")
-    case s if s.is(_.PerpetualCheck) => Some(s.id -> "Perpetual Check")
-    case s                           => Some(s.id -> s.toString)
+    case s if s.is(_.Timeout)           => none
+    case s if s.is(_.NoStart)           => none
+    case s if s.is(_.UnknownFinish)     => none
+    case s if s.is(_.Repetition)        => none
+    case s if s.is(_.Draw)              => Some(s.id -> "Draw/Repetition")
+    case s if s.is(_.Impasse27)         => Some(s.id -> "Impasse")
+    case s if s.is(_.TryRule)           => Some(s.id -> "Try rule")
+    case s if s.is(_.Outoftime)         => Some(s.id -> "Clock Flag")
+    case s if s.is(_.PerpetualCheck)    => Some(s.id -> "Perpetual check")
+    case s if s.is(_.RoyalsLost)        => Some(s.id -> "Royals lost")
+    case s if s.is(_.BareKing)          => Some(s.id -> "Bare king")
+    case s if s.is(_.SpecialVariantEnd) => Some(s.id -> "Special variant end")
+    case s                              => Some(s.id -> s.toString)
   }.flatten
 }

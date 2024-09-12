@@ -14,24 +14,35 @@ object RequestPref {
       )
     }
 
-  def fromRequest(req: RequestHeader): Pref = {
+  def fromRequest(req: RequestHeader, languageNotation: Boolean = true): Pref = {
 
     def paramOrSession(name: String): Option[String] =
       queryParam(req, name) orElse req.session.get(name)
 
-    val bg = paramOrSession("bg") | "light"
+    val customTheme = CustomTheme(
+      boardColor = paramOrSession("boardColor") | CustomTheme.default.boardColor,
+      boardImg = paramOrSession("boardImg") | CustomTheme.default.boardImg,
+      gridColor = paramOrSession("gridColor") | CustomTheme.default.gridColor,
+      gridWidth = paramOrSession("gridWidth").flatMap(_.toIntOption) | CustomTheme.default.gridWidth,
+      handsColor = paramOrSession("handsColor") | CustomTheme.default.handsColor,
+      handsImg = paramOrSession("handsImg") | CustomTheme.default.handsImg
+    ).some.filterNot(_ == CustomTheme.default)
+    val bg       = paramOrSession("bg") | "dark"
+    val theme    = paramOrSession("theme") | default.theme
+    val pieceSet = paramOrSession("pieceSet")
 
     default.copy(
       dark = bg != "light",
       transp = bg == "transp",
-      theme = paramOrSession("theme") | default.theme,
-      theme3d = req.session.data.getOrElse("theme3d", default.theme3d),
-      pieceSet = req.session.data.getOrElse("pieceSet", default.pieceSet),
-      pieceSet3d = req.session.data.getOrElse("pieceSet3d", default.pieceSet3d),
-      soundSet = req.session.data.getOrElse("soundSet", default.soundSet),
-      bgImg = req.session.data.get("bgImg"),
-      is3d = req.session.data.get("is3d") has "true",
-      pieceNotation = (req.session.data.get("pieceNotation").getOrElse("0")).toInt
+      theme = theme,
+      pieceSet = pieceSet | default.pieceSet,
+      chuPieceSet = paramOrSession("chuPieceSet") | default.chuPieceSet,
+      kyoPieceSet = paramOrSession("kyoPieceSet") | default.kyoPieceSet,
+      soundSet = paramOrSession("soundSet") | default.soundSet,
+      bgImg = paramOrSession("bgImg"),
+      notation = paramOrSession("notation").flatMap(_.toIntOption) | defaultNotation(req, languageNotation),
+      thickGrid = paramOrSession("thickGrid").flatMap(_.toIntOption) | default.thickGrid,
+      customTheme = customTheme
     )
   }
 
@@ -39,4 +50,10 @@ object RequestPref {
     req.queryString.get(name).flatMap(_.headOption).filter { v =>
       v.nonEmpty && v != "auto"
     }
+
+  private def defaultNotation(req: RequestHeader, languageNotation: Boolean): Int =
+    if (languageNotation && req.acceptLanguages.headOption.exists(_.language == "ja"))
+      Notations.japanese.index
+    else default.notation
+
 }

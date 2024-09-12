@@ -1,9 +1,11 @@
 package lila.setup
 
-import shogi.format.FEN
-import lila.game.{ Game, Player, Pov, Source }
+import shogi.format.forsyth.Sfen
+import lila.game.{ EngineConfig, Game, Player, Pov, Source }
 import lila.lobby.Color
 import lila.user.User
+
+import scala.util.chaining._
 
 case class AiConfig(
     variant: shogi.variant.Variant,
@@ -15,11 +17,11 @@ case class AiConfig(
     days: Int,
     level: Int,
     color: Color,
-    fen: Option[FEN] = None
+    sfen: Option[Sfen] = None
 ) extends Config
     with Positional {
 
-  val strictFen = true
+  val strictSfen = true
 
   def >> = (
     variant.id,
@@ -31,37 +33,41 @@ case class AiConfig(
     days,
     level,
     color.name,
-    fen.map(_.value)
+    sfen.map(_.value)
   ).some
 
   def game(user: Option[User]) = {
-    fenGame { shogiGame =>
+    makeGame pipe { shogiGame =>
       val perfPicker = lila.game.PerfPicker.mainOrDefault(
         shogi.Speed(shogiGame.clock.map(_.config)),
-        shogiGame.situation.board.variant,
+        shogiGame.variant,
         makeDaysPerTurn
       )
       Game
         .make(
           shogi = shogiGame,
+          initialSfen = sfen,
           sentePlayer = creatorColor.fold(
             Player.make(shogi.Sente, user, perfPicker),
-            Player.make(shogi.Sente, level.some)
+            Player.make(shogi.Sente, EngineConfig(sfen, shogiGame.variant, level).some)
           ),
           gotePlayer = creatorColor.fold(
-            Player.make(shogi.Gote, level.some),
+            Player.make(shogi.Gote, EngineConfig(sfen, shogiGame.variant, level).some),
             Player.make(shogi.Gote, user, perfPicker)
           ),
           mode = shogi.Mode.Casual,
-          source = if (shogiGame.board.variant.fromPosition) Source.Position else Source.Ai,
+          source = if (sfen.filterNot(_.initialOf(variant)).isDefined) Source.Position else Source.Ai,
           daysPerTurn = makeDaysPerTurn,
-          pgnImport = None
+          notationImport = None
         )
         .sloppy
     } start
   }
 
   def pov(user: Option[User]) = Pov(game(user), creatorColor)
+
+  def timeControlNonStandard =
+    variant.standard || time >= 1 || byoyomi >= 10 || increment >= 5
 }
 
 object AiConfig extends BaseConfig {
@@ -76,7 +82,7 @@ object AiConfig extends BaseConfig {
       d: Int,
       level: Int,
       c: String,
-      fen: Option[String]
+      sfen: Option[String]
   ) =
     new AiConfig(
       variant = shogi.variant.Variant(v) err "Invalid game variant " + v,
@@ -88,7 +94,7 @@ object AiConfig extends BaseConfig {
       days = d,
       level = level,
       color = Color(c) err "Invalid color " + c,
-      fen = fen map FEN
+      sfen = sfen map Sfen.apply
     )
 
   val default = AiConfig(
@@ -111,7 +117,6 @@ object AiConfig extends BaseConfig {
 
   import lila.db.BSON
   import lila.db.dsl._
-  import lila.game.BSONHandlers.FENBSONHandler
 
   implicit private[setup] val aiConfigBSONHandler = new BSON[AiConfig] {
 
@@ -126,7 +131,7 @@ object AiConfig extends BaseConfig {
         days = r int "d",
         level = r int "l",
         color = Color.Sente,
-        fen = r.getO[FEN]("f") filter (_.value.nonEmpty)
+        sfen = r.getO[Sfen]("f").filter(_.value.nonEmpty)
       )
 
     def writes(w: BSON.Writer, o: AiConfig) =
@@ -139,7 +144,7 @@ object AiConfig extends BaseConfig {
         "p"  -> o.periods,
         "d"  -> o.days,
         "l"  -> o.level,
-        "f"  -> o.fen
+        "f"  -> o.sfen
       )
   }
 }

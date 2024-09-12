@@ -11,7 +11,7 @@ import controllers.routes
 
 object inquiry {
 
-  // simul game study relay tournament
+  // simul game study tournament
   private val commFlagRegex = """\[FLAG\] (\w+)/(\w{8})(?:/w)? (.+)(?:\n|$)""".r
 
   def renderAtomText(atom: lila.report.Report.Atom) =
@@ -22,7 +22,6 @@ object inquiry {
           val id = m.group(2)
           val path = m.group(1) match {
             case "game"       => routes.Round.watcher(id, "sente")
-            case "relay"      => routes.Relay.show("-", id)
             case "tournament" => routes.Tournament.show(id)
             case _            => s"/${m.group(1)}/$id"
           }
@@ -65,7 +64,7 @@ object inquiry {
         )
       )
 
-    div(id := "inquiry")(
+    div(id    := "inquiry")(
       i(title := "Costello the Inquiry Octopus", cls := "costello"),
       div(cls := "meat")(
         userLink(in.user, withBestRating = true, params = "?mod"),
@@ -111,9 +110,9 @@ object inquiry {
             "Notes"
           ),
           div(
-            postForm(cls := "note", action := s"${routes.User.writeNote(in.user.username)}?note")(
+            postForm(cls    := "note", action      := s"${routes.User.writeNote(in.user.username)}?note")(
               textarea(name := "text", placeholder := "Write a mod note"),
-              input(tpe := "hidden", name := "mod", value := "true"),
+              input(tpe     := "hidden", name      := "mod", value := "true"),
               div(cls := "submission")(
                 submitButton(cls := "button thin")("SEND")
               )
@@ -154,7 +153,7 @@ object inquiry {
         isGranted(_.MarkEngine) option {
           val url = routes.Mod.engine(in.user.username, !in.user.marks.engine).url
           div(cls := "dropper engine buttons")(
-            postForm(action := url, title := "Mark as cheat")(
+            postForm(action                             := url, title := "Mark as cheat")(
               markButton(in.user.marks.engine)(dataIcon := "n"),
               autoNextInput
             ),
@@ -176,8 +175,8 @@ object inquiry {
           div(cls := "dropper shadowban buttons")(
             postForm(
               action := url,
-              title := (if (in.user.marks.troll) "Un-shadowban" else "Shadowban"),
-              cls := "main"
+              title  := (if (in.user.marks.troll) "Un-shadowban" else "Shadowban"),
+              cls    := "main"
             )(
               markButton(in.user.marks.troll)(dataIcon := "c"),
               autoNextInput
@@ -198,9 +197,6 @@ object inquiry {
         div(cls := "dropper more buttons")(
           iconTag("u"),
           div(
-            postForm(action := routes.Mod.notifySlack(in.user.id))(
-              submitButton(cls := "fbt")("Notify Slack")
-            ),
             postForm(action := routes.Report.xfiles(in.report.id))(
               submitButton(cls := List("fbt" -> true, "active" -> (in.report.room.key == "xfiles")))(
                 "Move to X-Files"
@@ -218,16 +214,16 @@ object inquiry {
         ),
         postForm(
           action := routes.Report.process(in.report.id),
-          title := "Dismiss this report as processed.",
-          cls := "process"
+          title  := "Dismiss this report as processed.",
+          cls    := "process"
         )(
           submitButton(dataIcon := "E", cls := "fbt"),
           autoNextInput
         ),
         postForm(
           action := routes.Report.inquiry(in.report.id),
-          title := "Cancel the inquiry, re-instore the report",
-          cls := "cancel"
+          title  := "Cancel the inquiry, re-instore the report",
+          cls    := "cancel"
         )(
           submitButton(dataIcon := "L", cls := "fbt")
         )

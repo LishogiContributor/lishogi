@@ -11,7 +11,7 @@ import lila.i18n.{ I18nKeys => trans }
 import lila.rating.{ Perf, PerfType }
 import lila.user.{ Title, User }
 
-trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
+trait UserHelper { self: I18nHelper with StringHelper with NumberHelper with DateHelper =>
 
   def ratingProgress(progress: Int): Option[Frag] =
     if (progress > 0) goodTag(cls := "rp")(progress).some
@@ -19,20 +19,25 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
     else none
 
   val topBarSortedPerfTypes: List[PerfType] = List(
-    PerfType.Bullet, // todo variant
+    PerfType.Bullet,
     PerfType.Blitz,
     PerfType.Rapid,
     PerfType.Classical,
-    PerfType.Correspondence
+    PerfType.Correspondence,
+    PerfType.Minishogi,
+    PerfType.Chushogi,
+    PerfType.Annanshogi,
+    PerfType.Kyotoshogi,
+    PerfType.Checkshogi
   )
 
   def showPerfRating(rating: Int, name: String, nb: Int, provisional: Boolean, icon: Char)(implicit
       lang: Lang
   ): Frag =
     span(
-      title := s"$name rating over ${nb.localize} games",
+      title    := s"$name rating over ${nb.localize} games",
       dataIcon := icon,
-      cls := "text"
+      cls      := "text"
     )(
       if (nb > 0) frag(rating, provisional option "?")
       else frag(nbsp, nbsp, nbsp, "-")
@@ -102,7 +107,7 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
       withTitle: Boolean = true,
       truncate: Option[Int] = None,
       params: String = ""
-  )(implicit lang: Lang): Frag =
+  )(implicit lang: Lang): Tag =
     userIdNameLink(
       userId = user.id,
       username = user.name,
@@ -124,7 +129,7 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
     title map { t =>
       frag(
         span(
-          cls := s"title${(t == Title.BOT) ?? " data-bot"}",
+          cls      := s"title${(t == Title.BOT) ?? " data-bot"}",
           st.title := Title.titleName(t)
         )(t),
         nbsp
@@ -142,9 +147,9 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
       title: Option[Title],
       params: String,
       modIcon: Boolean
-  )(implicit lang: Lang): Frag =
+  )(implicit lang: Lang): Tag =
     a(
-      cls := userClass(userId, cssClass, withOnline),
+      cls  := userClass(userId, cssClass, withOnline),
       href := userUrl(username, params = params)
     )(
       withOnline ?? (if (modIcon) moderatorIcon else lineIcon(isPatron)),
@@ -162,9 +167,9 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
       withPerfRating: Option[PerfType] = None,
       name: Option[Frag] = None,
       params: String = ""
-  )(implicit lang: Lang): Frag =
+  )(implicit lang: Lang): Tag =
     a(
-      cls := userClass(user.id, cssClass, withOnline, withPowerTip),
+      cls  := userClass(user.id, cssClass, withOnline, withPowerTip),
       href := userUrl(user.username, params)
     )(
       withOnline ?? lineIcon(user),
@@ -184,7 +189,7 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
       name: Option[Frag] = None
   )(implicit lang: Lang): Frag =
     span(
-      cls := userClass(user.id, cssClass, withOnline, withPowerTip),
+      cls      := userClass(user.id, cssClass, withOnline, withPowerTip),
       dataHref := userUrl(user.username)
     )(
       withOnline ?? lineIcon(user),
@@ -193,14 +198,16 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
       userRating(user, withPerfRating, withBestRating)
     )
 
-  def userIdSpanMini(userId: String, withOnline: Boolean = false)(implicit lang: Lang): Frag = {
+  def userIdSpanMini(userId: String, withOnline: Boolean = false, modIcon: Boolean = false)(implicit
+      lang: Lang
+  ): Frag = {
     val user = lightUser(userId)
     val name = user.fold(userId)(_.name)
     span(
-      cls := userClass(userId, none, withOnline),
+      cls      := userClass(userId, none, withOnline),
       dataHref := userUrl(name)
     )(
-      withOnline ?? lineIcon(user),
+      withOnline ?? { if (modIcon) moderatorIcon else lineIcon(user) },
       user.??(u => titleTag(u.title map Title.apply)),
       name
     )
@@ -256,6 +263,7 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
       case GameFilter.Loss     => trans.nbLosses.pluralSameTxt(u.count.loss)
       case GameFilter.Draw     => trans.nbDraws.pluralSameTxt(u.count.draw)
       case GameFilter.Playing  => trans.nbPlaying.pluralSameTxt(nbs.playing)
+      case GameFilter.Paused   => trans.nbAdjourned.pluralSameTxt(nbs.paused)
       case GameFilter.Bookmark => trans.nbBookmarks.pluralSameTxt(nbs.bookmark)
       case GameFilter.Imported => trans.nbImportedGames.pluralSameTxt(nbs.imported)
       case GameFilter.Search   => trans.search.advancedSearch.txt()
@@ -264,7 +272,7 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
   def describeUser(user: User)(implicit lang: Lang) = {
     val name      = user.titleUsername
     val nbGames   = user.count.game
-    val createdAt = org.joda.time.format.DateTimeFormat forStyle "M-" print user.createdAt
+    val createdAt = showEnglishDate(user.createdAt)
     val currentRating = user.perfs.bestPerf ?? { case (pt, perf) =>
       s" Current ${pt.trans} rating: ${perf.intRating}."
     }
@@ -277,10 +285,10 @@ trait UserHelper { self: I18nHelper with StringHelper with NumberHelper =>
   val lineIcon: Frag = i(cls := "line")
   def patronIcon(implicit lang: Lang): Frag =
     i(cls := "line patron", title := trans.patron.lishogiPatron.txt())
-  val moderatorIcon: Frag                                                  = i(cls := "line moderator", title := "Lishogi Mod")
-  private def lineIcon(patron: Boolean)(implicit lang: Lang): Frag         = if (patron) patronIcon else lineIcon
+  val moderatorIcon: Frag = i(cls := "line moderator", title := "Lishogi Mod")
+  private def lineIcon(patron: Boolean)(implicit lang: Lang): Frag = if (patron) patronIcon else lineIcon
   private def lineIcon(user: Option[LightUser])(implicit lang: Lang): Frag = lineIcon(user.??(_.isPatron))
   def lineIcon(user: LightUser)(implicit lang: Lang): Frag                 = lineIcon(user.isPatron)
   def lineIcon(user: User)(implicit lang: Lang): Frag                      = lineIcon(user.isPatron)
-  def lineIconChar(user: User): Frag                                       = if (user.isPatron) patronIconChar else lineIconChar
+  def lineIconChar(user: User): Frag = if (user.isPatron) patronIconChar else lineIconChar
 }

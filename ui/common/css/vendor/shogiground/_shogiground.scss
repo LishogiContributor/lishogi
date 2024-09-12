@@ -1,70 +1,91 @@
-@import 'board-2d';
+@import 'board-theme';
+@import 'shapes';
 
-cg-board {
-  @extend %box-shadow, %abs-100;
+sg-board {
+  @extend %rel-100;
+  display: block;
+  background-size: cover;
+  top: 0;
+}
+
+sg-squares,
+sg-pieces,
+sg-promotion {
+  @extend %abs-100;
   top: 0;
   left: 0;
-  user-select: none;
+  display: block;
   line-height: 0;
-  background-size: cover;
-  will-change: transform;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+sg-pieces {
   .manipulable & {
     cursor: pointer;
   }
 }
-square {
-  position: absolute;
-  width: calc(200% / 9);
-  height: calc(200% / 9);
-  margin: calc(-50% / 9);
-  transform: scale(0.5);
+sg-squares {
+  display: grid;
+  justify-content: space-between;
+  grid-template: repeat(9, 1fr) / repeat(9, 1fr);
+  .d-5x5 & {
+    grid-template: repeat(5, 1fr) / repeat(5, 1fr);
+  }
+  .d-12x12 & {
+    grid-template: repeat(12, 1fr) / repeat(12, 1fr);
+  }
+  // to force grid to fully cover the background
+  width: calc(100% + 0.04px);
+  height: calc(100% + 0.04px);
+
   pointer-events: none;
-  &.move-dest {
-    background: radial-gradient(rgba(20, 85, 30, 0.5) 19%, rgba(0, 0, 0, 0) 20%);
-    pointer-events: auto;
-  }
-  &.premove-dest {
-    background: radial-gradient(rgba(20, 30, 85, 0.5) 19%, rgba(0, 0, 0, 0) 20%);
-    pointer-events: auto;
-  }
-  &.oc.move-dest {
-    background: radial-gradient(transparent 0%, transparent 80%, rgba(20, 85, 0, 0.3) 80%);
-  }
-  &.oc.premove-dest {
-    background: radial-gradient(transparent 0%, transparent 80%, rgba(20, 30, 85, 0.2) 80%);
-  }
-  body.green &.last-move,
-  body.green-plastic &.last-move,
-  body.marble &.last-move {
-    background-color: rgba(0, 155, 199, 0.41);
-  }
-  &.last-move {
-    will-change: transform;
-    background-color: rgba(155, 199, 0, 0.41);
-  }
-  &.check {
-    background: radial-gradient(
-      ellipse at center,
-      rgba(255, 0, 0, 1) 0%,
-      rgba(231, 0, 0, 1) 25%,
-      rgba(169, 0, 0, 0) 89%,
-      rgba(158, 0, 0, 0) 100%
-    );
-  }
-  &.selected {
-    background-color: rgba(20, 85, 30, 0.5);
-  }
-  &.current-premove {
-    background-color: rgba(20, 30, 85, 0.5) !important;
-  }
-  &.move-dest:hover {
-    background: rgba(20, 85, 30, 0.3);
-  }
-  &.premove-dest:hover {
-    background: rgba(20, 30, 85, 0.2);
-  }
-  &.bh1 piece {
-    opacity: 0.98;
+  sq {
+    &.dest {
+      background: radial-gradient(rgba(20, 85, 30, 0.5) 19%, rgba(0, 0, 0, 0) 20%);
+    }
+    &.pre-dest {
+      background: radial-gradient(rgba(20, 30, 85, 0.5) 19%, rgba(0, 0, 0, 0) 20%);
+    }
+    &.oc.dest {
+      background: radial-gradient(transparent 0%, transparent 80%, rgba(20, 85, 0, 0.3) 80%);
+    }
+    &.oc.pre-dest {
+      background: radial-gradient(transparent 0%, transparent 80%, rgba(20, 30, 85, 0.2) 80%);
+    }
+    &.last-dest {
+      background-color: rgba(155, 199, 0, 0.41);
+    }
+    &.check {
+      background: radial-gradient(
+        ellipse at center,
+        rgba(255, 0, 0, 1) 0%,
+        rgba(231, 0, 0, 1) 25%,
+        rgba(169, 0, 0, 0) 89%,
+        rgba(158, 0, 0, 0) 100%
+      );
+    }
+    &.selected {
+      background-color: rgba(20, 85, 30, 0.5);
+    }
+    &.preselected,
+    &.current-pre {
+      background-color: rgba(20, 30, 85, 0.5);
+    }
+    &.dest.hover {
+      background: rgba(20, 85, 30, 0.3);
+    }
+    &.pre-dest.hover {
+      background: rgba(20, 30, 85, 0.2);
+    }
+    &.force-selected:not(.selected) {
+      animation: selected 1s ease-in-out infinite alternate;
+    }
+    &.sealed {
+      background-color: rgba(20, 30, 85, 0.5);
+    }
   }
 }
 piece {
@@ -73,57 +94,245 @@ piece {
   left: 0;
   width: calc(200% / 9);
   height: calc(200% / 9);
-  margin: calc(-50% / 9);
+  margin: calc(-50% / 11 * 12 / 9) calc(-50% / 9);
+  .d-5x5 sg-board & {
+    width: calc(200% / 5);
+    height: calc(200% / 5);
+    margin: calc(-50% / 11 * 12 / 5) calc(-50% / 5);
+  }
+  .d-12x12 sg-board & {
+    width: calc(200% / 12);
+    height: calc(200% / 12);
+    margin: calc(-50% / 11) calc(-50% / 12);
+  }
   transform: scale(0.5);
   background-size: cover;
-  z-index: z('cg__piece');
+  background-position: center;
+  background-repeat: no-repeat;
   pointer-events: none;
-  &.dragging {
-    cursor: move;
-    z-index: z('cg__piece.dragging');
-  }
+  z-index: z('sg__piece');
   &.anim {
-    z-index: z('cg__piece.anim');
+    z-index: z('sg__piece.anim');
   }
   &.fading {
-    z-index: z('cg__piece.fading');
+    z-index: z('sg__piece.fading');
     opacity: 0.5;
   }
   &.ghost {
     opacity: 0.3;
   }
-}
-
-cg-helper {
-  position: absolute;
-  width: calc(100% / 9);
-  padding-bottom: calc(100% / 9);
-  bottom: 0;
-}
-
-cg-container {
-  position: absolute;
-  width: 900%;
-  height: 900%;
-  display: block;
-  bottom: 0;
-}
-
-.cg-wrap svg {
-  overflow: hidden;
-  position: absolute;
-  top: 0px;
-  left: 0px;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: z('cg__svg');
-  opacity: 0.6;
-  image {
-    opacity: 0.5;
+  &.dragging {
+    cursor: pointer;
+    // pointer-events: auto; // interferes, but cursor has no effect without it
+    z-index: z('sg__piece.dragging') !important;
+    &.touch {
+      top: -50px;
+    }
   }
 }
 
-piece.fix-blur {
-  will-change: auto;
+sg-square-over {
+  position: absolute;
+  box-sizing: content-box;
+  top: 0;
+  left: 0;
+  width: calc(100% / 9);
+  height: calc(100% / 9);
+  .d-5x5 & {
+    width: calc(100% / 5);
+    height: calc(100% / 5);
+  }
+  .d-12x12 & {
+    width: calc(100% / 12);
+    height: calc(100% / 12);
+  }
+  background: #00000050;
+  border-radius: 50%;
+  padding: 6%;
+  margin: -6%;
+  will-change: transform;
+  pointer-events: none;
+  z-index: z('sg__overlay');
+}
+
+sg-promotion {
+  z-index: z('sg__promotion');
+  background-color: #0000003f;
+  &.active {
+    display: block;
+    pointer-events: auto;
+  }
+  sg-promotion-square {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(100% / 9);
+    height: calc(100% / 9);
+    .d-5x5 & {
+      width: calc(100% / 5);
+      height: calc(100% / 5);
+    }
+    .d-12x12 & {
+      width: calc(100% / 12);
+      height: calc(100% / 12);
+    }
+    sg-promotion-choices {
+      display: flex;
+      flex-direction: column;
+      background-color: $c-bg-high;
+      box-shadow: 3px 3px 7px #000000aa;
+      border-radius: 10px;
+      cursor: pointer;
+      width: 100%;
+      height: 200%;
+      piece {
+        display: block;
+        position: relative;
+        transform: scale(0.5);
+        width: 200% !important;
+        height: 100% !important;
+        margin: calc(-50%) !important;
+        pointer-events: auto;
+      }
+      &.reversed {
+        margin: calc(-100% / 11 * 12) 0;
+        flex-direction: column-reverse;
+      }
+    }
+  }
+}
+
+svg.sg-shapes,
+svg.sg-custom-svgs {
+  @extend %abs-100;
+  overflow: visible;
+  top: 0px;
+  left: 0px;
+  pointer-events: none;
+}
+.sg-custom-svgs {
+  z-index: z('sg__svg.sg-custom-svgs');
+  svg {
+    overflow: visible;
+  }
+}
+sg-free-pieces piece {
+  z-index: z('sg__svg.sg-free-pieces');
+  opacity: 0.7;
+}
+
+@keyframes selected {
+  from {
+    background-color: transparent;
+  }
+  to {
+    background-color: rgba(20, 85, 30, 0.5);
+  }
+}
+
+sg-hand-wrap {
+  position: relative;
+  sg-hand {
+    display: flex;
+    flex-wrap: wrap;
+    position: absolute;
+    align-items: center;
+    justify-content: space-between;
+    flex-direction: row-reverse;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background-size: cover;
+    &.promotion {
+      opacity: 0.6;
+      .hands-background & {
+        opacity: 1;
+        &::after {
+          content: '';
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          background-color: #0000003f;
+          z-index: 2;
+        }
+      }
+    }
+
+    sg-hp-wrap {
+      position: relative;
+      flex: 1 0 14%;
+      height: 100%;
+      &.selected {
+        opacity: 1;
+        background-color: rgba(20, 85, 30, 0.5);
+      }
+      &.preselected {
+        opacity: 1;
+        background-color: rgba(20, 30, 85, 0.5);
+      }
+
+      &.current-pre {
+        background-color: rgba(20, 30, 85, 0.5);
+      }
+
+      &[data-nb='0']:not(.drawing),
+      &:not([data-nb]) {
+        opacity: 0.1;
+        .clear-hands & {
+          opacity: 0;
+        }
+      }
+      &:after {
+        @extend %box-radius;
+        content: attr(data-nb);
+        position: absolute;
+        bottom: 0;
+        right: 1px;
+        line-height: 0.85em;
+        padding: 3px 0.25em;
+        font-weight: bold;
+        font-size: calc(1.3em * var(--board-scale));
+        border: 1px solid $c-font;
+        background-color: $c-bg-high;
+        color: $c-font-clearer;
+        cursor: pointer;
+        z-index: 2;
+      }
+      &[data-nb='0']:not(.selected):not(.drawing)::after,
+      &:not([data-nb])::after {
+        content: none;
+      }
+      &.drawing:before {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 0;
+        width: 12%;
+        height: 12%;
+        background-color: $c-font-dimmer;
+        border-radius: 50%;
+      }
+
+      piece {
+        cursor: pointer;
+        height: 200%;
+        width: 200%;
+        margin: calc(-50% / 11 * 12) -50%;
+        transform: scale(0.5);
+        pointer-events: auto;
+        z-index: z('sg__hand-piece');
+      }
+    }
+  }
+  &.hand-top sg-hand {
+    background-position: top left;
+    sg-hp-wrap::after {
+      bottom: unset;
+      top: 0;
+    }
+  }
+  &.hand-bottom sg-hand {
+    background-position: bottom right;
+  }
 }

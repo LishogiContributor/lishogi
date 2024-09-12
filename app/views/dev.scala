@@ -63,15 +63,15 @@ object dev {
             "Only use if you know exactly what you're doing."
           ),
           res map { pre(_) },
-          postForm(action := routes.Dev.cliPost())(
+          postForm(action := routes.Dev.cliPost)(
             form3.input(form("command"))(autofocus)
           ),
           h2("Command examples:"),
           pre("""uptime
 announce 10 minutes Lishogi will restart!
 announce cancel
+delete lishogi database
 change asset version
-puzzle disable 70000
 team disable foobar
 team enable foobar
 fishnet client create {username}

@@ -1,9 +1,8 @@
+import { modal } from 'common/modal';
+import spinner from 'common/spinner';
+import { VNode, h } from 'snabbdom';
 import * as control from './control';
 import AnalyseCtrl from './ctrl';
-import { spinner } from './util';
-import { modal } from './modal';
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
 
 const preventing = (f: () => void) => (e: MouseEvent) => {
   e.preventDefault();
@@ -14,42 +13,42 @@ export function bind(ctrl: AnalyseCtrl): void {
   if (!window.Mousetrap) return;
   const kbd = window.Mousetrap;
   kbd.bind(
-    ['left', 'k'],
+    ['left', 'j'],
     preventing(() => {
       control.prev(ctrl);
       ctrl.redraw();
     })
   );
   kbd.bind(
-    ['shift+left', 'shift+k'],
+    ['shift+left', 'shift+j'],
     preventing(() => {
       control.exitVariation(ctrl);
       ctrl.redraw();
     })
   );
   kbd.bind(
-    ['right', 'j'],
+    ['right', 'k'],
     preventing(() => {
       if (!ctrl.fork.proceed()) control.next(ctrl);
       ctrl.redraw();
     })
   );
   kbd.bind(
-    ['shift+right', 'shift+j'],
+    ['shift+right', 'shift+k'],
     preventing(() => {
       control.enterVariation(ctrl);
       ctrl.redraw();
     })
   );
   kbd.bind(
-    ['up', '0'],
+    ['up', '0', 'home'],
     preventing(() => {
       if (!ctrl.fork.prev()) control.first(ctrl);
       ctrl.redraw();
     })
   );
   kbd.bind(
-    ['down', '$'],
+    ['down', '$', 'end'],
     preventing(() => {
       if (!ctrl.fork.next()) control.last(ctrl);
       ctrl.redraw();
@@ -110,13 +109,6 @@ export function bind(ctrl: AnalyseCtrl): void {
     })
   );
   kbd.bind('x', preventing(ctrl.toggleThreatMode));
-  kbd.bind(
-    'e',
-    preventing(() => {
-      ctrl.toggleExplorer();
-      ctrl.redraw();
-    })
-  );
   if (ctrl.study) {
     const keyToMousedown = (key: string, selector: string) => {
       kbd.bind(
@@ -135,7 +127,7 @@ export function bind(ctrl: AnalyseCtrl): void {
 
 export function view(ctrl: AnalyseCtrl): VNode {
   return modal({
-    class: 'keyboard-help',
+    class: 'study__modal.keyboard-help',
     onInsert(el: HTMLElement) {
       window.lishogi.loadCssPath('analyse.keyboard');
       $(el)

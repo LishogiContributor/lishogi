@@ -44,10 +44,10 @@ export function practiceComplete(chapterId: string, nbMoves: number) {
   });
 }
 
-export function importPgn(studyId: string, data: any) {
+export function importNotation(studyId: string, data: any) {
   return $.ajax({
     method: 'POST',
-    url: `/study/${studyId}/import-pgn?sri=${window.lishogi.sri}`,
+    url: `/study/${studyId}/import-notation?sri=${window.lishogi.sri}`,
     data: data,
     headers,
   });

@@ -3,6 +3,7 @@ package lila.simul
 import play.api.libs.json._
 
 import lila.common.LightUser
+import lila.common.Json._
 import lila.game.{ Game, GameRepo }
 import lila.user.User
 
@@ -41,16 +42,20 @@ final class JsonView(
       .add("team", team)
       .add("quote" -> simul.isCreated.option(lila.quote.Quote.one(simul.id)))
 
-  def api(simul: Simul): Fu[JsObject] =
+  def apiJson(simul: Simul): Fu[JsObject] =
     getLightUser(simul.hostId) map { lightHost =>
-      baseSimul(simul, lightHost) ++ Json.obj(
-        "nbApplicants" -> simul.applicants.size,
-        "nbPairings"   -> simul.pairings.size
-      )
+      baseSimul(simul, lightHost) ++ Json
+        .obj(
+          "nbApplicants" -> simul.applicants.size,
+          "nbPairings"   -> simul.pairings.size
+        )
+        .add("estimatedStartAt" -> simul.startedAt)
+        .add("startedAt" -> simul.startedAt)
+        .add("finishedAt" -> simul.finishedAt)
     }
 
   def api(simuls: List[Simul]): Fu[JsArray] =
-    simuls.map(api).sequenceFu map JsArray.apply
+    lila.common.Future.linear(simuls)(apiJson) map JsArray.apply
 
   def apiAll(
       pending: List[Simul],
@@ -126,9 +131,9 @@ final class JsonView(
     Json.obj(
       "id"       -> g.id,
       "status"   -> g.status.id,
-      "fen"      -> (shogi.format.Forsyth exportSituation g.situation),
-      "pockets"  -> (shogi.format.Forsyth exportCrazyPocket g.board),
-      "lastMove" -> ~g.lastMoveKeys,
+      "variant"  -> g.variant.key,
+      "sfen"     -> g.situation.toSfen,
+      "lastMove" -> ~g.lastUsiStr,
       "orient"   -> g.playerByUserId(hostId).map(_.color)
     )
 

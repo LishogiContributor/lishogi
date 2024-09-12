@@ -16,11 +16,11 @@ object show {
       control: lila.video.UserControl
   )(implicit ctx: Context) =
     layout(
-      title = s"${video.title} • Free Shogi Videos",
+      title = s"${video.title} - ${trans.videoLibrary.txt()}",
       control = control,
       openGraph = lila.app.ui
         .OpenGraph(
-          title = s"${video.title} by ${video.author}",
+          title = s"${video.title} - ${video.author} | ${trans.videoLibrary.txt()}",
           description = shorten(~video.metadata.description, 152),
           url = s"$netBaseUrl${routes.Video.show(video.id)}",
           `type` = "video",
@@ -31,15 +31,15 @@ object show {
       div(cls := "show")(
         div(cls := "embed")(
           iframe(
-            id := "ytplayer",
+            id  := "ytplayer",
             tpe := "text/html",
             src := s"https://www.youtube.com/embed/${video.id}?autoplay=1&origin=https://lishogi.org&start=${video.startTime}",
             st.frameborder := "0",
             frame.allowfullscreen
           )
         ),
-        h1(cls := "box__pad")(
-          a(cls := "is4 text", dataIcon := "i", href := s"${routes.Video.index()}?${control.queryString}"),
+        h1(cls  := "box__pad")(
+          a(cls := "is4 text", dataIcon := "i", href := s"${routes.Video.index}?${control.queryString}"),
           video.title
         ),
         div(cls := "meta box__pad")(
@@ -49,9 +49,9 @@ object show {
           ),
           video.tags.map { tag =>
             a(
-              cls := "tag",
+              cls      := "tag",
               dataIcon := "o",
-              href := s"${routes.Video.index()}?tags=${tag.replace(" ", "+")}"
+              href     := s"${routes.Video.index}?tags=${tag.replace(" ", "+")}"
             )(
               tag.capitalize
             )

@@ -13,7 +13,7 @@ object tournaments {
 
   def page(t: lila.team.Team, tours: TeamInfo.PastAndNext)(implicit ctx: Context) = {
     views.html.base.layout(
-      title = s"${t.name} • ${trans.tournaments.txt()}",
+      title = s"${t.name} - ${trans.tournaments.txt()}",
       moreCss = cssTag("team"),
       wrapClass = "full-screen-force"
     ) {
@@ -21,18 +21,18 @@ object tournaments {
         div(cls := "box")(
           h1(
             views.html.team.bits.link(t),
-            " • ",
+            " - ",
             trans.tournaments()
           ),
           div(cls := "team-tournaments team-tournaments--both")(
             div(cls := "team-tournaments__next")(
-              h2("Upcoming tournaments"),
+              h2(trans.team.upcomingTourns()),
               table(cls := "slist slist-pad slist-invert")(
                 renderList(tours.next)
               )
             ),
             div(cls := "team-tournaments__past")(
-              h2("Completed tournaments"),
+              h2(trans.team.completedTourns()),
               table(cls := "slist slist-pad")(
                 renderList(tours.past)
               )
@@ -43,70 +43,46 @@ object tournaments {
     }
   }
 
-  def renderList(tours: List[TeamInfo.AnyTour])(implicit ctx: Context) =
+  def renderList(tours: List[lila.tournament.Tournament])(implicit ctx: Context) =
     tbody(
-      tours map { any =>
+      tours map { tour =>
         tr(
           cls := List(
-            "enterable" -> any.isEnterable,
-            "soon"      -> any.isNowOrSoon
+            "enterable" -> tour.isEnterable,
+            "soon"      -> tour.isNowOrSoon
           )
         )(
-          td(cls := "icon")(iconTag(any.any.fold(tournamentIconChar, views.html.swiss.bits.iconChar))),
+          td(cls := "icon")(iconTag(tournamentIconChar(tour))),
           td(cls := "header")(
-            any.any.fold(
-              t =>
-                a(href := routes.Tournament.show(t.id))(
-                  span(cls := "name")(t.name()),
-                  span(cls := "setup")(
-                    t.clock.show,
-                    " • ",
-                    if (t.variant.exotic) t.variant.name else t.perfType.map(_.trans),
-                    !t.position.initial option frag(" • ", trans.thematic()),
-                    " • ",
-                    t.mode.fold(trans.casualTournament, trans.ratedTournament)(),
-                    " • ",
-                    t.durationString
-                  )
-                ),
-              s =>
-                a(href := routes.Page.notSupported())(
-                  span(cls := "name")(s.name),
-                  span(cls := "setup")(
-                    s.clock.show,
-                    " • ",
-                    if (s.variant.exotic) s.variant.name else s.perfType.map(_.trans),
-                    " • ",
-                    (if (s.settings.rated) trans.ratedTournament else trans.casualTournament)()
-                  )
-                )
+            a(href := routes.Tournament.show(tour.id))(
+              span(cls := "name")(tour.name()),
+              span(cls := "setup")(
+                tour.clock.show,
+                " - ",
+                if (!tour.variant.standard) variantName(tour.variant) else tour.perfType.map(_.trans),
+                tour.position.isDefined option frag(" - ", trans.thematic()),
+                " - ",
+                tour.mode.fold(trans.casualTournament, trans.ratedTournament)(),
+                " - ",
+                tour.durationString
+              )
             )
           ),
           td(cls := "infos")(
-            any.any.fold(
-              t =>
-                frag(
-                  t.teamBattle map { battle =>
-                    frag(battle.teams.size, " teams battle")
-                  } getOrElse "Inner team",
-                  br,
-                  renderStartsAt(any)
-                ),
-              s =>
-                frag(
-                  s.settings.nbRounds,
-                  " rounds swiss",
-                  br,
-                  renderStartsAt(any)
-                )
+            frag(
+              tour.teamBattle map { battle =>
+                frag(battle.teams.size, " teams battle")
+              } getOrElse "Inner team",
+              br,
+              renderStartsAt(tour)
             )
           ),
-          td(cls := "text", dataIcon := "r")(any.nbPlayers.localize)
+          td(cls := "text", dataIcon := "r")(tour.nbPlayers.localize)
         )
       }
     )
 
-  private def renderStartsAt(any: TeamInfo.AnyTour)(implicit lang: Lang): Frag =
-    if (any.isEnterable && any.startsAt.isBeforeNow) trans.playingRightNow()
-    else momentFromNowOnce(any.startsAt)
+  private def renderStartsAt(tour: lila.tournament.Tournament)(implicit lang: Lang): Frag =
+    if (tour.isEnterable && tour.startsAt.isBeforeNow) trans.playingRightNow()
+    else momentFromNowOnce(tour.startsAt)
 }

@@ -1,9 +1,9 @@
 package controllers
 
-import shogi.format.Forsyth.SituationPlus
-import shogi.format.{ FEN, Forsyth }
+import shogi.format.forsyth.Sfen.SituationPlus
+import shogi.format.forsyth.Sfen
 import shogi.Situation
-import shogi.variant.{ FromPosition, Standard, Variant }
+import shogi.variant.{ Standard, Variant }
 import play.api.libs.json.Json
 import play.api.mvc._
 import scala.concurrent.duration._
@@ -13,6 +13,7 @@ import lila.app._
 import lila.game.Pov
 import lila.round.Forecast.{ forecastJsonWriter, forecastStepJsonFormat }
 import lila.round.JsonView.WithFlags
+import lila.study.JsonView.tagsWrites
 import views._
 
 final class UserAnalysis(
@@ -25,53 +26,58 @@ final class UserAnalysis(
 
   def parseArg(arg: String) =
     arg.split("/", 2) match {
-      //case Array(key) => load("", Variant orDefault key)
-      case Array(key) => load("", Standard)
-      case Array(key, fen) =>
+      case Array(key) => load("", Variant orDefault key)
+      case Array(key, sfen) =>
         Variant.byKey get key match {
-          //case Some(variant)                   => load(fen, variant)
-          case Some(variant)                   => load(fen, Standard)
-          case _ if fen == Standard.initialFen => load(arg, Standard)
-          case _                               => load(arg, FromPosition)
+          case Some(variant) => load(sfen, variant)
+          case _             => load(arg, Standard)
         }
       case _ => load("", Standard)
     }
 
-  def load(urlFen: String, variant: Variant) =
+  def load(urlSfen: String, variant: Variant) =
     Open { implicit ctx =>
-      val decodedFen: Option[FEN] = lila.common.String
-        .decodeUriPath(urlFen)
-        .map(_.replace('_', ' ').trim)
-        .filter(_.nonEmpty)
-        .orElse(get("fen")) map FEN.apply
-      val pov         = makePov(decodedFen, variant)
-      val orientation = get("color").flatMap(shogi.Color.apply) | pov.color
+      val decodedSfen: Option[Sfen] = lila.common.String
+        .decodeUriPath(urlSfen)
+        .filter(_.trim.nonEmpty)
+        .orElse(get("sfen")) map Sfen.clean
+      val pov         = makePov(decodedSfen, variant)
+      val orientation = get("color").flatMap(shogi.Color.fromName) | pov.color
       env.api.roundApi
-        .userAnalysisJson(pov, ctx.pref, decodedFen, orientation, owner = false, me = ctx.me) map { data =>
-        EnableSharedArrayBuffer(Ok(html.board.userAnalysis(data, pov)))
+        .userAnalysisJson(
+          pov,
+          ctx.pref,
+          orientation,
+          owner = false,
+          me = ctx.me
+        ) map { data =>
+        Ok(html.board.userAnalysis(data, pov)).enableSharedArrayBuffer
       }
     }
 
-  private[controllers] def makePov(fen: Option[FEN], variant: Variant): Pov =
-    makePov {
-      fen.filter(_.value.nonEmpty).flatMap { f =>
-        Forsyth.<<<@(variant, f.value)
-      } | SituationPlus(Situation(variant), 1)
-    }
+  private[controllers] def makePov(sfen: Option[Sfen], variant: Variant, imported: Boolean = false): Pov = {
+    val sitFrom = sfen.filter(_.value.nonEmpty).flatMap {
+      _.toSituationPlus(variant)
+    } | SituationPlus(Situation(variant), 1)
+    makePov(sitFrom, imported)
+  }
 
-  private[controllers] def makePov(from: SituationPlus): Pov =
+  private[controllers] def makePov(from: SituationPlus, imported: Boolean): Pov =
     Pov(
       lila.game.Game
         .make(
           shogi = shogi.Game(
             situation = from.situation,
-            turns = from.turns
+            plies = from.plies,
+            startedAtPly = from.plies,
+            startedAtStep = from.stepNumber
           ),
-          sentePlayer = lila.game.Player.make(shogi.Sente, none),
-          gotePlayer = lila.game.Player.make(shogi.Gote, none),
+          initialSfen = Some(from.toSfen),
+          sentePlayer = lila.game.Player.make(shogi.Sente),
+          gotePlayer = lila.game.Player.make(shogi.Gote),
           mode = shogi.Mode.Casual,
-          source = lila.game.Source.Api,
-          pgnImport = None
+          source = if (imported) lila.game.Source.Import else lila.game.Source.Api,
+          notationImport = None
         )
         .withId("synthetic"),
       from.situation.color
@@ -81,27 +87,24 @@ final class UserAnalysis(
     Open { implicit ctx =>
       OptionFuResult(env.game.gameRepo game id) { g =>
         env.round.proxyRepo upgradeIfPresent g flatMap { game =>
-          val pov = Pov(game, shogi.Color(color == "sente"))
+          val pov = Pov(game, shogi.Color.fromSente(color == "sente"))
           negotiate(
             html =
               if (game.replayable) Redirect(routes.Round.watcher(game.id, color)).fuccess
               else {
                 val owner = isMyPov(pov)
                 for {
-                  initialFen <- env.game.gameRepo initialFen game.id
                   data <-
                     env.api.roundApi
-                      .userAnalysisJson(pov, ctx.pref, initialFen, pov.color, owner = owner, me = ctx.me)
-                } yield NoCache(
-                  Ok(
-                    html.board
-                      .userAnalysis(
-                        data,
-                        pov,
-                        withForecast = owner && !pov.game.synthetic && pov.game.playable
-                      )
-                  )
-                )
+                      .userAnalysisJson(pov, ctx.pref, pov.color, owner = owner, me = ctx.me)
+                } yield Ok(
+                  html.board
+                    .userAnalysis(
+                      data,
+                      pov,
+                      withForecast = owner && !pov.game.synthetic && pov.game.playable
+                    )
+                ).noCache
               },
             api = apiVersion => mobileAnalysis(pov, apiVersion)
           )
@@ -112,49 +115,52 @@ final class UserAnalysis(
   private def mobileAnalysis(pov: Pov, apiVersion: lila.common.ApiVersion)(implicit
       ctx: Context
   ): Fu[Result] =
-    env.game.gameRepo initialFen pov.gameId flatMap { initialFen =>
-      gameC.preloadUsers(pov.game) zip
-        (env.analyse.analyser get pov.game) zip
-        env.game.crosstableApi(pov.game) flatMap { case _ ~ analysis ~ crosstable =>
-          import lila.game.JsonView.crosstableWrites
-          env.api.roundApi.review(
-            pov,
-            apiVersion,
-            tv = none,
-            analysis,
-            initialFenO = initialFen.some,
-            withFlags = WithFlags(division = true, opening = true, clocks = true, movetimes = true)
-          ) map { data =>
-            Ok(data.add("crosstable", crosstable))
-          }
+    gameC.preloadUsers(pov.game) zip
+      env.analyse.analyser.get(pov.game) zip
+      env.game.crosstableApi(pov.game) flatMap { case ((_, analysis), crosstable) =>
+        import lila.game.JsonView.crosstableWrites
+        env.api.roundApi.review(
+          pov,
+          apiVersion,
+          tv = none,
+          analysis,
+          withFlags = WithFlags(division = true, clocks = true, movetimes = true)
+        ) map { data =>
+          Ok(data.add("crosstable", crosstable))
         }
-    }
+      }
 
   // XHR only
-  def pgn =
+  def notation =
     OpenBody { implicit ctx =>
       implicit val req = ctx.body
-      env.importer.forms.importForm
+      lila.study.StudyForm.importFree.form
         .bindFromRequest()
         .fold(
           jsonFormError,
           data =>
-            env.importer.importer
-              .inMemory(data)
+            lila.study.NotationImport
+              .userAnalysis(data.notation)
               .fold(
-                err => BadRequest(jsonError(err.toString)).fuccess,
-                { case (game, fen) =>
+                err => BadRequest(err).fuccess,
+                { case (game, root, tags) =>
                   val pov = Pov(game, shogi.Sente)
-                  env.api.roundApi.userAnalysisJson(
-                    pov,
-                    ctx.pref,
-                    initialFen = fen,
-                    pov.color,
-                    owner = false,
-                    me = ctx.me
-                  ) map { data =>
-                    Ok(data)
-                  }
+                  val baseData = env.round.jsonView
+                    .userAnalysisJson(
+                      pov,
+                      ctx.pref,
+                      pov.color,
+                      owner = false,
+                      me = ctx.me
+                    )
+                  Ok(
+                    baseData ++ Json.obj(
+                      "treeParts" -> lila.study.JsonView.partitionTreeJsonWriter.writes(
+                        root
+                      ),
+                      "tags" -> tags
+                    )
+                  ).fuccess
                 }
               )
         )
@@ -183,7 +189,7 @@ final class UserAnalysis(
       }
     }
 
-  def forecastsOnMyTurn(fullId: String, uci: String) =
+  def forecastsOnMyTurn(fullId: String, usi: String) =
     AuthBody(parse.json) { implicit ctx => _ =>
       import lila.round.Forecast
       OptionFuResult(env.round.proxyRepo pov fullId) { pov =>
@@ -195,7 +201,7 @@ final class UserAnalysis(
               err => BadRequest(err.toString).fuccess,
               forecasts => {
                 val wait = 50 + (Forecast maxPlies forecasts min 10) * 50
-                env.round.forecastApi.playAndSave(pov, uci, forecasts) >>
+                env.round.forecastApi.playAndSave(pov, usi, forecasts) >>
                   lila.common.Future.sleep(wait.millis) inject
                   Ok(Json.obj("reload" -> true))
               }

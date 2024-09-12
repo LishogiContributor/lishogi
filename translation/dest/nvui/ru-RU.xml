@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="textualRepresentation">Текстовое представление</string>
+  <string name="gameInfo">Информация об игре</string>
+  <string name="pieces">Фигуры</string>
+  <string name="board">Доска</string>
+  <string name="hands">Фигуры на руках</string>
+  <string name="none" comment="No pieces in hand">Отсутствуют</string>
+  <string name="moves" comment="Followed by list of moves">Ходы</string>
+  <string name="currentPosition">Текущая позиция</string>
+  <string name="moveForm">Ввод хода</string>
+  <string name="commandInput">Ввод команды</string>
+  <string name="commands">Команды</string>
+  <string name="useArrowKeys">Используйте стрелки для навигации по игре</string>
+</resources>

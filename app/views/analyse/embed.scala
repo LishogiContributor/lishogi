@@ -23,17 +23,22 @@ object embed {
           layout.viewport,
           layout.metaCsp(basicCsp withNonce config.nonce),
           st.headTitle(replay titleOf pov),
-          layout.pieceSprite(lila.pref.PieceSet.default),
+          if (pov.game.variant.chushogi) layout.chuPieceSprite(config.chuPieceSet)
+          else if (pov.game.variant.kyotoshogi) layout.kyoPieceSprite(config.kyoPieceSet)
+          else layout.pieceSprite(config.pieceSet),
           cssTagWithTheme("analyse.embed", config.bg)
         ),
         body(
-          cls := s"highlight ${config.bg} ${config.board}",
-          dataDev := (!isProd).option("true"),
-          dataAssetUrl := assetBaseUrl,
+          cls              := s"highlight ${config.bg} ${config.board}",
+          dataDev          := (!isProd).option("true"),
+          dataAssetUrl     := assetBaseUrl,
           dataAssetVersion := assetVersion.value,
-          dataTheme := config.bg
+          dataTheme        := config.bg,
+          dataPieceSet     := config.pieceSet.key,
+          dataChuPieceSet  := config.chuPieceSet.key,
+          dataKyoPieceSet  := config.kyoPieceSet.key
         )(
-          div(cls := "is2d")(
+          div(
             main(cls := "analyse")
           ),
           footer {
@@ -55,12 +60,12 @@ object embed {
           analyseTag,
           embedJsUnsafe(
             s"""lishogi.startEmbeddedAnalyse(${safeJsonValue(
-              Json.obj(
-                "data"  -> data,
-                "embed" -> true,
-                "i18n"  -> views.html.board.userAnalysisI18n(withCeval = false, withExplorer = false)
-              )
-            )})""",
+                Json.obj(
+                  "data"  -> data,
+                  "embed" -> true,
+                  "i18n"  -> views.html.board.userAnalysisI18n(withCeval = false)
+                )
+              )})""",
             config.nonce
           )
         )

@@ -19,18 +19,18 @@ object home {
       moreJs = embedJsUnsafe(s"""$$(function() {
   lishogi.StrongSocket.defaults.params.flag = 'simul';
   lishogi.pubsub.on('socket.in.reload', () => {
-    $$('.simul-list__content').load('${routes.Simul
-        .homeReload()}', () => lishogi.pubsub.emit('content_loaded'));
+    $$('.simul-list__content').load('${routes.Simul.homeReload}', () => lishogi.pubsub.emit('content_loaded'));
   });
 });"""),
       title = trans.simultaneousExhibitions.txt(),
       openGraph = lila.app.ui
         .OpenGraph(
           title = trans.simultaneousExhibitions.txt(),
-          url = s"$netBaseUrl${routes.Simul.home()}",
+          url = s"$netBaseUrl${routes.Simul.home}",
           description = trans.aboutSimul.txt()
         )
-        .some
+        .some,
+      withHrefLangs = lila.i18n.LangList.All.some
     ) {
       main(cls := "page-menu simul-list")(
         st.aside(cls := "page-menu__menu simul-list__help")(

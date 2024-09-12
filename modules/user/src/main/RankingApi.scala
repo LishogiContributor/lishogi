@@ -34,7 +34,7 @@ final class RankingApi(
           "rating"    -> perf.intRating,
           "prog"      -> perf.progress,
           "stable"    -> perf.rankable(PerfType variantOf perfType),
-          "expiresAt" -> DateTime.now.plusDays(7)
+          "expiresAt" -> DateTime.now.plusMonths(1)
         ),
         upsert = true
       )
@@ -93,13 +93,23 @@ final class RankingApi(
       rapid          <- topPerf(PerfType.Rapid.id, nb)
       classical      <- topPerf(PerfType.Classical.id, nb)
       correspondence <- topPerf(PerfType.Correspondence.id, nb)
+      minishogi      <- topPerf(PerfType.Minishogi.id, nb)
+      chushogi       <- topPerf(PerfType.Chushogi.id, nb)
+      annanshogi     <- topPerf(PerfType.Annanshogi.id, nb)
+      kyotoshogi     <- topPerf(PerfType.Kyotoshogi.id, nb)
+      checkshogi     <- topPerf(PerfType.Checkshogi.id, nb)
     } yield Perfs.Leaderboards(
       ultraBullet = ultraBullet,
       bullet = bullet,
       blitz = blitz,
       rapid = rapid,
       classical = classical,
-      correspondence = correspondence
+      correspondence = correspondence,
+      minishogi = minishogi,
+      chushogi = chushogi,
+      annanshogi = annanshogi,
+      kyotoshogi = kyotoshogi,
+      checkshogi = checkshogi
     )
 
   object weeklyStableRanking {
@@ -142,7 +152,7 @@ final class RankingApi(
         .map(_._2.result())
   }
 
-  object weeklyRatingDistribution {
+  object monthlyRatingDistribution {
 
     private type NbUsers = Int
 
@@ -212,14 +222,16 @@ final class RankingApi(
      */
     private def monitorRatingDistribution(perfId: Perf.ID)(nbUsersList: List[NbUsers]): Unit = {
       val total = nbUsersList.foldLeft(0)(_ + _)
-      (Stat.minRating to 2800 by Stat.group).toList.zip(nbUsersList).foldLeft(0) {
-        case (prev, (rating, nbUsers)) =>
+      (Stat.minRating to 2800 by Stat.group).toList
+        .zip(nbUsersList)
+        .foldLeft(0) { case (prev, (rating, nbUsers)) =>
           val acc = prev + nbUsers
           PerfType(perfId) foreach { pt =>
             lila.mon.rating.distribution(pt.key, rating).update(prev.toDouble / total)
           }
           acc
-      }
+        }
+        .unit
     }
   }
 }

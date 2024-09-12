@@ -9,26 +9,24 @@ import controllers.routes
 
 object side {
 
-  private val separator  = " • "
+  private val separator  = " - "
   private val dataUserTv = attr("data-user-tv")
   private val dataTime   = attr("data-time")
 
   def apply(
       pov: lila.game.Pov,
-      initialFen: Option[shogi.format.FEN],
       tour: Option[lila.tournament.TourAndTeamVs],
       simul: Option[lila.simul.Simul],
       userTv: Option[lila.user.User] = None,
       bookmarked: Boolean
   )(implicit ctx: Context): Option[Frag] =
     ctx.noBlind option frag(
-      meta(pov, initialFen, tour, simul, userTv, bookmarked),
+      meta(pov, tour, simul, userTv, bookmarked),
       pov.game.userIds.filter(isStreaming) map views.html.streamer.bits.contextual
     )
 
   def meta(
       pov: lila.game.Pov,
-      initialFen: Option[shogi.format.FEN],
       tour: Option[lila.tournament.TourAndTeamVs],
       simul: Option[lila.simul.Simul],
       userTv: Option[lila.user.User] = None,
@@ -45,16 +43,7 @@ object side {
                   views.html.bookmark.toggle(game, bookmarked),
                   if (game.imported)
                     div(
-                      a(href := routes.Importer.importGame(), title := trans.importGame.txt())("IMPORT"),
-                      separator,
-                      if (game.variant.exotic)
-                        bits.variantLink(
-                          game.variant,
-                          (game.variant.name).toUpperCase,
-                          initialFen = initialFen
-                        )
-                      else
-                        game.variant.name.toUpperCase
+                      a(href := routes.Importer.importGame, title := trans.importGame.txt())("IMPORT")
                     )
                   else
                     frag(
@@ -62,25 +51,20 @@ object side {
                       separator,
                       (if (game.rated) trans.rated else trans.casual).txt(),
                       separator,
-                      if (game.variant.exotic)
-                        bits.variantLink(
-                          game.variant,
-                          (game.variant.name).toUpperCase,
-                          initialFen = initialFen
-                        )
-                      else
-                        game.perfType.map { pt =>
-                          span(title := pt.desc)(pt.trans)
-                        }
+                      bits.variantLink(game.variant)
                     )
                 ),
-                game.pgnImport.flatMap(_.date).map(frag(_)) getOrElse {
-                  frag(if (game.isBeingPlayed) trans.playingRightNow() else momentFromNow(game.createdAt))
+                game.notationImport.flatMap(_.date).map(frag(_)) getOrElse {
+                  frag(
+                    if (game.isBeingPlayed) trans.playingRightNow()
+                    else if (game.paused) trans.gameAdjourned()
+                    else momentFromNow(game.createdAt)
+                  )
                 }
               ),
-              game.pgnImport.exists(_.date.isDefined) option small(
+              game.notationImport.exists(_.date.isDefined) option small(
                 "Imported ",
-                game.pgnImport.flatMap(_.user).map { user =>
+                game.notationImport.flatMap(_.user).map { user =>
                   trans.by(userIdLink(user.some, None, false))
                 }
               )
@@ -90,9 +74,9 @@ object side {
             game.players.map { p =>
               frag(
                 div(cls := s"player color-icon is ${p.color.name} text")(
-                  playerLink(p, withOnline = false, withDiff = true, withBerserk = true)
-                ),
-                tour.flatMap(_.teamVs).map(_.teams(p.color)) map { teamLink(_, false)(cls := "team") }
+                  playerLink(p, withOnline = false, withDiff = true, withBerserk = true),
+                  tour.flatMap(_.teamVs).map(_.teams(p.color)) map { teamLink(_, false)(cls := "team") }
+                )
               )
             }
           )
@@ -100,10 +84,10 @@ object side {
         game.finishedOrAborted option {
           st.section(cls := "status")(
             gameEndStatus(game),
-            game.winner.map { winner =>
+            game.winnerColor.map { color =>
               frag(
                 separator,
-                winner.color.fold(trans.blackIsVictorious, trans.whiteIsVictorious)()
+                transWithColorName(trans.xIsVictorious, color, game.isHandicap)
               )
             }
           )
@@ -120,10 +104,6 @@ object side {
           )
         } orElse game.tournamentId.map { tourId =>
           st.section(cls := "game__tournament-link")(tournamentLink(tourId))
-        } orElse game.swissId.map { swissId =>
-          st.section(cls := "game__tournament-link")(
-            views.html.swiss.bits.link(lila.swiss.Swiss.Id(swissId))
-          )
         } orElse simul.map { sim =>
           st.section(cls := "game__simul-link")(
             a(href := routes.Simul.show(sim.id))(sim.fullName)

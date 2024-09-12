@@ -1,5 +1,4 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { VNode, h } from 'snabbdom';
 
 const scale = 8;
 let now: number, startTime: number, stopTime: number;

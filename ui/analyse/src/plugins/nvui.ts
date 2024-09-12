@@ -1,18 +1,26 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { prop, Prop } from 'common';
-import AnalyseController from '../ctrl';
-import { makeConfig as makeCgConfig } from '../ground';
-import { Shogiground } from 'shogiground';
-import { Redraw, AnalyseData, MaybeVNodes } from '../interfaces';
+import { Prop, prop } from 'common/common';
+import { MaybeVNodes, bind } from 'common/snabbdom';
 import { Player } from 'game';
-import { renderSan, renderPieces, renderBoard, styleSetting } from 'nvui/chess';
-import { renderSetting } from 'nvui/setting';
-import { Notify } from 'nvui/notify';
-import { Style } from 'nvui/chess';
 import { commands } from 'nvui/command';
-import * as moveView from '../moveView';
-import { bind } from '../util';
+import { Notify } from 'nvui/notify';
+import { renderSetting } from 'nvui/setting';
+import {
+  Style,
+  renderBoard,
+  renderMove,
+  renderPieces,
+  styleSetting,
+  supportedVariant,
+  validUsi,
+  renderHand,
+} from 'nvui/shogi';
+import { Shogiground } from 'shogiground';
+import { VNode, h } from 'snabbdom';
+import AnalyseController from '../ctrl';
+import { makeConfig as makeSgConfig } from '../ground';
+import { AnalyseData, Redraw } from '../interfaces';
+import { opposite } from 'shogiground/util';
+import { engineNameFromCode } from 'common/engineName';
 
 window.lishogi.AnalyseNVUI = function (redraw: Redraw) {
   const notify = new Notify(redraw),
@@ -26,24 +34,32 @@ window.lishogi.AnalyseNVUI = function (redraw: Redraw) {
   return {
     render(ctrl: AnalyseController): VNode {
       const d = ctrl.data,
-        style = moveStyle.get();
+        style = moveStyle.get(),
+        variantNope = !supportedVariant(d.game.variant.key) && 'Sorry, this variant is not supported in blind mode.',
+        noarg = ctrl.trans.noarg;
       if (!ctrl.shogiground)
-        ctrl.shogiground = Shogiground(document.createElement('div'), {
-          ...makeCgConfig(ctrl),
+        ctrl.shogiground = Shogiground({
+          ...makeSgConfig(ctrl),
           animation: { enabled: false },
           drawable: { enabled: false },
-          coordinates: false,
+          coordinates: {
+            enabled: false,
+          },
         });
+      if (variantNope) setTimeout(() => notify.set(variantNope), 3000);
+
       return h('main.analyse', [
         h('div.nvui', [
-          h('h1', 'Textual representation'),
-          h('h2', 'Game info'),
+          h('h1', noarg('textualRepresentation')),
+          h('h2', noarg('gameInfo')),
           ...['sente', 'gote'].map((color: Color) =>
             h('p', [color + ' player: ', renderPlayer(ctrl, playerByColor(d, color))])
           ),
-          h('p', `${d.game.rated ? 'Rated' : 'Casual'} ${d.game.perf}`),
-          d.clock ? h('p', `Clock: ${d.clock.initial / 60} + ${d.clock.increment}`) : null,
-          h('h2', 'Moves'),
+          h('p', `${noarg(d.game.rated ? 'rated' : 'casual')}`),
+          d.clock
+            ? h('p', noarg('clock') + `: ${d.clock.initial / 60} + ${d.clock.increment} | ${d.clock.byoyomi})`)
+            : null,
+          h('h2', noarg('moves')),
           h(
             'p.moves',
             {
@@ -52,22 +68,22 @@ window.lishogi.AnalyseNVUI = function (redraw: Redraw) {
                 'aria-live': 'off',
               },
             },
-            renderMainline(ctrl.mainline, ctrl.path, style)
+            renderMainline(ctrl.mainline, ctrl.path, ctrl.data.game.variant.key, style)
           ),
-          h('h2', 'Pieces'),
+          h('h2', noarg('pieces')),
           h('div.pieces', renderPieces(ctrl.shogiground.state.pieces, style)),
-          h('h2', 'Current position'),
+          h('h2', noarg('currentPosition')),
           h(
             'p.position',
             {
               attrs: {
                 'aria-live': 'assertive',
-                'aria-atomic': true,
+                'aria-atomic': 'true',
               },
             },
-            renderCurrentNode(ctrl.node, style)
+            renderCurrentNode(ctrl.node, ctrl.data.game.variant.key, style)
           ),
-          h('h2', 'Move form'),
+          h('h2', noarg('moveForm')),
           h(
             'form',
             {
@@ -81,7 +97,7 @@ window.lishogi.AnalyseNVUI = function (redraw: Redraw) {
             },
             [
               h('label', [
-                'Command input',
+                noarg('commandInput'),
                 h('input.move.mousetrap', {
                   attrs: {
                     name: 'move',
@@ -96,10 +112,35 @@ window.lishogi.AnalyseNVUI = function (redraw: Redraw) {
           notify.render(),
           // h('h2', 'Actions'),
           // h('div.actions', tableInner(ctrl)),
-          h('h2', 'Computer analysis'),
-          ...(renderAcpl(ctrl, style) || [requestAnalysisButton(ctrl, analysisInProgress, notify.set)]),
-          h('h2', 'Board'),
-          h('pre.board', renderBoard(ctrl.shogiground.state.pieces, ctrl.data.player.color)),
+          h('h2', noarg('computerAnalysis')),
+          ...(renderAcpl(ctrl, ctrl.data.game.variant.key, style) || [
+            requestAnalysisButton(ctrl, analysisInProgress, notify.set),
+          ]),
+          h('h2', [noarg('board'), ' & ', noarg('hands')]),
+          h(
+            'pre.hand',
+            renderHand(
+              'top',
+              opposite(ctrl.data.player.color),
+              ctrl.shogiground.state.hands.handMap.get(opposite(ctrl.data.player.color)),
+              ctrl.data.game.variant.key,
+              style
+            )
+          ),
+          h(
+            'pre.board',
+            renderBoard(ctrl.shogiground.state.pieces, ctrl.data.player.color, ctrl.data.game.variant.key, style)
+          ),
+          h(
+            'pre.hand',
+            renderHand(
+              'bottom',
+              ctrl.data.player.color,
+              ctrl.shogiground.state.hands.handMap.get(ctrl.data.player.color),
+              ctrl.data.game.variant.key,
+              style
+            )
+          ),
           h('div.content', {
             hook: {
               insert: vnode => {
@@ -107,11 +148,11 @@ window.lishogi.AnalyseNVUI = function (redraw: Redraw) {
               },
             },
           }),
-          h('h2', 'Settings'),
-          h('label', ['Move notation', renderSetting(moveStyle, ctrl.redraw)]),
-          h('h2', 'Keyboard shortcuts'),
-          h('p', ['Use arrow keys to navigate in the game.']),
-          h('h2', 'Commands'),
+          h('h2', noarg('settings')),
+          h('label', [noarg('notationSystem'), renderSetting(moveStyle, ctrl.redraw)]),
+          h('h2', noarg('keyboardShortcuts')),
+          h('p', noarg('useArrowKeys')),
+          h('h2', noarg('commands')),
           h('p', [
             'Type these commands in the command input.',
             h('br'),
@@ -131,26 +172,33 @@ function onSubmit(ctrl: AnalyseController, notify: (txt: string) => void, style:
     let input = $input.val().trim();
     if (isShortCommand(input)) input = '/' + input;
     if (input[0] === '/') onCommand(ctrl, notify, input.slice(1), style());
-    else notify('Invalid command');
+    else {
+      const usi = validUsi(input, ctrl.node.sfen, ctrl.data.game.variant.key);
+      if (usi) ctrl.sendUsi(usi);
+      else notify('Invalid command');
+    }
     $input.val('');
     return false;
   };
 }
 
-const shortCommands = ['p', 'scan'];
+const shortCommands = ['p', 's'];
 
 function isShortCommand(input: string): boolean {
   return shortCommands.includes(input.split(' ')[0]);
 }
 
 function onCommand(ctrl: AnalyseController, notify: (txt: string) => void, c: string, style: Style) {
-  const pieces = ctrl.shogiground.state.pieces;
-  notify(commands.piece.apply(c, pieces, style) || commands.scan.apply(c, pieces, style) || `Invalid command: ${c}`);
+  const pieces = ctrl.shogiground.state.pieces,
+    hands = ctrl.shogiground.state.hands.handMap;
+  notify(
+    commands.piece.apply(c, pieces, hands, style) || commands.scan.apply(c, pieces, style) || `Invalid command: ${c}`
+  );
 }
 
 const analysisGlyphs = ['?!', '?', '??'];
 
-function renderAcpl(ctrl: AnalyseController, style: Style): MaybeVNodes | undefined {
+function renderAcpl(ctrl: AnalyseController, variant: VariantKey, style: Style): MaybeVNodes | undefined {
   const anal = ctrl.data.analysis;
   if (!anal) return undefined;
   const analysisNodes = ctrl.mainline.filter(n => (n.glyphs || []).find(g => analysisGlyphs.includes(g.symbol)));
@@ -162,10 +210,7 @@ function renderAcpl(ctrl: AnalyseController, style: Style): MaybeVNodes | undefi
       h(
         'select',
         {
-          hook: bind('change', e => {
-            ctrl.jumpToMain(parseInt((e.target as HTMLSelectElement).value));
-            ctrl.redraw();
-          }),
+          hook: bind('change', e => ctrl.jumpToMain(parseInt((e.target as HTMLSelectElement).value)), ctrl.redraw),
         },
         analysisNodes
           .filter(n => (n.ply % 2 === 1) === (color === 'sente'))
@@ -178,7 +223,7 @@ function renderAcpl(ctrl: AnalyseController, style: Style): MaybeVNodes | undefi
                   selected: node.ply === ctrl.node.ply,
                 },
               },
-              [moveView.plyToTurn(node.ply), renderSan(node.san!, node.uci, style), renderComments(node, style)].join(
+              [node.ply + ctrl.plyOffset(), renderMove(node.usi, node.sfen, variant, style), renderComments(node)].join(
                 ' '
               )
             )
@@ -211,16 +256,13 @@ function requestAnalysisButton(ctrl: AnalyseController, inProgress: Prop<boolean
   );
 }
 
-function renderMainline(nodes: Tree.Node[], currentPath: Tree.Path, style: Style) {
+function renderMainline(nodes: Tree.Node[], currentPath: Tree.Path, variant: VariantKey, style: Style) {
   const res: Array<string | VNode> = [];
   let path: Tree.Path = '';
   nodes.forEach(node => {
-    if (!node.san || !node.uci) return;
+    if (!node.usi) return;
     path += node.id;
-    const content: MaybeVNodes = [
-      node.ply & 1 ? moveView.plyToTurn(node.ply) + ' ' : null,
-      renderSan(node.san, node.uci, style),
-    ];
+    const content: MaybeVNodes = [node.ply.toString(), renderMove(node.usi, node.sfen, variant, style)];
     res.push(
       h(
         'move',
@@ -228,34 +270,31 @@ function renderMainline(nodes: Tree.Node[], currentPath: Tree.Path, style: Style
           attrs: { p: path },
           class: { active: path === currentPath },
         },
-        content
+        content.join(' ')
       )
     );
-    res.push(renderComments(node, style));
+    res.push(renderComments(node));
     res.push(', ');
     if (node.ply % 2 === 0) res.push(h('br'));
   });
   return res;
 }
 
-function renderCurrentNode(node: Tree.Node, style: Style): string {
-  if (!node.san || !node.uci) return 'Initial position';
-  return [moveView.plyToTurn(node.ply), renderSan(node.san, node.uci, style), renderComments(node, style)].join(' ');
+function renderCurrentNode(node: Tree.Node, variant: VariantKey, style: Style): string {
+  return [node.ply, renderMove(node.usi, node.sfen, variant, style), renderComments(node)].join(' ');
 }
 
-function renderComments(node: Tree.Node, style: Style): string {
+function renderComments(node: Tree.Node): string {
   if (!node.comments) return '';
-  return (node.comments || []).map(c => renderComment(c, style)).join('. ');
+  return (node.comments || []).map(c => renderComment(c)).join('. ');
 }
 
-function renderComment(comment: Tree.Comment, style: Style): string {
-  return comment.by === 'lishogi'
-    ? comment.text.replace(/Best move was (.+)\./, (_, san) => 'Best move was ' + renderSan(san, undefined, style))
-    : comment.text;
+function renderComment(comment: Tree.Comment): string {
+  return comment.text;
 }
 
 function renderPlayer(ctrl: AnalyseController, player: Player) {
-  return player.ai ? ctrl.trans('aiNameLevelAiLevel', 'Engine', player.ai) : userHtml(ctrl, player);
+  return player.ai ? engineNameFromCode(player.aiCode, player.ai, ctrl.trans) : userHtml(ctrl, player);
 }
 
 function userHtml(ctrl: AnalyseController, player: Player) {

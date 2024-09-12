@@ -10,10 +10,13 @@ coords {
   position: absolute;
   display: flex;
   pointer-events: none;
-  @include fluid-size('font-size', 8px, 12px);
+  @include fluid-size('font-size', 7px, 11px);
+  body[data-notation='2'] &.ranks,
+  .d-12x12 &.ranks {
+    @include fluid-size('font-size', 6px, 10px);
+  }
   user-select: none;
   color: #fff;
-  text-shadow: 0 1px 2px #000;
   font-weight: bold;
 
   &.ranks {
@@ -25,11 +28,11 @@ coords {
     &.gote {
       flex-flow: column;
     }
-    z-index: 1;
+    z-index: 0;
   }
 
   &.files {
-    top: 0px;
+    top: 0;
     left: 0;
     text-align: left;
     flex-flow: row;
@@ -41,47 +44,126 @@ coords {
     coord {
       padding-left: 4px;
     }
-    z-index: 1;
+    z-index: 0;
   }
 
   coord {
     flex: 1 1 auto;
   }
-
-  /* negate inner coords colors */
-  .is3d .cg-wrap coords coord {
-    color: #fff !important;
-    text-shadow: 0 1px 2px #000 !important;
-  }
-  .is3d .cg-wrap coords.files {
-    bottom: calc(1px - 2.5%);
-    coord {
-      padding-left: 3px;
-    }
-  }
 }
 
 @include coords-colors;
 
-/* handle outer coords */
+/* handle outer/edge coords */
 @include breakpoint($mq-col2-uniboard) {
-  .coords-out coords {
+  .coords-out coords,
+  .coords-edge coords {
     text-shadow: none;
+    text-align: center;
     &.ranks {
-      right: -15px;
       top: 0;
-      width: 12px;
       coord {
         transform: translateY(42%);
       }
     }
+  }
+  .coords-out coords {
+    &.ranks {
+      right: -12px;
+      width: 12px;
+    }
     &.files {
       top: -15px;
-      left: 0;
-      text-align: center;
     }
     coord {
       color: $c-font-page !important;
     }
+  }
+  .coords-edge {
+    $edge-size: calc(1.7vh * var(--board-scale, 1));
+    $edge-size-s: calc(1.7vh * var(--board-scale, 1) - 1px);
+    .main-board {
+      sg-board {
+        border: $edge-size solid transparent;
+        background-origin: border-box;
+      }
+      .sg-hand-wrap {
+        height: calc((100% - #{$edge-size}) / 9 * 7);
+        sg-hand {
+          padding-left: calc(#{$edge-size} / 9);
+          padding-right: calc(#{$edge-size} / 9);
+        }
+        &.hand-bottom sg-hand {
+          padding-bottom: $edge-size;
+        }
+        &.hand-top sg-hand {
+          padding-top: $edge-size;
+        }
+      }
+      &.v-minishogi .sg-hand-wrap {
+        sg-hand {
+          padding: $edge-size calc(#{$edge-size} / 5);
+        }
+      }
+      &.v-kyotoshogi .sg-hand-wrap {
+        sg-hand {
+          padding-left: calc(#{$edge-size} / 5);
+          padding-right: calc(#{$edge-size} / 5);
+        }
+        height: calc((100% - #{$edge-size}) / 5 * 4);
+      }
+    }
+
+    sg-promotion {
+      outline: $edge-size solid #0000003f;
+    }
+    coords {
+      font-size: $edge-size-s;
+      &.ranks {
+        left: 100%;
+        width: $edge-size;
+        coord {
+          transform: translateY(42%);
+        }
+      }
+      &.files {
+        top: unset;
+        bottom: 100%;
+        &.gote {
+          bottom: unset;
+          top: 100%;
+        }
+        height: $edge-size-s;
+        line-height: $edge-size-s;
+      }
+    }
+    body[data-notation='2'] & {
+      coords.ranks {
+        // full width characters
+        font-size: calc(1.4vh * var(--board-scale, 1));
+      }
+    }
+    .board-editor .spare {
+      border-top: $edge-size solid transparent;
+      border-bottom: $edge-size solid transparent;
+      &-bottom {
+        border-right: calc(#{$edge-size} / 9 * 4) solid transparent;
+      }
+      &-top {
+        border-left: calc(#{$edge-size} / 9 * 4) solid transparent;
+      }
+    }
+  }
+}
+
+.d-12x12 coords {
+  coord {
+    flex: 1 1 calc(100% / 12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  &.ranks coord {
+    transform: unset;
   }
 }

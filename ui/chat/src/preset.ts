@@ -1,6 +1,5 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { bind } from './util';
+import { bind } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import { Redraw } from './interfaces';
 
 export interface PresetCtrl {

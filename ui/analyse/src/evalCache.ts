@@ -1,6 +1,5 @@
-import { defined, prop, Prop } from 'common';
+import { Prop, defined, prop } from 'common/common';
 import throttle from 'common/throttle';
-import { assureLishogiUci, assureUsi } from 'shogiops/compat';
 
 export interface EvalCache {
   onCeval(): void;
@@ -11,25 +10,26 @@ export interface EvalCache {
 
 const evalPutMinDepth = 20;
 const evalPutMinNodes = 3e6;
-const evalPutMaxMoves = 10;
+const evalPutMaxMoves = 12;
 
-function qualityCheck(ev): boolean {
-  // below 500k nodes, the eval might come from an imminent threefold repetition
+function qualityCheck(ev: Tree.ClientEval): boolean {
+  // below 500k nodes, the eval might come from an imminent fourfold repetition
   // and should therefore be ignored
+  // todo - review the numbers for yaneuraou
   return ev.nodes > 500000 && (ev.depth >= evalPutMinDepth || ev.nodes > evalPutMinNodes);
 }
 
 // from client eval to server eval
-function toPutData(variant, ev) {
+function toPutData(variant: VariantKey, ev: Tree.ClientEval) {
   const data: any = {
-    fen: ev.fen,
+    sfen: ev.sfen,
     knodes: Math.round(ev.nodes / 1000),
     depth: ev.depth,
     pvs: ev.pvs.map(pv => {
       return {
         cp: pv.cp,
         mate: pv.mate,
-        moves: pv.moves.slice(0, evalPutMaxMoves).map(assureLishogiUci).join(' '),
+        moves: pv.moves.slice(0, evalPutMaxMoves).join(' '),
       };
     }),
   };
@@ -38,14 +38,14 @@ function toPutData(variant, ev) {
 }
 
 // from server eval to client eval
-function toCeval(e) {
+function toCeval(e: Tree.ServerEval) {
   const res: any = {
-    fen: e.fen,
+    sfen: e.sfen,
     nodes: e.knodes * 1000,
     depth: e.depth,
     pvs: e.pvs.map(function (from) {
-      const to: any = {
-        moves: from.moves.split(' ').map(assureUsi),
+      const to: Tree.PvData = {
+        moves: from.moves.split(' '),
       };
       if (defined(from.cp)) to.cp = from.cp;
       else to.mate = from.mate;
@@ -60,27 +60,35 @@ function toCeval(e) {
 }
 
 export function make(opts): EvalCache {
-  const fetchedByFen = {};
+  const fetchedBySfen = {};
   const upgradable = prop(false);
   return {
-    onCeval: throttle(500, function () {
+    onCeval: throttle(1000, () => {
       const node = opts.getNode(),
         ev = node.ceval;
-      if (ev && !ev.cloud && node.fen in fetchedByFen && qualityCheck(ev) && opts.canPut()) {
-        // opts.send('evalPut', toPutData(opts.variant, ev));
-        console.log('Disabled posting eval to the server for now.', toPutData(opts.variant, ev));
+      const fetched = fetchedBySfen[node.sfen];
+      if (
+        ev &&
+        !ev.cloud &&
+        ev.enteringKingRule &&
+        node.sfen in fetchedBySfen &&
+        (!fetched || fetched.depth < ev.depth) &&
+        qualityCheck(ev) &&
+        opts.canPut()
+      ) {
+        opts.send('evalPut', toPutData(opts.variant, ev));
       }
     }),
     fetch(path: Tree.Path, multiPv: number): void {
       const node = opts.getNode();
       if ((node.ceval && node.ceval.cloud) || !opts.canGet()) return;
-      const serverEval = fetchedByFen[node.fen];
+      const serverEval = fetchedBySfen[node.sfen];
       if (serverEval) return opts.receive(toCeval(serverEval), path);
-      else if (node.fen in fetchedByFen) return;
+      else if (node.sfen in fetchedBySfen) return;
       // waiting for response
-      else fetchedByFen[node.fen] = undefined; // mark as waiting
+      else fetchedBySfen[node.sfen] = undefined; // mark as waiting
       const obj: any = {
-        fen: node.fen,
+        sfen: node.sfen,
         path,
       };
       if (opts.variant !== 'standard') obj.variant = opts.variant;
@@ -89,7 +97,7 @@ export function make(opts): EvalCache {
       opts.send('evalGet', obj);
     },
     onCloudEval(serverEval) {
-      fetchedByFen[serverEval.fen] = serverEval;
+      fetchedBySfen[serverEval.sfen] = serverEval;
       opts.receive(toCeval(serverEval), serverEval.path);
     },
     upgradable,

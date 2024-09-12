@@ -1,44 +1,42 @@
 import LobbyController from './ctrl';
-import { Hook } from './interfaces';
+import { Hook, Tab } from './interfaces';
 
-function ratingOrder(a, b) {
-  return (a.rating || 0) > (b.rating || 0) ? -1 : 1;
-}
+export const tabs: Tab[] = ['real_time', 'presets'];
 
-function timeOrder(a, b) {
-  return a.t < b.t ? -1 : 1;
-}
+const ratingOrder =
+  (reverse: boolean) =>
+  (a: Hook, b: Hook): number =>
+    ((a.rating || 0) > (b.rating || 0) ? -1 : 1) * (reverse ? -1 : 1);
+
+const timeOrder =
+  (reverse: boolean) =>
+  (a: Hook, b: Hook): number =>
+    (a.t > b.t ? -1 : 1) * (reverse ? -1 : 1);
 
 export function sort(ctrl: LobbyController, hooks: Hook[]) {
-  hooks.sort(ctrl.sort === 'time' ? timeOrder : ratingOrder);
+  const s = ctrl.sort;
+  hooks.sort(s.startsWith('time') ? timeOrder(s !== 'time') : ratingOrder(s !== 'rating'));
 }
 
-export function init(hook: Hook) {
-  hook.action = hook.sri === window.lishogi.sri ? 'cancel' : 'join';
-  hook.variant = hook.variant || 'standard';
-}
-
-export function initAll(ctrl: LobbyController) {
-  ctrl.data.hooks.forEach(init);
-}
-
-export function add(ctrl: LobbyController, hook) {
-  init(hook);
+export function add(ctrl: LobbyController, hook: Hook) {
   ctrl.data.hooks.push(hook);
 }
 export function setAll(ctrl: LobbyController, hooks: Hook[]) {
   ctrl.data.hooks = hooks;
-  initAll(ctrl);
 }
-export function remove(ctrl: LobbyController, id) {
+export function remove(ctrl: LobbyController, id: string) {
   ctrl.data.hooks = ctrl.data.hooks.filter(h => h.id !== id);
   ctrl.stepHooks.forEach(h => {
     if (h.id === id) h.disabled = true;
   });
+  if (ctrl.currentPresetId && !ctrl.data.hooks.some(h => h.sri === window.lishogi.sri))
+    ctrl.currentPresetId = undefined;
 }
-export function syncIds(ctrl: LobbyController, ids) {
+export function syncIds(ctrl: LobbyController, ids: string[]) {
   ctrl.data.hooks = ctrl.data.hooks.filter(h => ids.includes(h.id));
+  if (ctrl.currentPresetId && !ctrl.data.hooks.some(h => h.sri === window.lishogi.sri))
+    ctrl.currentPresetId = undefined;
 }
-export function find(ctrl: LobbyController, id) {
+export function find(ctrl: LobbyController, id: string) {
   return ctrl.data.hooks.find(h => h.id === id);
 }

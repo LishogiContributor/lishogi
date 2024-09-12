@@ -4,7 +4,7 @@ import org.joda.time.DateTime
 import reactivemongo.api.ReadPreference
 import scala.concurrent.duration._
 
-import shogi.variant.{ FromPosition, Standard, Variant }
+import shogi.variant.Variant
 import lila.db.dsl._
 import Schedule.{ Freq, Speed }
 
@@ -32,28 +32,30 @@ case class FreqWinners(
 }
 
 case class AllWinners(
-    hyperbullet: FreqWinners,
+    // hyperbullet: FreqWinners,
     bullet: FreqWinners,
     superblitz: FreqWinners,
     blitz: FreqWinners,
     hyperrapid: FreqWinners,
     rapid: FreqWinners,
+    classical: FreqWinners,
     elite: List[Winner],
-    marathon: List[Winner],
+    // marathon: List[Winner],
     variants: Map[String, FreqWinners]
 ) {
 
   lazy val top: List[Winner] = List(
-    List(hyperbullet, bullet, superblitz, blitz, hyperrapid, rapid).flatMap(_.top),
-    List(elite.headOption, marathon.headOption).flatten,
+    List(bullet, superblitz, blitz, hyperrapid, rapid, classical).flatMap(_.top),
+    List(elite.headOption).flatten,
     WinnersApi.variants.flatMap { v =>
       variants get v.key flatMap (_.top)
     }
   ).flatten
 
   def userIds =
-    List(hyperbullet, bullet, superblitz, blitz, hyperrapid, rapid).flatMap(_.userIds) :::
-      elite.map(_.userId) ::: marathon.map(_.userId) :::
+    List(bullet, superblitz, blitz, hyperrapid, rapid, classical).flatMap(_.userIds) :::
+      // elite.map(_.userId) ::: marathon.map(_.userId) :::
+      elite.map(_.userId) :::
       variants.values.toList.flatMap(_.userIds)
 }
 
@@ -94,11 +96,11 @@ final class WinnersApi(
   private def fetchAll: Fu[AllWinners] =
     for {
       yearlies  <- fetchLastFreq(Freq.Yearly, DateTime.now.minusYears(1))
-      monthlies <- fetchLastFreq(Freq.Monthly, DateTime.now.minusMonths(2))
-      weeklies  <- fetchLastFreq(Freq.Weekly, DateTime.now.minusWeeks(2))
-      dailies   <- fetchLastFreq(Freq.Daily, DateTime.now.minusDays(2))
+      monthlies <- fetchLastFreq(Freq.Monthly, DateTime.now.minusMonths(3))
+      weeklies  <- fetchLastFreq(Freq.Weekly, DateTime.now.minusWeeks(3))
+      dailies   <- fetchLastFreq(Freq.Daily, DateTime.now.minusDays(3))
       elites    <- fetchLastFreq(Freq.Weekend, DateTime.now.minusWeeks(3))
-      marathons <- fetchLastFreq(Freq.Marathon, DateTime.now.minusMonths(13))
+      // marathons <- fetchLastFreq(Freq.Marathon, DateTime.now.minusMonths(13))
     } yield {
       def standardFreqWinners(speed: Speed): FreqWinners =
         FreqWinners(
@@ -108,14 +110,15 @@ final class WinnersApi(
           daily = firstStandardWinner(dailies, speed)
         )
       AllWinners(
-        hyperbullet = standardFreqWinners(Speed.HyperBullet),
+        // hyperbullet = standardFreqWinners(Speed.HyperBullet),
         bullet = standardFreqWinners(Speed.Bullet),
         superblitz = standardFreqWinners(Speed.SuperBlitz),
         blitz = standardFreqWinners(Speed.Blitz),
         hyperrapid = standardFreqWinners(Speed.HyperRapid),
         rapid = standardFreqWinners(Speed.Rapid),
+        classical = standardFreqWinners(Speed.Classical),
         elite = elites flatMap (_.winner) take 4,
-        marathon = marathons flatMap (_.winner) take 4,
+        // marathon = marathons flatMap (_.winner) take 4,
         variants = WinnersApi.variants.view.map { v =>
           v.key -> FreqWinners(
             yearly = firstVariantWinner(yearlies, v),
@@ -138,16 +141,13 @@ final class WinnersApi(
   def all: Fu[AllWinners] = allCache.get {}
 
   // because we read on secondaries, delay cache clear
-  def clearCache(tour: Tournament) =
+  def clearCache(tour: Tournament): Unit =
     if (tour.schedule.exists(_.freq.isDailyOrBetter))
-      scheduler.scheduleOnce(5.seconds) { allCache.invalidate {} }
+      scheduler.scheduleOnce(5.seconds) { allCache.invalidate {}.unit }.unit
 
 }
 
 object WinnersApi {
 
-  val variants = Variant.all.filter {
-    case Standard | FromPosition => false
-    case _                       => true
-  }
+  val variants = Variant.all.filterNot(_.standard)
 }

@@ -5,13 +5,13 @@ import play.api.libs.json.Json
 import scala.concurrent.duration._
 import scala.concurrent.Promise
 
-import lila.common.{ Bus, LightUser }
+import lila.common.Bus
 import lila.game.Game
 import lila.hub.Trouper
 
 final private[tv] class TvTrouper(
     renderer: lila.hub.actors.Renderer,
-    lightUser: LightUser.GetterSync,
+    lightUserApi: lila.user.LightUserApi,
     recentTvGames: lila.round.RecentTvGames,
     gameProxyRepo: lila.round.GameProxyRepo,
     rematches: lila.game.Rematches
@@ -46,20 +46,24 @@ final private[tv] class TvTrouper(
     case GetChampions(promise) => promise success Tv.Champions(channelChampions)
 
     case lila.game.actorApi.StartGame(g) =>
-      if (g.hasClock) {
-        val candidate = Tv.toCandidate(lightUser)(g)
+      if (g.hasClock)
         channelTroupers collect {
-          case (chan, trouper) if chan filter candidate => trouper
+          case (chan, trouper) if chan.filter(g) => trouper
         } foreach (_ addCandidate g)
-      }
 
     case s @ TvTrouper.Select => channelTroupers.foreach(_._2 ! s)
 
     case Selected(channel, game) =>
       import lila.socket.Socket.makeMessage
-      val player = game.firstPlayer
-      val user   = player.userId flatMap lightUser
-      (user |@| player.rating) apply { case (u, r) =>
+      import cats.implicits._
+      val player = game.players.sortBy { p =>
+        if (!p.isHuman) {
+          if (channel.key == "computer") (Int.MaxValue / 2) + ~p.rating
+          else Int.MinValue
+        } else ~p.rating
+      }.lastOption | game.firstPlayer
+      val user = player.userId flatMap lightUserApi.sync
+      (user, player.rating) mapN { (u, r) =>
         channelChampions += (channel -> Tv.Champion(u, r, game.id))
       }
       recentTvGames.put(game)
@@ -76,7 +80,7 @@ final private[tv] class TvTrouper(
         }
       )
       Bus.publish(lila.hub.actorApi.tv.TvSelect(game.id, game.speed, data), "tvSelect")
-      if (channel == Tv.Channel.Best) {
+      if (channel == Tv.Channel.Standard) {
         implicit def timeout = makeTimeout(100 millis)
         actorAsk(renderer.actor, actorApi.RenderFeaturedJs(game)) foreach { case html: String =>
           val event = lila.hub.actorApi.game.ChangeFeatured(

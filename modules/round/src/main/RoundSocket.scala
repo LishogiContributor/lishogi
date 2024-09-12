@@ -7,8 +7,8 @@ import scala.concurrent.ExecutionContext
 
 import actorApi._
 import actorApi.round._
-import shogi.format.Uci
-import shogi.{ Centis, Color, Gote, MoveMetrics, Sente, Speed }
+import shogi.format.usi.{ UciToUsi, Usi }
+import shogi.{ Centis, Color, Gote, LagMetrics, Sente, Speed }
 import lila.chat.{ BusChan, Chat }
 import lila.common.{ Bus, IpAddress, Lilakka }
 import lila.game.Game.{ FullId, PlayerId }
@@ -88,14 +88,14 @@ final class RoundSocket(
       }
       duct
     },
-    initialCapacity = 65536
+    initialCapacity = 8192
   )
 
   private def tellRound(gameId: Game.Id, msg: Any): Unit = rounds.tell(gameId.value, msg)
 
   private lazy val roundHandler: Handler = {
-    case Protocol.In.PlayerMove(fullId, uci, blur, lag) if !stopping =>
-      tellRound(fullId.gameId, HumanPlay(fullId.playerId, uci, blur, lag, none))
+    case Protocol.In.PlayerMove(fullId, usi, blur, lag) if !stopping =>
+      tellRound(fullId.gameId, HumanPlay(fullId.playerId, usi, blur, lag, none))
     case Protocol.In.PlayerDo(id, tpe) if !stopping =>
       tpe match {
         case "moretime"     => tellRound(id.gameId, Moretime(id.playerId))
@@ -105,6 +105,10 @@ final class RoundSocket(
         case "takeback-no"  => tellRound(id.gameId, TakebackNo(id.playerId))
         case "draw-yes"     => tellRound(id.gameId, DrawYes(id.playerId))
         case "draw-no"      => tellRound(id.gameId, DrawNo(id.playerId))
+        case "pause-yes"    => tellRound(id.gameId, PauseYes(id.playerId))
+        case "pause-no"     => tellRound(id.gameId, PauseNo(id.playerId))
+        case "resume-yes"   => tellRound(id.gameId, ResumeYes(id.playerId))
+        case "resume-no"    => tellRound(id.gameId, ResumeNo(id.playerId))
         case "draw-claim"   => tellRound(id.gameId, DrawClaim(id.playerId))
         case "resign"       => tellRound(id.gameId, Resign(id.playerId.value))
         case "resign-force" => tellRound(id.gameId, ResignForce(id.playerId))
@@ -115,13 +119,13 @@ final class RoundSocket(
       }
     case Protocol.In.Flag(gameId, color, fromPlayerId) => tellRound(gameId, ClientFlag(color, fromPlayerId))
     case Protocol.In.PlayerChatSay(id, Right(color), msg) =>
-      messenger.owner(id, color, msg)
+      messenger.owner(id, color, msg).unit
     case Protocol.In.PlayerChatSay(id, Left(userId), msg) =>
-      messenger.owner(id, userId, msg)
+      messenger.owner(id, userId, msg).unit
     case Protocol.In.WatcherChatSay(id, userId, msg) =>
-      messenger.watcher(id, userId, msg)
+      messenger.watcher(id, userId, msg).unit
     case RP.In.ChatTimeout(roomId, modId, suspect, reason, text) =>
-      messenger.timeout(Chat.Id(s"$roomId/w"), modId, suspect, reason, text)
+      messenger.timeout(Chat.Id(s"$roomId/w"), modId, suspect, reason, text).unit
     case Protocol.In.Berserk(gameId, userId) => tournamentActor ! Berserk(gameId.value, userId)
     case Protocol.In.PlayerOnlines(onlines) =>
       onlines foreach {
@@ -199,7 +203,7 @@ final class RoundSocket(
     rounds.tellAll(RoundDuct.Tick)
   }
   system.scheduler.scheduleWithFixedDelay(60 seconds, 60 seconds) { () =>
-    lila.mon.round.ductCount.update(rounds.size)
+    lila.mon.round.ductCount.update(rounds.size).unit
   }
 
   private val terminationDelay = new TerminationDelay(system.scheduler, 1 minute, finishRound)
@@ -220,10 +224,9 @@ object RoundSocket {
         case _               => 1
       }
     } / {
-      import shogi.variant._
-      (pov.game.shogi.board.materialImbalance, pov.game.variant) match {
-        case (i, _) if (pov.color.sente && i <= -4) || (pov.color.gote && i >= 4) => 3
-        case _                                                                    => 1
+      pov.game.shogi.situation.materialImbalance match {
+        case i if (pov.color.sente && i <= -4) || (pov.color.gote && i >= 4) => 3
+        case _                                                               => 1
       }
     } / {
       if (pov.player.hasUser) 1 else 2
@@ -233,9 +236,9 @@ object RoundSocket {
 
     object In {
 
-      case class PlayerOnlines(onlines: Iterable[(Game.Id, Option[RoomCrowd])])        extends P.In
-      case class PlayerDo(fullId: FullId, tpe: String)                                 extends P.In
-      case class PlayerMove(fullId: FullId, uci: Uci, blur: Boolean, lag: MoveMetrics) extends P.In
+      case class PlayerOnlines(onlines: Iterable[(Game.Id, Option[RoomCrowd])])       extends P.In
+      case class PlayerDo(fullId: FullId, tpe: String)                                extends P.In
+      case class PlayerMove(fullId: FullId, usi: Usi, blur: Boolean, lag: LagMetrics) extends P.In
       case class PlayerChatSay(gameId: Game.Id, userIdOrColor: Either[User.ID, Color], msg: String)
           extends P.In
       case class WatcherChatSay(gameId: Game.Id, userId: User.ID, msg: String)                    extends P.In
@@ -267,9 +270,9 @@ object RoundSocket {
               } yield PlayerDo(FullId(fullId), tpe)
             }
           case "r/move" =>
-            raw.get(5) { case Array(fullId, uciS, blurS, lagS, mtS) =>
-              Uci(uciS) map { uci =>
-                PlayerMove(FullId(fullId), uci, P.In.boolean(blurS), MoveMetrics(centis(lagS), centis(mtS)))
+            raw.get(5) { case Array(fullId, usiS, blurS, lagS, mtS) =>
+              Usi(usiS).orElse(UciToUsi(usiS)) map { usi =>
+                PlayerMove(FullId(fullId), usi, P.In.boolean(blurS), LagMetrics(centis(lagS), centis(mtS)))
               }
             }
           case "chat/say" =>
@@ -361,16 +364,18 @@ object RoundSocket {
     private[this] val terminations = new ConcurrentHashMap[String, Cancellable](65536)
 
     def schedule(gameId: Game.Id): Unit =
-      terminations.compute(
-        gameId.value,
-        (id, canc) => {
-          Option(canc).foreach(_.cancel())
-          scheduler.scheduleOnce(duration) {
-            terminations remove id
-            terminate(Game.Id(id))
+      terminations
+        .compute(
+          gameId.value,
+          (id, canc) => {
+            Option(canc).foreach(_.cancel())
+            scheduler.scheduleOnce(duration) {
+              terminations remove id
+              terminate(Game.Id(id))
+            }
           }
-        }
-      )
+        )
+        .unit
 
     def cancel(gameId: Game.Id): Unit =
       Option(terminations remove gameId.value).foreach(_.cancel())

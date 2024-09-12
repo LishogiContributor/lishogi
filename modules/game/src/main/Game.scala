@@ -1,21 +1,10 @@
 package lila.game
 
 import shogi.Color.{ Gote, Sente }
-import shogi.format.{ FEN, Uci }
-import shogi.opening.{ FullOpening, FullOpeningDB }
-import shogi.variant.{ FromPosition, Standard, Variant }
-import shogi.{
-  Centis,
-  CheckCount,
-  Clock,
-  Color,
-  Mode,
-  MoveOrDrop,
-  Speed,
-  Status,
-  Game => ShogiGame,
-  StartingPosition
-}
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.Usi
+import shogi.variant.Variant
+import shogi.{ Centis, Clock, Color, Game => ShogiGame, Handicap, Mode, Speed, Status }
 import lila.common.Sequence
 import lila.db.ByteArray
 import lila.rating.PerfType
@@ -32,6 +21,8 @@ case class Game(
     status: Status,
     daysPerTurn: Option[Int],
     binaryMoveTimes: Option[ByteArray] = None,
+    pausedSeconds: Option[Int] = None,
+    sealedUsi: Option[Usi] = None,
     mode: Mode = Mode.default,
     bookmarks: Int = 0,
     createdAt: DateTime = DateTime.now,
@@ -41,12 +32,15 @@ case class Game(
   lazy val clockHistory = shogi.clock flatMap loadClockHistory
 
   def situation = shogi.situation
-  def board     = shogi.situation.board
-  def history   = shogi.situation.board.history
-  def variant   = shogi.situation.board.variant
-  def turns     = shogi.turns
+  def board     = shogi.board
+  def hands     = shogi.hands
+  def history   = shogi.history
+  def variant   = shogi.variant
+  def plies     = shogi.plies
   def clock     = shogi.clock
-  def pgnMoves  = shogi.pgnMoves
+  def usis      = shogi.usis
+
+  def initialSfen = history.initialSfen
 
   val players = List(sentePlayer, gotePlayer)
 
@@ -61,7 +55,7 @@ case class Game(
   def player(c: Color.type => Color): Player = player(c(Color))
 
   def isPlayerFullId(player: Player, fullId: String): Boolean =
-    (fullId.size == Game.fullIdSize) && player.id == (fullId drop Game.gameIdSize)
+    (fullId.sizeIs == Game.fullIdSize) && player.id == (fullId drop Game.gameIdSize)
 
   def player: Player = player(turnColor)
 
@@ -72,17 +66,17 @@ case class Game(
 
   def opponent(c: Color): Player = player(!c)
 
-  lazy val firstColor = Color(sentePlayer before gotePlayer)
+  lazy val firstColor = Color.fromSente(sentePlayer before gotePlayer)
   def firstPlayer     = player(firstColor)
   def secondPlayer    = player(!firstColor)
 
-  def turnColor = shogi.player
+  def turnColor = shogi.color
 
   def turnOf(p: Player): Boolean = p == player
   def turnOf(c: Color): Boolean  = c == turnColor
   def turnOf(u: User): Boolean   = player(u) ?? turnOf
 
-  def playedTurns = turns - shogi.startedAtTurn
+  def playedPlies = plies - shogi.startedAtPly
 
   def flagged = (status == Status.Outoftime).option(turnColor)
 
@@ -91,29 +85,28 @@ case class Game(
 
   def fullIdOf(color: Color): String = s"$id${player(color).id}"
 
-  def isHandicap(initialFen: Option[FEN]): Boolean =
-    if (variant == Standard) false else StartingPosition isFENHandicap initialFen
-
-  def tournamentId = metadata.tournamentId
-  def simulId      = metadata.simulId
-  def swissId      = metadata.swissId
+  def tournamentId  = metadata.tournamentId
+  def simulId       = metadata.simulId
+  def postGameStudy = metadata.postGameStudy
 
   def isTournament = tournamentId.isDefined
   def isSimul      = simulId.isDefined
-  def isSwiss      = swissId.isDefined
-  def isMandatory  = isTournament || isSimul || isSwiss
+  def isMandatory  = isTournament || isSimul
   def isClassical  = perfType contains Classical
   def nonMandatory = !isMandatory
 
   def hasChat = !isTournament && !isSimul && nonAi
 
+  // Only for defined handicaps in shogi/Handicap.scala
+  lazy val isHandicap: Boolean = initialSfen.fold(false)(sfen => Handicap.isHandicap(sfen, variant))
+
   // we can't rely on the clock,
   // because if moretime was given,
   // elapsed time is no longer representing the game duration
   def durationSeconds: Option[Int] =
-    (movedAt.getSeconds - createdAt.getSeconds) match {
+    (movedAt.getSeconds - createdAt.getSeconds - ~pausedSeconds) match {
       case seconds if seconds > 60 * 60 * 12 => none // no way it lasted more than 12 hours, come on.
-      case seconds                           => seconds.toInt.some
+      case seconds                           => (seconds.toInt atLeast 0).some
     }
 
   private def everyOther[A](l: List[A]): List[A] =
@@ -126,44 +119,50 @@ case class Game(
     for {
       clk <- clock
       inc = clk.incrementOf(color)
+      byo = clk.byoyomiOf(color)
       history <- clockHistory
       clocks = history(color)
     } yield Centis(0) :: {
       val pairs = clocks.iterator zip clocks.iterator.drop(1)
 
       // We need to determine if this color's last clock had inc applied.
-      // if finished and history.size == playedTurns then game was ended
+      // if finished and history.size == playedPlies then game was ended
       // by a players move, such as with mate or autodraw. In this case,
       // the last move of the game, and the only one without inc, is the
       // last entry of the clock history for !turnColor.
       //
-      // On the other hand, if history.size is more than playedTurns,
+      // On the other hand, if history.size is more than playedPlies,
       // then the game ended during a players turn by async event, and
       // the last recorded time is in the history for turnColor.
-      val noLastInc = finished && (history.size <= playedTurns) == (color != turnColor)
+      val noLastInc = finished && (history.size <= playedPlies) == (color != turnColor)
 
-      val byoStart = {
-        if (clk.players(color).startsAtZero)
-          0
-        else (history.turnByoyomiStarted(color) - 1)
-      }
-
-      val outOfTimeByo = (status == Status.Outoftime) && (color == turnColor)
+      // Also if we timed out over a period or periods, we need to
+      // multiply byoyomi by number of periods entered that turn and add
+      // previous remaining time, which could either be byoyomi or
+      // remaining time
+      val byoyomiStart = history.firstEnteredPeriod(color)
+      val byoyomiTimeout =
+        byoyomiStart.isDefined && (status == Status.Outoftime) && (color == turnColor)
 
       pairs.zipWithIndex.map { case ((first, second), index) =>
         {
-          val d = first - second
-          if (((index + 1) >= byoStart) && !pairs.hasNext && outOfTimeByo)
-            clk.byoyomi // If we time out over a period(s) this doesn't work
-          else if ((index + 1) >= byoStart) second
-          else if (pairs.hasNext || !noLastInc) d + inc
-          else d
+          val turn         = index + 2 + shogi.startedAtPly / 2
+          val afterByoyomi = byoyomiStart ?? (_ <= turn)
+
+          // after byoyomi we store movetimes directly, not remaining time
+          val mt   = if (afterByoyomi) second else first - second
+          val cInc = (!afterByoyomi && (pairs.hasNext || !noLastInc)) ?? inc
+
+          if (!pairs.hasNext && byoyomiTimeout) {
+            val prevTurnByoyomi = byoyomiStart ?? (_ < turn)
+            (if (prevTurnByoyomi) byo else first) + byo * history.countSpentPeriods(color, turn)
+          } else mt + cInc
         } nonNeg
       } toList
     }
   } orElse binaryMoveTimes.map { binary =>
     // TODO: make movetime.read return List after writes are disabled.
-    val base = BinaryFormat.moveTime.read(binary, playedTurns)
+    val base = BinaryFormat.moveTime.read(binary, playedPlies)
     val mts  = if (color == startColor) base else base.drop(1)
     everyOther(mts.toList)
   }
@@ -174,86 +173,116 @@ case class Game(
       b <- moveTimes(!startColor)
     } yield Sequence.interleave(a, b)
 
-  def bothClockStates: Option[Vector[Centis]] = {
-    (clock, clockHistory) match {
-      case (Some(c), Some(ch)) => Some(ch.bothClockStates(startColor, c.byoyomi))
-      case (_, Some(ch))       => Some(ch.bothClockStates(startColor, Centis(0)))
-      case _                   => None
-    }
-  }
+  def bothClockStates: Option[Vector[Centis]] =
+    clockHistory.map(_.bothClockStates(startColor, clock ?? (_.byoyomi)))
 
-  def pgnMoves(color: Color): PgnMoves = {
+  def usis(color: Color): Usis = {
     val pivot = if (color == startColor) 0 else 1
-    pgnMoves.zipWithIndex.collect {
+    usis.zipWithIndex.collect {
       case (e, i) if (i % 2) == pivot => e
     }
   }
 
-  // apply a move
-  def update(
-      game: ShogiGame, // new shogi position
-      moveOrDrop: MoveOrDrop,
-      blur: Boolean = false
+  def resume =
+    if (!paused) this
+    else {
+      val shogiAfterSealedUsi = sealedUsi.flatMap(u => shogi(u).toOption)
+      val newShogi            = shogiAfterSealedUsi.getOrElse(shogi)
+      val pSeconds            = (nowSeconds - movedAt.getSeconds).toInt atLeast 0
+      val resumed = copy(
+        // clock was already updated, make sure proper color is set
+        shogi = newShogi.copy(clock = clock.map(_.copy(color = newShogi.situation.color).start)),
+        status = Status.Started,
+        sealedUsi = none,
+        pausedSeconds = pausedSeconds.map(_ + pSeconds).orElse(pSeconds.some),
+        movedAt = DateTime.now
+      )
+
+      if (shogiAfterSealedUsi.isDefined) resumed
+      else
+        resumed.copy(
+          binaryMoveTimes = binaryMoveTimes.map { binary =>
+            val moveTimes = BinaryFormat.moveTime.read(binary, playedPlies)
+            BinaryFormat.moveTime.write(moveTimes)
+          },
+          loadClockHistory = _ =>
+            clockHistory.map { ch =>
+              (ch.update(newShogi.color, _.dropRight(1)))
+            }
+        )
+    }
+
+  def pauseAndSealUsi(
+      usi: Usi,
+      newShogi: ShogiGame, // new shogi position
+      blur: Boolean
+  ) =
+    applyGame(newShogi, blur, true).map { g =>
+      g.copy(
+        sentePlayer = g.sentePlayer.removePauseOffer,
+        gotePlayer = g.gotePlayer.removePauseOffer,
+        shogi = shogi.copy(clock = newShogi.clock.map(_.stop)), // use old shogi position but new clock
+        sealedUsi = usi.some,
+        status = Status.Paused
+      )
+    }
+
+  // after making a move
+  def applyGame(
+      newShogi: ShogiGame, // new shogi position
+      blur: Boolean,
+      reload: Boolean = false
   ): Progress = {
     def copyPlayer(player: Player) =
-      if (blur && moveOrDrop.fold(_.color, _.color) == player.color)
-        player.copy(
-          blurs = player.blurs.add(playerMoves(player.color))
-        )
+      if (blur && turnColor == player.color)
+        player.addBlurs(playerMoves(player.color))
       else player
 
     // This must be computed eagerly
     // because it depends on the current time
     val newClockHistory = for {
-      clk <- game.clock
+      clk <- newShogi.clock
       ch  <- clockHistory
-    } yield ch.record(turnColor, clk).validateStart(clk)
+    } yield ch
+      .record(turnColor, clk, shogi.fullTurnNumber)
 
     val updated = copy(
       sentePlayer = copyPlayer(sentePlayer),
       gotePlayer = copyPlayer(gotePlayer),
-      shogi = game,
-      binaryMoveTimes = (!isPgnImport && !shogi.clock.isDefined).option {
+      shogi = newShogi,
+      binaryMoveTimes = (!isNotationImport && !shogi.clock.isDefined).option {
         BinaryFormat.moveTime.write {
           binaryMoveTimes.?? { t =>
-            BinaryFormat.moveTime.read(t, playedTurns)
+            BinaryFormat.moveTime.read(t, playedPlies)
           } :+ Centis(nowCentis - movedAt.getCentis).nonNeg
         }
       },
       loadClockHistory = _ => newClockHistory,
-      status = game.situation.status | status,
+      status = newShogi.situation.status | status,
       movedAt = DateTime.now
     )
 
-    val state = Event.State(
-      color = game.situation.color,
-      turns = game.turns,
-      status = (status != updated.status) option updated.status,
-      winner = game.situation.winner,
-      senteOffersDraw = sentePlayer.isOfferingDraw,
-      goteOffersDraw = gotePlayer.isOfferingDraw
-    )
-
-    val clockEvent = updated.shogi.clock map Event.Clock.apply orElse {
-      updated.playableCorrespondenceClock map Event.CorrespondenceClock.apply
+    val event = newShogi.usis.lastOption.ifFalse(reload).fold[Event](Event.Reload) { usi =>
+      Event.UsiEvent(
+        usi = usi,
+        situation = newShogi.situation,
+        state = Event.State(
+          color = newShogi.situation.color,
+          plies = newShogi.plies,
+          status = (status != updated.status) option updated.status,
+          winner = newShogi.situation.winner
+        ),
+        clock = updated.shogi.clock map Event.Clock.apply orElse {
+          updated.playableCorrespondenceClock map Event.CorrespondenceClock.apply
+        }
+      )
     }
 
-    val events = List(moveOrDrop.fold(
-      Event.Move(_, game.situation, state, clockEvent, updated.board.crazyData),
-      Event.Drop(_, game.situation, state, clockEvent, updated.board.crazyData)
-    ))
-    
-    Progress(this, updated, events)
+    Progress(this, updated, List(event))
   }
 
-  def lastMoveKeys: Option[String] = {
-    history.lastMove map {
-      case Uci.Drop(target, pos) => s"${target.forsyth}*$pos" // changed
-      case m: Uci.Move           => m.keys
-    }
-  }
-
-  def pocketsKeys: Option[String] = board.crazyData.map { data => data.pockets.keys }
+  def lastUsiStr: Option[String] =
+    history.lastUsi map (_.usi)
 
   def updatePlayer(color: Color, f: Player => Player) =
     color.fold(
@@ -272,33 +301,13 @@ case class Game(
     else
       copy(
         status = Status.Started,
-        mode = Mode(mode.rated && userIds.distinct.size == 2)
+        mode = Mode(mode.rated && userIds.distinct.sizeIs == 2)
       )
-
-  def startClock =
-    clock map { c =>
-      start.withClock(c.start)
-    }
-
-  def moveToNextPeriod = {
-    clock map { c =>
-      {
-        clockHistory match {
-          case Some(ch) =>
-            start.withClockAndHistory(
-              c.nextPeriod(turnColor),
-              ch.enteredNewPeriod(turnColor, shogi.fullMoveNumber)
-            )
-          case _ => start.withClock(c.nextPeriod(turnColor))
-        }
-      }
-    }
-  }
 
   def correspondenceClock: Option[CorrespondenceClock] =
     daysPerTurn map { days =>
       val increment   = days * 24 * 60 * 60
-      val secondsLeft = (movedAt.getSeconds + increment - nowSeconds).toInt max 0
+      val secondsLeft = if (paused) increment else (movedAt.getSeconds + increment - nowSeconds).toInt max 0
       CorrespondenceClock(
         increment = increment,
         senteTime = turnColor.fold(secondsLeft, increment).toFloat,
@@ -316,6 +325,10 @@ case class Game(
 
   def started = status >= Status.Started
 
+  def prePaused = players.forall(_.isOfferingPause)
+
+  def paused = status == Status.Paused
+
   def notStarted = !started
 
   def aborted = status == Status.Aborted
@@ -324,9 +337,9 @@ case class Game(
 
   def abort = copy(status = Status.Aborted)
 
-  def playable = status < Status.Aborted && !imported
+  def playable = status < Status.Aborted && !imported && !paused
 
-  def playableEvenImported = status < Status.Aborted
+  def playableEvenPaused = status < Status.Aborted && !imported
 
   def playableBy(p: Player): Boolean = playable && turnOf(p)
 
@@ -338,15 +351,19 @@ case class Game(
 
   def alarmable = hasCorrespondenceClock && playable && nonAi
 
-  def continuable =
-    status != Status.Mate && status != Status.Stalemate && status != Status.Impasse && status != Status.PerpetualCheck // todo
-
-  def aiLevel: Option[Int] = players find (_.isAi) flatMap (_.aiLevel)
+  def aiPlayer: Option[Player]       = players find (_.isAi)
+  def aiEngine: Option[EngineConfig] = aiPlayer flatMap (_.engineConfig)
+  def aiLevel: Option[Int]           = aiEngine map (_.level)
 
   def hasAi: Boolean = players.exists(_.isAi)
   def nonAi          = !hasAi
 
-  def aiPov: Option[Pov] = players.find(_.isAi).map(_.color) map pov
+  // Set only after July 2024
+  def hasBot: Boolean = players.exists(_.isBot)
+
+  def hasHuman: Boolean = players.exists(_.isHuman)
+
+  def aiPov: Option[Pov] = aiPlayer.map(_.color) map pov
 
   def mapPlayers(f: Player => Player) =
     copy(
@@ -354,22 +371,31 @@ case class Game(
       gotePlayer = f(gotePlayer)
     )
 
-  def playerCanOfferDraw(color: Color) = false
-  //started && playable &&
-  //  turns >= 8 &&
-  //  shogi.situation.impasse &&
-  //  !player(color).isOfferingDraw &&
-  //  !opponent(color).isAi &&
-  //  !playerHasOfferedDraw(color)
+  def playerCanOfferDraw(color: Color) =
+    Game.drawableVariants.contains(variant) &&
+      started && playable &&
+      plies >= 2 &&
+      !player(color).isOfferingDraw &&
+      !opponent(color).isAi &&
+      !playerHasOfferedDraw(color)
 
   def playerHasOfferedDraw(color: Color) =
-    player(color).lastDrawOffer ?? (_ >= turns - 20)
+    player(color).lastDrawOffer ?? (_ >= plies - 20)
+
+  def playerCanOfferPause(color: Color) =
+    Game.pausableVariants.contains(variant) &&
+      started && playable && nonAi &&
+      plies >= 20 && players.forall(_.hasUser) &&
+      !player(color).isOfferingPause &&
+      clock.exists(c =>
+        c.config.limitSeconds >= 60 * 15 || c.config.byoyomiSeconds >= 30
+      ) // only real time - for now
 
   def playerCouldRematch =
     finishedOrAborted &&
       nonMandatory &&
-      !boosted && ! {
-        hasAi && variant == FromPosition && clock.exists(_.config.limitSeconds < 60)
+      !boosted && {
+        nonAi || initialSfen.isEmpty || !(clock.exists(_.config.limitSeconds < 60))
       }
 
   def playerCanProposeTakeback(color: Color) =
@@ -378,16 +404,16 @@ case class Game(
       !player(color).isProposingTakeback &&
       !opponent(color).isProposingTakeback
 
-  def boosted = rated && finished && bothPlayersHaveMoved && playedTurns < 10
+  def boosted = rated && finished && bothPlayersHaveMoved && playedPlies < 10
 
   def moretimeable(color: Color) =
     playable && nonMandatory && {
       clock.??(_ moretimeable color) || correspondenceClock.??(_ moretimeable color)
     }
 
-  def abortable = status == Status.Started && playedTurns < 2 && nonMandatory
+  def abortable = status == Status.Started && playedPlies < 2 && nonMandatory
 
-  def berserkable = clock.??(_.config.berserkable) && status == Status.Started && playedTurns < 2
+  def berserkable = clock.??(_.config.berserkable) && status == Status.Started && playedPlies < 2
 
   def goBerserk(color: Color) =
     clock.ifTrue(berserkable && !player(color).berserk).map { c =>
@@ -398,8 +424,8 @@ case class Game(
           shogi = shogi.copy(clock = Some(newClock)),
           loadClockHistory = _ =>
             clockHistory.map(history => {
-              if (history(color).isEmpty) history
-              else history.reset(color).record(color, newClock)
+              if (history(color).isEmpty && history.periodEntries(color).isEmpty) history
+              else history.reset(color).record(color, newClock, shogi.fullTurnNumber)
             })
         ).updatePlayer(color, _.goBerserk)
       ) ++
@@ -414,31 +440,26 @@ case class Game(
   def drawable        = playable && !abortable
   def forceResignable = resignable && nonAi && !fromFriend && hasClock
 
-  def finish(status: Status, winner: Option[Color]) = {
-    val newClock = clock map { _.stop }
-    Progress(
-      this,
-      copy(
-        status = status,
-        sentePlayer = sentePlayer.finish(winner contains Sente),
-        gotePlayer = gotePlayer.finish(winner contains Gote),
-        shogi = shogi.copy(clock = newClock),
-        loadClockHistory = clk =>
-          clockHistory map { history =>
-            // If not already finished, we're ending due to an event
-            // in the middle of a turn, such as resignation or draw
-            // acceptance. In these cases, record a final clock time
-            // for the active color. This ensures the end time in
-            // clockHistory always matches the final clock time on
-            // the board.
-            if (!finished) history.record(turnColor, clk, true)
-            else history
-          }
-      ),
-      // Events here for BC.
-      List(Event.End(winner)) ::: newClock.??(c => List(Event.Clock(c)))
+  def finish(status: Status, winner: Option[Color]) =
+    copy(
+      status = status,
+      sentePlayer = sentePlayer.finish(winner contains Sente),
+      gotePlayer = gotePlayer.finish(winner contains Gote),
+      shogi = shogi.copy(clock = clock map { _.stop }),
+      loadClockHistory = clk =>
+        clockHistory map { history =>
+          // If not already finished, we're ending due to an event
+          // in the middle of a turn, such as resignation or draw
+          // acceptance. In these cases, record a final clock time
+          // for the active color. This ensures the end time in
+          // clockHistory always matches the final clock time on
+          // the board.
+          if (!finished)
+            history
+              .record(turnColor, clk, shogi.fullTurnNumber)
+          else history
+        }
     )
-  }
 
   def rated  = mode.rated
   def casual = !rated
@@ -447,23 +468,19 @@ case class Game(
 
   def finishedOrAborted = finished || aborted
 
-  def accountable = playedTurns >= 2 || isTournament
+  def accountable = playedPlies >= 2 || isTournament
 
-  def replayable = isPgnImport || finished || (aborted && bothPlayersHaveMoved)
+  def replayable = isNotationImport || finished || (aborted && bothPlayersHaveMoved)
 
   def analysable =
-    replayable && playedTurns > 4 &&
+    replayable && playedPlies > 4 &&
       Game.analysableVariants(variant)
 
-  def ratingVariant =
-    if (isTournament && variant.fromPosition) Standard
-    else variant
-
-  def fromPosition = variant.fromPosition || source.??(Source.Position ==)
+  def fromPosition =
+    initialSfen.isDefined || source.??(Source.Position ==)
 
   def imported = source contains Source.Import
 
-  def fromPool   = source contains Source.Pool
   def fromLobby  = source contains Source.Lobby
   def fromFriend = source contains Source.Friend
 
@@ -475,6 +492,8 @@ case class Game(
 
   def winnerUserId: Option[String] = winner flatMap (_.userId)
 
+  def loserColor: Option[Color] = loser map (_.color)
+
   def loserUserId: Option[String] = loser flatMap (_.userId)
 
   def wonBy(c: Color): Option[Boolean] = winner map (_.color == c)
@@ -483,23 +502,17 @@ case class Game(
 
   def drawn = finished && winner.isEmpty
 
-  def outoftime(withGrace: Boolean): Boolean = {
+  def outoftime(withGrace: Boolean): Boolean =
     if (isCorrespondence)
       outoftimeCorrespondence
     else outoftimeClock(withGrace)
-  }
-
-  def nextPeriodClock(withGrace: Boolean): Boolean =
-    clock ?? { c =>
-      !isCorrespondence && clockValidity && c.outOfTime(turnColor, withGrace) && c.hasPeriodsLeft(turnColor)
-    }
-
-  private def clockValidity: Boolean = started && playable && (bothPlayersHaveMoved || isSimul || isSwiss)
 
   private def outoftimeClock(withGrace: Boolean): Boolean =
     clock ?? { c =>
-      clockValidity && {
-        (!c.isRunning && c.players.exists(_.elapsed.centis > 0)) || c.outOfTime(turnColor, withGrace)
+      started && playable && {
+        c.outOfTime(turnColor, withGrace) || {
+          !c.isRunning && c.players.exists(_.elapsed.centis > 0)
+        }
       }
     }
 
@@ -516,12 +529,7 @@ case class Game(
 
   def isUnlimited = !hasClock && !hasCorrespondenceClock
 
-  def isClockRunning = clock ?? (_.isRunning)
-
   def withClock(c: Clock) = Progress(this, copy(shogi = shogi.copy(clock = Some(c))))
-
-  def withClockAndHistory(c: Clock, ch: ClockHistory) =
-    Progress(this, copy(shogi = shogi.copy(clock = Some(c)), loadClockHistory = _ => Some(ch)))
 
   def correspondenceGiveTime = Progress(this, copy(movedAt = DateTime.now))
 
@@ -540,7 +548,8 @@ case class Game(
         case Blitz       => 21
         case Rapid       => 25
         case _           => 30
-      } else
+      }
+      else
         speed match {
           case UltraBullet => 15
           case Bullet      => 20
@@ -560,29 +569,30 @@ case class Game(
       Centis.ofMillis(movedAt.getMillis - nowMillis + timeForFirstMove.millis).nonNeg
     }
 
-  def playerWhoDidNotMove: Option[Player] =
-    playedTurns match {
+  def playerWhoDidNotMove: Option[Player] = {
+    playedPlies match {
       case 0 => player(startColor).some
       case 1 => player(!startColor).some
       case _ => none
     }
+  } filterNot { player => winnerColor contains player.color }
 
-  def onePlayerHasMoved    = playedTurns > 0
-  def bothPlayersHaveMoved = playedTurns > 1
+  def onePlayerHasMoved    = playedPlies > 0
+  def bothPlayersHaveMoved = playedPlies > 1
 
-  def startColor = Color(shogi.startedAtTurn % 2 == 0)
+  def startColor = Color.fromPly(shogi.startedAtPly)
 
   def playerMoves(color: Color): Int =
-    if (color == startColor) (playedTurns + 1) / 2
-    else playedTurns / 2
+    if (color == startColor) (playedPlies + 1) / 2
+    else playedPlies / 2
 
   def playerHasMoved(color: Color) = playerMoves(color) > 0
 
   def playerBlurPercent(color: Color): Int =
-    if (playedTurns > 5) (player(color).blurs.nb * 100) / playerMoves(color)
+    if (playedPlies > 5) (player(color).blurs.nb * 100) / playerMoves(color)
     else 0
 
-  def isBeingPlayed = !isPgnImport && !finishedOrAborted
+  def isBeingPlayed = !isNotationImport && !finishedOrAborted && !paused
 
   def olderThan(seconds: Int) = movedAt isBefore DateTime.now.minusSeconds(seconds)
 
@@ -615,15 +625,14 @@ case class Game(
 
   def userRatings = playerMaps(_.rating)
 
-  def averageUsersRating =
+  def averageUsersRating(default: Int) =
     userRatings match {
       case a :: b :: Nil => Some((a + b) / 2)
-      case a :: Nil      => Some((a + 1500) / 2)
+      case a :: Nil      => Some((a + default) / 2)
       case _             => None
     }
 
   def withTournamentId(id: String) = copy(metadata = metadata.copy(tournamentId = id.some))
-  def withSwissId(id: String)      = copy(metadata = metadata.copy(swissId = id.some))
 
   def withSimulId(id: String) = copy(metadata = metadata.copy(simulId = id.some))
 
@@ -631,17 +640,10 @@ case class Game(
 
   def source = metadata.source
 
-  def pgnImport   = metadata.pgnImport
-  def isPgnImport = pgnImport.isDefined
-
-  def resetTurns =
-    copy(
-      shogi = shogi.copy(turns = 0, startedAtTurn = 0)
-    )
-
-  lazy val opening: Option[FullOpening.AtPly] =
-    if (fromPosition || !Variant.openingSensibleVariants(variant)) none
-    else FullOpeningDB search pgnMoves
+  def notationImport   = metadata.notationImport
+  def isNotationImport = notationImport.isDefined
+  def isKifImport      = notationImport.fold(false)(_.isKif)
+  def isCsaImport      = notationImport.fold(false)(_.isCsa)
 
   def synthetic = id == Game.syntheticId
 
@@ -655,6 +657,8 @@ case class Game(
   def loserPov                                      = loser map playerPov
 
   def setAnalysed = copy(metadata = metadata.copy(analysed = true))
+
+  def setPostGameStudy(studyId: String) = copy(metadata = metadata.copy(postGameStudy = studyId.some))
 
   def secondsSinceCreation = (nowSeconds - createdAt.getSeconds).toInt
 
@@ -674,31 +678,44 @@ object Game {
   }
   case class PlayerId(value: String) extends AnyVal with StringValue
 
-  case class WithInitialFen(game: Game, fen: Option[FEN])
-
   val syntheticId = "synthetic"
 
   val maxPlayingRealtime = 100 // plus 200 correspondence games
 
-  val maxPlies = 600 // unlimited can cause StackOverflowError
+  def maxPlies(variant: Variant) =
+    if (variant.chushogi) 1000
+    else 700 // unlimited can cause StackOverflowError
 
   val analysableVariants: Set[Variant] = Set(
     shogi.variant.Standard,
-    shogi.variant.FromPosition
+    shogi.variant.Minishogi,
+    shogi.variant.Kyotoshogi
   )
 
   val unanalysableVariants: Set[Variant] = Variant.all.toSet -- analysableVariants
 
-  val variantsWhereSenteIsBetter: Set[Variant] = Set()
+  val drawableVariants: Set[Variant] = Set(
+    shogi.variant.Chushogi
+  )
+
+  val pausableVariants: Set[Variant] = Set(
+    shogi.variant.Chushogi
+  )
 
   val blindModeVariants: Set[Variant] = Set(
     shogi.variant.Standard,
-    shogi.variant.FromPosition
+    shogi.variant.Minishogi,
+    shogi.variant.Annanshogi,
+    shogi.variant.Kyotoshogi,
+    shogi.variant.Checkshogi
   )
 
-  def allowRated(variant: Variant, clock: Option[Clock.Config]) =
-    variant.standard || {
-      clock ?? { _.estimateTotalTime >= Centis(3000) }
+  val gifVariants: Set[Variant] =
+    Set(shogi.variant.Standard, shogi.variant.Checkshogi)
+
+  def allowRated(initialSfen: Option[Sfen], clock: Option[Clock.Config], variant: Variant) =
+    initialSfen.filterNot(_.initialOf(variant)).isEmpty && clock.fold(true) { c =>
+      c.periodsTotal <= 1 && (!c.hasByoyomi || !c.hasIncrement) && (!variant.chushogi || c.estimateTotalSeconds >= 250)
     }
 
   val gameIdSize   = 8
@@ -735,35 +752,38 @@ object Game {
   def isBotCompatible(game: Game) =
     game.hasAi || game.source.contains(Source.Friend)
 
-  private[game] val emptyCheckCount = CheckCount(0, 0)
-
   private[game] val someEmptyClockHistory = Some(ClockHistory())
 
   def make(
       shogi: ShogiGame,
+      initialSfen: Option[Sfen],
       sentePlayer: Player,
       gotePlayer: Player,
       mode: Mode,
       source: Source,
-      pgnImport: Option[PgnImport],
+      notationImport: Option[NotationImport],
       daysPerTurn: Option[Int] = None
   ): NewGame = {
     val createdAt = DateTime.now
+    val shogiWithInitialSfen =
+      initialSfen.filterNot(_.initialOf(shogi.variant)).fold(shogi) { sfen =>
+        shogi.withHistory(shogi.situation.history.withInitialSfen(sfen))
+      }
     NewGame(
       Game(
         id = IdGenerator.uncheckedGame,
         sentePlayer = sentePlayer,
         gotePlayer = gotePlayer,
-        shogi = shogi,
+        shogi = shogiWithInitialSfen,
         status = Status.Created,
         daysPerTurn = daysPerTurn,
         mode = mode,
         metadata = Metadata(
           source = source.some,
-          pgnImport = pgnImport,
+          notationImport = notationImport,
           tournamentId = none,
-          swissId = none,
           simulId = none,
+          postGameStudy = none,
           analysed = false
         ),
         createdAt = createdAt,
@@ -775,83 +795,74 @@ object Game {
   def metadata(source: Source) =
     Metadata(
       source = source.some,
-      pgnImport = none,
+      notationImport = none,
       tournamentId = none,
-      swissId = none,
       simulId = none,
+      postGameStudy = none,
       analysed = false
     )
 
   object BSONFields {
 
-    val id                = "_id"
-    val sentePlayer       = "p0"
-    val gotePlayer        = "p1"
-    val playerIds         = "is"
-    val playerUids        = "us"
-    val playingUids       = "pl"
-    val binaryPieces      = "ps"
-    val oldPgn            = "pg"
-    val huffmanPgn        = "hp"
-    val status            = "s"
-    val turns             = "t"
-    val startedAtTurn     = "st"
-    val clock             = "c"
-    val positionHashes    = "ph"
-    val checkCount        = "cc"
-    val historyLastMove   = "cl"
-    val daysPerTurn       = "cd"
-    val moveTimes         = "mt"
-    val senteClockHistory = "cw"
-    val goteClockHistory  = "cb"
-    val periodsSente      = "pw"
-    val periodsGote       = "pb"
-    val rated             = "ra"
-    val analysed          = "an"
-    val variant           = "v"
-    val crazyData         = "chd"
-    val bookmarks         = "bm"
-    val createdAt         = "ca"
-    val movedAt           = "ua" // ua = updatedAt (bc)
-    val source            = "so"
-    val pgnImport         = "pgni"
-    val tournamentId      = "tid"
-    val swissId           = "iid"
-    val simulId           = "sid"
-    val tvAt              = "tv"
-    val winnerColor       = "w"
-    val winnerId          = "wid"
-    val initialFen        = "if"
-    val checkAt           = "ck"
-    val perfType          = "pt" // only set on student games for aggregation
+    val id                 = "_id"
+    val sentePlayer        = "p0"
+    val gotePlayer         = "p1"
+    val playerIds          = "is"
+    val playerUids         = "us"
+    val playingUids        = "pl"
+    val usis               = "um"
+    val status             = "s"
+    val plies              = "t"
+    val clock              = "c"
+    val positionHashes     = "ph"
+    val daysPerTurn        = "cd"
+    val moveTimes          = "mt"
+    val senteClockHistory  = "cw"
+    val goteClockHistory   = "cb"
+    val periodsSente       = "pw"
+    val periodsGote        = "pb"
+    val rated              = "ra"
+    val analysed           = "an"
+    val postGameStudy      = "pgs"
+    val variant            = "v"
+    val lastLionCapture    = "llc"
+    val consecutiveAttacks = "cna"
+    val hands              = "hs"
+    val bookmarks          = "bm"
+    val createdAt          = "ca"
+    val movedAt            = "ua" // ua = updatedAt (bc)
+    val source             = "so"
+    val notationImport     = "pgni"
+    val tournamentId       = "tid"
+    val simulId            = "sid"
+    val tvAt               = "tv"
+    val winnerColor        = "w"
+    val winnerId           = "wid"
+    val initialSfen        = "if"
+    val checkAt            = "ck"
+    val sealedUsi          = "su"
+    val pausedSeconds      = "ps"
+    val perfType           = "pt" // only set on student games for aggregation
   }
 }
 
-// Represents at what turn we entered a new period
-case class PeriodEntries(sente: Vector[Int], gote: Vector[Int]) {
+// At what turns we entered a new period
+case class PeriodEntries(
+    sente: Vector[Int],
+    gote: Vector[Int]
+) {
+
   def apply(c: Color) =
     c.fold(sente, gote)
 
-  def update(c: Color, t: Int) =
-    c.fold(copy(sente = sente :+ t), copy(gote = gote :+ t))
+  def update(c: Color, f: Vector[Int] => Vector[Int]) =
+    c.fold(copy(sente = f(sente)), copy(gote = f(gote)))
 
-  def byoyomi(c: Color): Boolean =
-    c.fold(!sente.isEmpty, !gote.isEmpty)
-
-  def turnIsPresent(c: Color, t: Int): Boolean = c.fold(sente contains t, gote contains t)
-  def dropTurn(c: Color, t: Int) =
-    c.fold(
-      copy(sente = sente filterNot (_ == t)),
-      copy(gote = gote filterNot (_ == t))
-    )
-
-  def first(c: Color): Option[Int] = c.fold(sente.headOption, gote.headOption)
-  def last(c: Color): Option[Int]  = c.fold(sente.lastOption, gote.lastOption)
 }
 
 object PeriodEntries {
-  val default = PeriodEntries(Vector(), Vector())
-  val zeroes  = PeriodEntries(Vector(0), Vector(0))
+  val default    = PeriodEntries(Vector(), Vector())
+  val maxPeriods = 5
 }
 
 case class ClockHistory(
@@ -860,56 +871,55 @@ case class ClockHistory(
     periodEntries: PeriodEntries = PeriodEntries.default
 ) {
 
+  def apply(color: Color): Vector[Centis] = color.fold(sente, gote)
+
   def update(color: Color, f: Vector[Centis] => Vector[Centis]): ClockHistory =
     color.fold(copy(sente = f(sente)), copy(gote = f(gote)))
 
-  def record(color: Color, clock: Clock, finalRecord: Boolean = false): ClockHistory = {
-    if (finalRecord && clock.isUsingByoyomi(color)) {
-      val remTime = clock.remainingTime(color)
-      update(color, _ :+ (clock.byoyomi - remTime))
-    } else update(color, _ :+ clock.remainingTimeTurn(color))
+  def updatePeriods(color: Color, f: Vector[Int] => Vector[Int]): ClockHistory =
+    copy(periodEntries = periodEntries.update(color, f))
+
+  def record(color: Color, clock: Clock, turn: Int): ClockHistory = {
+    val curClock        = clock currentClockFor color
+    val initiatePeriods = clock.config.startsAtZero && periodEntries(color).isEmpty
+    val isUsingByoyomi  = curClock.periods > 0 && !initiatePeriods
+
+    val timeToStore = if (isUsingByoyomi) clock.lastTimeOf(color) else curClock.time
+
+    update(color, _ :+ timeToStore)
+      .updatePeriods(
+        color,
+        _.padTo(initiatePeriods ?? 1, 0).padTo(curClock.periods atMost PeriodEntries.maxPeriods, turn)
+      )
   }
 
-  def validateStart(clock: Clock): ClockHistory = {
-    if (clock.startsAtZero && periodEntries(Sente).isEmpty && periodEntries(Gote).isEmpty)
-      copy(periodEntries = PeriodEntries.zeroes)
-    else this
-  }
-
-  def reset(color: Color) = update(color, _ => Vector.empty)
-
-  def apply(color: Color): Vector[Centis] = color.fold(sente, gote)
+  def reset(color: Color) = update(color, _ => Vector.empty).updatePeriods(color, _ => Vector.empty)
 
   def last(color: Color) = apply(color).lastOption
 
   def size = sente.size + gote.size
 
-  def updateWithByoTime(color: Color, byo: Centis): Vector[Centis] = {
-    val standardTimes = color.fold(
-      sente.take(turnByoyomiStarted(color) - 1),
-      gote.take(turnByoyomiStarted(color) - 1)
-    )
-    standardTimes.padTo(color.fold(sente.size, gote.size), byo)
-  }
+  def firstEnteredPeriod(color: Color): Option[Int] =
+    periodEntries(color).headOption
 
-  def turnByoyomiStarted(color: Color): Int =
-    periodEntries.first(color) getOrElse Game.maxPlies
+  def countSpentPeriods(color: Color, turn: Int) =
+    periodEntries(color).count(_ == turn)
 
-  def enteredNewPeriod(color: Color, turn: Int) =
-    copy(periodEntries = periodEntries.update(color, turn))
+  def refundSpentPeriods(color: Color, turn: Int) =
+    updatePeriods(color, _.filterNot(_ == turn))
 
-  def turnIsPresent(color: Color, turn: Int): Boolean =
-    periodEntries.turnIsPresent(color, turn)
-
-  def dropTurn(color: Color, turn: Int) = {
-    if (turnIsPresent(color, turn)) copy(periodEntries = periodEntries.dropTurn(color, turn))
-    else this
+  private def padWithByo(color: Color, byo: Centis): Vector[Centis] = {
+    val times = apply(color)
+    times.take(firstEnteredPeriod(color).fold(times.size)(_ - 1)).padTo(times.size, byo)
   }
 
   // first state is of the color that moved first.
-  def bothClockStates(firstMoveBy: Color, byo: Centis): Vector[Centis] =
+  def bothClockStates(firstMoveBy: Color, byo: Centis): Vector[Centis] = {
+    val senteTimes = padWithByo(Sente, byo)
+    val goteTimes  = padWithByo(Gote, byo)
     Sequence.interleave(
-      firstMoveBy.fold(updateWithByoTime(Sente, byo), updateWithByoTime(Gote, byo)),
-      firstMoveBy.fold(updateWithByoTime(Gote, byo), updateWithByoTime(Sente, byo))
+      firstMoveBy.fold(senteTimes, goteTimes),
+      firstMoveBy.fold(goteTimes, senteTimes)
     )
+  }
 }

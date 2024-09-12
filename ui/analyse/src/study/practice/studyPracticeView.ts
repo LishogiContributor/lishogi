@@ -1,11 +1,11 @@
-import { h, thunk } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { plural, bind, spinner, richHTML, option } from '../../util';
-import { StudyCtrl } from '../interfaces';
-import { MaybeVNodes } from '../../interfaces';
-import { StudyPracticeData, StudyPracticeCtrl } from './interfaces';
+import { MaybeVNodes, bind, bindNonPassive } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import { VNode, h, thunk } from 'snabbdom';
 import { boolSetting } from '../../boolSetting';
+import { option, plural, richHTML } from '../../util';
 import { view as descView } from '../description';
+import { StudyCtrl } from '../interfaces';
+import { StudyPracticeCtrl, StudyPracticeData } from './interfaces';
 
 function selector(data: StudyPracticeData) {
   return h(
@@ -105,7 +105,6 @@ export function underboard(ctrl: StudyCtrl): MaybeVNodes {
             checked: p.autoNext(),
             change: p.autoNext,
           },
-          ctrl.trans,
           ctrl.redraw
         ),
       ];
@@ -124,7 +123,7 @@ export function side(ctrl: StudyCtrl): VNode {
     h(
       'div.practice__side__chapters',
       {
-        hook: bind('click', e => {
+        hook: bindNonPassive('click', e => {
           e.preventDefault();
           const target = e.target as HTMLElement,
             id = (target.parentNode as HTMLElement).getAttribute('data-id') || target.getAttribute('data-id');

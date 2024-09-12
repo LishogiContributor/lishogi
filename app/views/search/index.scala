@@ -29,8 +29,8 @@ object index {
       main(cls := "box page-small search")(
         h1(advancedSearch()),
         st.form(
-          rel := "nofollow",
-          cls := "box__pad search__form",
+          rel    := "nofollow",
+          cls    := "box__pad search__form",
           action := s"${routes.Search.index()}#results",
           method := "GET"
         )(dataReqs)(
@@ -81,7 +81,7 @@ object index {
               frag(
                 div(cls := "search__status box__pad")(
                   strong(xGamesFound(pager.nbResults.localize, pager.nbResults)),
-                  " • ",
+                  " - ",
                   permalink
                 ),
                 div(cls := "search__rows")(
@@ -92,7 +92,7 @@ object index {
             else
               div(cls := "search__status box__pad")(
                 strong(xGamesFound(0)),
-                " • ",
+                " - ",
                 permalink
               )
           }

@@ -1,8 +1,3 @@
-import { VNode } from 'snabbdom/vnode';
-
-export type MaybeVNode = VNode | string | null | undefined;
-export type MaybeVNodes = MaybeVNode[];
-
 interface Untyped {
   [key: string]: any;
 }
@@ -23,6 +18,7 @@ export interface TournamentOpts extends Untyped {
 export interface TournamentData extends Untyped {
   teamBattle?: TeamBattle;
   teamStanding?: RankedTeam[];
+  myTeam?: RankedTeam;
 }
 
 export interface TeamBattle {
@@ -30,6 +26,7 @@ export interface TeamBattle {
     [id: string]: string;
   };
   joinWith: string[];
+  hasMoreThanTenTeams?: boolean;
 }
 
 export interface RankedTeam {

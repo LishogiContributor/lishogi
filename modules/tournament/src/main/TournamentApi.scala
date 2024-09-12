@@ -35,6 +35,7 @@ final class TournamentApi(
     renderer: lila.hub.actors.Renderer,
     socket: TournamentSocket,
     tellRound: lila.round.TellRound,
+    roundSocket: lila.round.RoundSocket,
     trophyApi: lila.user.TrophyApi,
     verify: Condition.Verify,
     duelStore: DuelStore,
@@ -75,8 +76,7 @@ final class TournamentApi(
       mode = setup.realMode,
       password = setup.password,
       variant = setup.realVariant,
-      position =
-        DataForm.startingPosition(setup.position | shogi.StartingPosition.initial.fen, setup.realVariant),
+      position = setup.position,
       berserkable = setup.berserkable | true,
       streakable = setup.streakable | true,
       teamBattle = setup.teamBattleByTeam map TeamBattle.init,
@@ -106,37 +106,36 @@ final class TournamentApi(
 
   def update(old: Tournament, data: TournamentSetup, myTeams: List[LightTeam]): Funit = {
     import data._
-    val tour = old.copy(
-      name = name | old.name,
-      clock = if (old.isCreated) clockConfig else old.clock,
-      minutes = minutes,
-      mode = realMode,
-      variant = if (old.isCreated) realVariant else old.variant,
-      startsAt = startDate | old.startsAt,
-      password = data.password,
-      position =
-        if (old.isCreated || !old.position.initial)
-          DataForm.startingPosition(position | shogi.StartingPosition.initial.fen, realVariant)
-        else old.position,
-      noBerserk = !(~berserkable),
-      noStreak = !(~streakable),
-      teamBattle = old.teamBattle,
-      description = description,
-      hasChat = data.hasChat | true
-    ) pipe { tour =>
+    val variant = if (old.isCreated) realVariant else old.variant
+    val tour = old
+      .copy(
+        name = name | old.name,
+        clock = if (old.isCreated) clockConfig else old.clock,
+        minutes = minutes,
+        mode = realMode,
+        variant = variant,
+        startsAt = startDate | old.startsAt,
+        password = data.password,
+        position = variant.standard ?? {
+          if (old.isCreated || old.position.isDefined) data.position
+          else old.position
+        },
+        noBerserk = !(~berserkable),
+        noStreak = !(~streakable),
+        teamBattle = old.teamBattle,
+        description = description,
+        hasChat = data.hasChat | true
+      ) pipe { tour =>
       tour.perfType.fold(tour) { perfType =>
-        tour.copy(conditions =
-          conditions
+        tour.copy(
+          conditions = conditions
             .convert(perfType, myTeams.view.map(_.pair).toMap)
-            .copy(teamMember = old.conditions.teamMember) // can't change that
+            .copy(teamMember = old.conditions.teamMember), // can't change that
+          mode = if (tour.position.isDefined) shogi.Mode.Casual else tour.mode
         )
       }
     }
     tournamentRepo update tour void
-  }
-
-  private[tournament] def create(tournament: Tournament): Funit = {
-    tournamentRepo.insert(tournament).void
   }
 
   def teamBattleUpdate(
@@ -148,17 +147,28 @@ final class TournamentApi(
       tournamentRepo.setTeamBattle(tour.id, TeamBattle(teamIds, data.nbLeaders))
     }
 
+  def teamBattleTeamInfo(tour: Tournament, teamId: TeamID): Fu[Option[TeamBattle.TeamInfo]] =
+    tour.teamBattle.exists(_ teams teamId) ?? cached.teamInfo.get(tour.id -> teamId)
+
   private val hadPairings = new lila.memo.ExpireSetMemo(1 hour)
 
-  private[tournament] def makePairings(forTour: Tournament, users: WaitingUsers): Funit =
-    (users.size > 1 && (!hadPairings.get(forTour.id) || users.haveWaitedEnough)) ??
+  private[tournament] def makePairings(
+      forTour: Tournament,
+      users: WaitingUsers,
+      smallTourNbActivePlayers: Option[Int]
+  ): Funit =
+    (users.size > 1 && (
+      !hadPairings.get(forTour.id) ||
+        users.haveWaitedEnough ||
+        smallTourNbActivePlayers.exists(_ <= users.size * 1.5)
+    )) ??
       Sequencing(forTour.id)(tournamentRepo.startedById) { tour =>
         cached
           .ranking(tour)
           .mon(_.tournament.pairing.createRanking)
           .flatMap { ranking =>
             pairingSystem
-              .createPairings(tour, users, ranking)
+              .createPairings(tour, users, ranking, smallTourNbActivePlayers)
               .mon(_.tournament.pairing.createPairings)
               .flatMap {
                 case Nil => funit
@@ -167,9 +177,11 @@ final class TournamentApi(
                   playerRepo
                     .byTourAndUserIds(tour.id, pairings.flatMap(_.users))
                     .map {
-                      _.view.map { player =>
-                        player.userId -> player
-                      }.toMap
+                      _.view
+                        .map { player =>
+                          player.userId -> player
+                        }
+                        .toMap
                     }
                     .mon(_.tournament.pairing.createPlayerMap)
                     .flatMap { playersMap =>
@@ -178,15 +190,13 @@ final class TournamentApi(
                           pairingRepo.insert(pairing) >>
                             autoPairing(tour, pairing, playersMap, ranking)
                               .mon(_.tournament.pairing.createAutoPairing)
-                              .map {
-                                socket.startGame(tour.id, _)
-                              }
+                              .map { socket.startGame(tour.id, _) }
                         }
                         .sequenceFu
                         .mon(_.tournament.pairing.createInserts) >>
                         featureOneOf(tour, pairings, ranking)
                           .mon(_.tournament.pairing.createFeature) >>-
-                        lila.mon.tournament.pairing.batchSize.record(pairings.size)
+                        lila.mon.tournament.pairing.batchSize.record(pairings.size).unit
                     }
               }
           }
@@ -406,8 +416,9 @@ final class TournamentApi(
             pairingRepo.findPlaying(tour.id, userId) flatMap {
               case Some(pairing) if !pairing.berserkOf(userId) =>
                 (pairing colorOf userId) ?? { color =>
-                  pairingRepo.setBerserk(pairing, userId) >>-
-                    tellRound(gameId, GoBerserk(color))
+                  roundSocket.rounds.ask(gameId) { GoBerserk(color, _) } flatMap {
+                    _ ?? pairingRepo.setBerserk(pairing, userId)
+                  }
                 }
               case _ => funit
             }
@@ -596,7 +607,8 @@ final class TournamentApi(
         game.sentePlayer.userId.ifTrue(tour.isStarted) flatMap { senteId =>
           game.gotePlayer.userId map { goteId =>
             cached ranking tour map { ranking =>
-              ranking.get(senteId) |@| ranking.get(goteId) apply { case (senteR, goteR) =>
+              import cats.implicits._
+              (ranking.get(senteId), ranking.get(goteId)) mapN { (senteR, goteR) =>
                 GameRanks(senteR + 1, goteR + 1)
               }
             }
@@ -610,30 +622,26 @@ final class TournamentApi(
 
   def notableFinished = cached.notableFinishedCache.get {}
 
-  private def scheduledCreatedAndStarted =
-    tournamentRepo.scheduledCreated(6 * 60) zip tournamentRepo.scheduledStarted
+  private def createdAndStarted =
+    tournamentRepo.created(8 * 60) zip tournamentRepo.started
 
   // when loading /tournament
   def fetchVisibleTournaments: Fu[VisibleTournaments] =
-    scheduledCreatedAndStarted zip notableFinished map { case ((created, started), finished) =>
+    createdAndStarted zip notableFinished map { case ((created, started), finished) =>
       VisibleTournaments(created, started, finished)
     }
 
   // when updating /tournament
   def fetchUpdateTournaments: Fu[VisibleTournaments] =
-    scheduledCreatedAndStarted dmap { case (created, started) =>
+    createdAndStarted dmap { case (created, started) =>
       VisibleTournaments(created, started, Nil)
     }
 
   def playerInfo(tour: Tournament, userId: User.ID): Fu[Option[PlayerInfoExt]] =
-    userRepo named userId flatMap {
-      _ ?? { user =>
-        playerRepo.find(tour.id, user.id) flatMap {
-          _ ?? { player =>
-            playerPovs(tour, user.id, 50) map { povs =>
-              PlayerInfoExt(user, player, povs).some
-            }
-          }
+    playerRepo.find(tour.id, userId) flatMap {
+      _ ?? { player =>
+        playerPovs(tour, userId, 50) map { povs =>
+          PlayerInfoExt(userId, player, povs).some
         }
       }
     }

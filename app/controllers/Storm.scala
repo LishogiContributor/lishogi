@@ -1,27 +1,24 @@
 package controllers
 
 import play.api.mvc._
-import views._
 
 import lila.api.Context
 import lila.app._
 
-final class Storm(env: Env)(implicit mat: akka.stream.Materializer) extends LilaController(env) {
+final class Storm(env: Env) extends LilaController(env) {
 
   def home =
     Open { implicit ctx =>
       NoBot {
         env.storm.selector.apply flatMap { puzzles =>
           ctx.userId.?? { u => env.storm.highApi.get(u) dmap some } map { high =>
-            NoCache {
-              Ok(
-                views.html.storm.home(
-                  env.storm.json(puzzles, ctx.me),
-                  env.storm.json.pref(ctx.pref),
-                  high
-                )
+            Ok(
+              views.html.storm.home(
+                env.storm.json(puzzles, ctx.me),
+                env.storm.json.pref(ctx.pref),
+                high
               )
-            }
+            ).noCache
           }
         }
       }
@@ -64,7 +61,7 @@ final class Storm(env: Env)(implicit mat: akka.stream.Materializer) extends Lila
     }
 
   def apiDashboardOf(username: String, days: Int) =
-    Open { implicit ctx =>
+    Open { _ =>
       val userId = lila.user.User normalize username
       if (days < 0 || days > 365) notFoundJson("Invalid days parameter")
       else

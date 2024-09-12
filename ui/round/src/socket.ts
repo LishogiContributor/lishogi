@@ -1,11 +1,11 @@
-import * as game from 'game';
-import throttle from 'common/throttle';
 import notify from 'common/notification';
+import throttle from 'common/throttle';
+import * as game from 'game';
 import { isPlayerTurn } from 'game';
-import * as xhr from './xhr';
-import * as sound from './sound';
 import RoundController from './ctrl';
 import { Untyped } from './interfaces';
+import * as sound from './sound';
+import * as xhr from './xhr';
 
 const li = window.lishogi;
 
@@ -77,8 +77,7 @@ export function make(send: SocketSend, ctrl: RoundController): RoundSocket {
       if (fromOp) notify(ctrl.noarg('yourOpponentProposesATakeback'));
       ctrl.redraw();
     },
-    move: ctrl.apiMove,
-    drop: ctrl.apiMove,
+    usi: ctrl.apiMove,
     reload,
     redirect: ctrl.setRedirecting,
     clockInc(o) {
@@ -118,16 +117,27 @@ export function make(send: SocketSend, ctrl: RoundController): RoundSocket {
       if (fromOp) notify(ctrl.noarg('yourOpponentOffersADraw'));
       ctrl.redraw();
     },
+    pauseOffer(by) {
+      if (by) {
+        const fromOp = by === ctrl.data.opponent.color;
+        if (fromOp) ctrl.data.opponent.offeringPause = true;
+        else ctrl.data.player.offeringPause = true;
+        if (fromOp && !ctrl.data.player.offeringPause) notify(ctrl.noarg('yourOpponentOffersAnAdjournment'));
+      } else ctrl.data.player.offeringPause = ctrl.data.opponent.offeringPause = !!by;
+      ctrl.redraw();
+    },
+    resumeOffer(by) {
+      ctrl.data.player.offeringPause = ctrl.data.opponent.offeringPause = false;
+      ctrl.data.player.offeringResume = by === ctrl.data.player.color;
+      const fromOp = (ctrl.data.opponent.offeringResume = by === ctrl.data.opponent.color);
+      if (fromOp) notify(ctrl.noarg('yourOpponentProposesResumption'));
+      ctrl.redraw();
+    },
     berserk(color: Color) {
       ctrl.setBerserk(color);
     },
     gone: ctrl.setGone,
     goneIn: ctrl.setGone,
-    checkCount(e) {
-      ctrl.data.player.checks = ctrl.data.player.color == 'sente' ? e.sente : e.gote;
-      ctrl.data.opponent.checks = ctrl.data.opponent.color == 'sente' ? e.sente : e.gote;
-      ctrl.redraw();
-    },
     simulPlayerMove(gameId: string) {
       if (
         ctrl.opts.userId &&
@@ -156,6 +166,11 @@ export function make(send: SocketSend, ctrl: RoundController): RoundSocket {
         )
       );
     },
+    postGameStudy(studyId: string) {
+      ctrl.data.game.postGameStudy = studyId;
+      ctrl.postGameStudyOffer = true;
+      ctrl.redraw();
+    },
   };
 
   li.pubsub.on('ab.rep', n => send('rep', { n }));
@@ -164,16 +179,7 @@ export function make(send: SocketSend, ctrl: RoundController): RoundSocket {
     send,
     handlers,
     moreTime: throttle(300, () => send('moretime')),
-    outoftime: backoff(500, 1.1, () => {
-      if (
-        ctrl.clock &&
-        ctrl.clock.byoyomi > 0 &&
-        ctrl.clock.curPeriods[ctrl.data.game.player] < ctrl.clock.startPeriod
-      ) {
-        ctrl.clock.nextPeriod(ctrl.data.game.player);
-        send('flag', ctrl.data.game.player);
-      } else send('flag', ctrl.data.game.player);
-    }),
+    outoftime: backoff(500, 1.1, () => send('flag', ctrl.data.game.player)),
     berserk: throttle(200, () => send('berserk', null, { ackable: true })),
     sendLoading(typ: string, data?: any) {
       ctrl.setLoading(true);

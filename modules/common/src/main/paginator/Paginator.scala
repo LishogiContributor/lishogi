@@ -1,19 +1,17 @@
 package lila.common
 package paginator
 
-import scalaz.Success
+import cats.data.Validated
 
-import config.MaxPerPage
+import lila.common.config.MaxPerPage
 
 final class Paginator[A] private[paginator] (
     val currentPage: Int,
     val maxPerPage: MaxPerPage,
-    /** Returns the results for the current page.
-      * The result is cached.
+    /** Returns the results for the current page. The result is cached.
       */
     val currentPageResults: Seq[A],
-    /** Returns the number of results.
-      * The result is cached.
+    /** Returns the number of results. The result is cached.
       */
     val nbResults: Int
 ) {
@@ -32,8 +30,8 @@ final class Paginator[A] private[paginator] (
     if (maxPerPage.value > 0) (nbResults + maxPerPage.value - 1) / maxPerPage.value
     else 0
 
-  /** Returns whether we have to paginate or not.
-    * This is true if the number of results is higher than the max per page.
+  /** Returns whether we have to paginate or not. This is true if the number of results is higher than the max
+    * per page.
     */
   def hasToPaginate: Boolean = nbResults > maxPerPage.value
 
@@ -67,7 +65,7 @@ object Paginator {
       currentPage: Int,
       maxPerPage: MaxPerPage = MaxPerPage(10)
   )(implicit ec: scala.concurrent.ExecutionContext): Fu[Paginator[A]] =
-    validate(adapter, currentPage, maxPerPage) | apply(adapter, 1, maxPerPage)
+    validate(adapter, currentPage, maxPerPage) getOrElse apply(adapter, 1, maxPerPage)
 
   def empty[A]: Paginator[A] = new Paginator(0, MaxPerPage(0), Nil, 0)
 
@@ -88,11 +86,11 @@ object Paginator {
       adapter: AdapterLike[A],
       currentPage: Int = 1,
       maxPerPage: MaxPerPage = MaxPerPage(10)
-  )(implicit ec: scala.concurrent.ExecutionContext): Valid[Fu[Paginator[A]]] =
-    if (currentPage < 1) !!("Max per page must be greater than zero")
-    else if (maxPerPage.value <= 0) !!("Current page must be greater than zero")
+  )(implicit ec: scala.concurrent.ExecutionContext): Validated[String, Fu[Paginator[A]]] =
+    if (currentPage < 1) Validated.invalid("Max per page must be greater than zero")
+    else if (maxPerPage.value <= 0) Validated.invalid("Current page must be greater than zero")
     else
-      Success(for {
+      Validated.valid(for {
         results   <- adapter.slice((currentPage - 1) * maxPerPage.value, maxPerPage.value)
         nbResults <- adapter.nbResults
       } yield new Paginator(currentPage, maxPerPage, results, nbResults))

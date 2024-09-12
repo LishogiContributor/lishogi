@@ -1,117 +1,90 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 	<string name="faqAbbreviation">Câu hỏi thường gặp</string>
-	<string name="frequentlyAskedQuestions">Những câu hỏi thường gặp</string>
-	<string name="whyIsLishogiCalledLishogi">Tại sao Lishogi lại... có tên là Lishogi?</string>
+	<string name="frequentlyAskedQuestions">Các câu hỏi thường gặp</string>
+	<string name="whyIsLishogiCalledLishogi">Tại sao Lishogi lại có tên là Lishogi?</string>
 	<string name="forkedFromLichess">Lishogi là một dự án mã nguồn mở dựa trên Lichess, nhưng vì nó dùng để chơi Shogi, nên tên của nó là Lishogi!</string>
 	<string name="lishogiCombinationLiveLightLibrePronounced">Bởi vì nó lấy cảm hứng từ Lichess, mà Lichess có tên như vậy vì nó là sự kết hợp của live/light/libre và chess. Lishogi được đọc là %1$s</string>
-	<string name="leechess">lee-shogi</string>
-	<string name="hearItPronouncedBySpecialist">Nghe cách phát âm chuẩn.</string>
-	<string name="whyLiveLightLibre">Live ( luôn trực tiếp ) vì các ván đấu luôn được chơi và theo dõi 24/4. Light và Libre ( nhẹ và miễn phí ) vì Lishogi có mã nguồn mở và không có các vấn đề độc quyền làm ảnh hướng đến các trang web khác.</string>
+	<string name="leeshogi">lee-shogi</string>
+	<string name="whyLiveLightLibre">Luôn trực tiếp vì bạn có thể chơi và xem mọi lúc trong thời gian thực 24/7; light và libre (nhẹ nhàng và miễn phí) vì Lishogi có mã nguồn mở và không có các vấn đề độc quyền làm ảnh hướng đến các trang web khác.</string>
 	<string name="whyIsLilaCalledLila">Tương tự vậy, mã nguồn của Lishogi,%1$s, li là viết tắt của cờ vua trong sca, la vì phần lớn Lishogi được viết bằng %2$s, một ngôn ngữ lập trình trực quan.</string>
 	<string name="howCanIContributeToLishogi">Làm thế nào để tôi có thể đóng góp cho Lishogi?</string>
-	<string name="lishogiPoweredByDonationsAndVolunteers">Lishogi được hỗ trợ bởi sự đóng góp từ những người bảo trợ và nỗ lực của một nhóm tình nguyện viên.</string>
-	<string name="findMoreAndSeeHowHelp">Bạn có thể xem thêm thông tin về %1$s. Nếu bạn muốn giúp Lishogi bằng việc tình nguyện dành thời gian và kỹ năng của bạn, có rất nhiều %2$s.</string>
-	<string name="beingAPatron">Trở thành một Patron</string>
+	<string name="lishogiPoweredByDonationsAndVolunteers">Lishogi được hỗ trợ bởi những sự đóng góp từ những người bảo trợ và nỗ lực của một nhóm tình nguyện viên.</string>
+	<string name="beingAPatron">Trở thành một Người bảo trợ Lishogi.</string>
 	<string name="otherWaysToContribute">Có rất nhiều cách để bạn đóng góp cho Lishogi.</string>
-	<string name="breakdownOfOurCosts">xem bảng chi tiết về chi phí của chúng tôi</string>
+	<string name="breakdownOfOurCosts">xem phân tích chi phí của chúng tôi</string>
 	<string name="otherWaysToHelp">những cách khác để giúp đỡ</string>
-	<string name="areThereWebsitesBasedOnLishogi">Có trang web nào tương tự, dựa trên cấu trúc của Lishogi không?</string>
-	<string name="yesLishogiInspiredOtherOpenSourceWebsites">Đúng vậy, Lishogi thực sự đã truyền cảm hứng cho các trang web mã nguồn mở khác sử dụng %1$s, %2$s, hay là %3$s của chúng tôi.</string>
-	<string name="fairPlay">Chơi đẹp</string>
+	<string name="fairPlay">Chơi Công Bằng</string>
 	<string name="whyFlaggedRatingManipulationOrCheater">Tại sao tôi lại bị đánh dấu vì tạo một xếp hạng giả (xâm nhập lỗ hổng và thay đổi trái phép) hoặc sử dụng sự hỗ trợ của máy tính?</string>
 	<string name="cheatDetectionMethods">Lishogi có các phương pháp phát hiện mạnh mẽ và một quy trình rất kỹ lưỡng để xem xét tất cả các bằng chứng và đưa ra quyết định. Quá trình này thường liên quan đến nhiều người kiểm duyệt và có thể mất nhiều thời gian. Ngoài việc đánh dấu, chúng tôi sẽ không đi sâu vào chi tiết về bằng chứng hay quy trình ra quyết định đối với các trường hợp riêng lẻ. Vì làm vậy sẽ giúp bạn dễ dàng tránh bị phát hiện hơn trong tương lai và trở thành lời mời cho các cuộc tranh luận không hiệu quả. Thời gian và công sức đó tốt hơn nên dành cho những trường hợp quan trọng khác. Người dùng có thể kháng nghị bằng cách gửi email cho %1$s, nhưng các quyết định thường hiếm khi bị thay đổi.</string>
 	<string name="whenAmIEligibleRatinRefund">Khi nào thì tôi đủ điều kiện để được bồi thường xếp hạng tự động từ những kẻ gian lận?</string>
 	<string name="ratingRefundExplanation">Một phút sau khi một người chơi bị đánh dấu, 40 ván đấu được xếp hạng mới nhất của họ trong vòng 3 ngày qua sẽ được thực hiện. Nếu bạn là đối thủ của họ trong các ván đấu đó, bạn bị mất xếp hạng (vì thua hoặc hòa) và xếp hạng của bạn không phải là tạm thời, bạn sẽ được hoàn lại xếp hạng. Điểm hoàn lại được giới hạn dựa trên xếp hạng cao nhất của bạn và tiến độ xếp hạng của bạn sau ván đấu.
    (Ví dụ: nếu xếp hạng của bạn tăng lên đáng kể sau các ván đấu đó, bạn có thể không được hoàn điểm hoặc chỉ được hoàn lại một phần.) Khoản hoàn trả sẽ không bao giờ vượt quá 150 điểm.</string>
 	<string name="preventLeavingGameWithoutResigning">Chuyện gì sẽ xảy ra đối với những người chơi rời khỏi ván đấu thay vì đầu hàng?</string>
-	<string name="leavingGameWithoutResigningExplanation">Nếu đối thủ của bạn thường xuyên hủy / rời trò chơi, họ sẽ bị \"cấm chơi\", có nghĩa là họ tạm thời bị cấm chơi. Điều này không được công khai trên hồ sơ của họ. Nếu hành vi vẫn tiếp tục, độ dài của thời gian cấm sẽ tăng lên - và hành vi này kéo dài có thể dẫn đến việc đóng tài khoản.</string>
+	<string name="leavingGameWithoutResigningExplanation">Nếu đối thủ của bạn thường xuyên hủy/rời trò chơi, họ sẽ bị \"cấm chơi\", có nghĩa là họ tạm thời bị cấm chơi. Điều này không được công khai trên hồ sơ của họ. Nếu hành vi vẫn tiếp tục, thời lượng cấm sẽ tăng lên - và hành vi này kéo dài có thể dẫn đến việc đóng tài khoản.</string>
 	<string name="howCanIBecomeModerator">Làm sao để tôi có thể trở thành một quản trị viên?</string>
 	<string name="youCannotApply">Rất tiếc là bạn không thể đăng ký để trở thành một quản trị viên. Nếu chúng tôi thấy ai đó mà chúng tôi nghĩ rằng sẽ là quản trị viên tốt, chúng tôi sẽ liên hệ trực tiếp với họ.</string>
-	<string name="isCorrespondenceDifferent">Đánh cờ qua thư có khác với Shogi bình thường?</string>
-	<string name="youCanUseOpeningBookNoEngine">Trên Lishogi, sự khác biệt chính trong các quy tắc cho shogi tương ứng là một cuốn sách mở được cho phép. Việc sử dụng máy tính phân tích vẫn bị cấm và sẽ bị gắn cờ vì sử dụng máy tính phân tích hỗ trợ. Mặc dù ICCF cho phép sử dụng máy tính phân tích trong đánh cờ qua thư, nhưng Lishogi thì không.</string>
+	<string name="isCorrespondenceDifferent">Đánh cờ qua thư có khác với cờ Shogi bình thường?</string>
+	<string name="youCanUseOpeningBookNoEngine">Trên Lishogi, sự khác biệt chính trong các quy tắc cho shogi qua thư là một cuốn sách khai cuộc được cho phép. Việc sử dụng máy tính phân tích vẫn bị cấm và sẽ bị gắn cờ vì sử dụng máy tính phân tích hỗ trợ. Mặc dù ICCF cho phép sử dụng máy tính phân tích trong đánh cờ qua thư, nhưng Lishogi thì không.</string>
 	<string name="gameplay">Lối chơi</string>
-	<string name="howBulletBlitzEtcDecided">Cờ siêu chớp, cờ chớp và các định giờ khác được quyết định thế nào?</string>
-	<string name="basedOnGameDuration">Việc xác định loại cờ của Lishogi dựa trên thời lượng ván đấu ước tính =%1$s
-Ví dụ: thời lượng ước tính của một ván cờ 5+3 là 5 × 60 + 40 × 3 = 420 giây.</string>
-	<string name="durationFormula">60 x ( thời gian đồng hồ chính theo phút ) + 60 x ( thời gian bổ sung ) + 25 x ( thời gian byoyomi )</string>
+	<string name="howBulletBlitzEtcDecided">Cờ Siêu Chớp, Cờ Chớp và các loại cờ khác được quyết định như thế nào?</string>
+	<string name="basedOnGameDuration">Việc xác định loại cờ của Lishogi dựa trên thời lượng ván đấu ước tính = %1$s
+Ví dụ: thời lượng ước tính của trò chơi 5+3|4 là 60 × 5 + 60 × 3 + 25 × 4 = 580 giây.</string>
+	<string name="formulaOfDuration">60 x (thời gian ban đầu tính bằng phút) + 60 x (thời gian gia tăng) + 25 x (thời gian byoyomi) x (số lần byoyomi)</string>
 	<string name="inferiorThanXsEqualYtimeControl">&lt; %1$s giây = %2$s</string>
 	<string name="superiorThanXsEqualYtimeControl">≥ %1$s giây = %2$s</string>
 	<string name="whatVariantsCanIplay">Tôi có thể chơi các loại biến thể nào trên Lishogi?</string>
-	<string name="lishogiSupportChessAnd">Lishogi hỗ trợ Shogi tiêu chuẩn và %1$s.</string>
-	<string name="eightVariants">8 biến thể Shogi khác</string>
-	<string name="whatIsACPL">What is the average centipawn loss (ACPL)?</string>
-	<string name="acplExplanation">The centipawn is the unit of measure used in chess as representation of the advantage. A centipawn is equal to 1/100th of a pawn. Therefore 100 centipawns = 1 pawn. These values play no formal role in the game but are useful to players, and essential in computer chess, for evaluating positions.
+	<string name="lishogiSupportShogiAnd">Lishogi hỗ trợ shogi tiêu chuẩn và %1$s.</string>
+	<string name="whatIsACPL">Phần trăm tốt mất trung bình (ACPL) là gì?</string>
+	<string name="acplExplanation">Phần trăm tốt là đơn vị đo lường được sử dụng trong cờ vua (hoặc shogi) để đại diện cho lợi thế. Một phần trăm tốt bằng 1/100 tốt. Do đó 100 phần trăm tốt = 1 tốt. Những giá trị này không đóng vai trò chính thức trong ván đấu nhưng hữu ích cho người chơi và rất cần thiết trong cờ vua (shogi) trên máy tính để đánh giá các thế trận/thế cờ.
 
-The top computer move will lose zero centipawns, but lesser moves will result in a deterioration of the position, measured in centipawns.
+Đẩy tốt lên cao sẽ có thể không làm mất phần trăm tốt, nhưng để phần trăm tốt thấp sẽ làm giảm , được đo bằng phần trăm tốt.
 
-This value can be used as an indicator of the quality of play. The fewer centipawns one loses per move, the stronger the play.
+Giá trị này có thể được sử dụng như một chỉ báo về chất lượng chơi. Càng ít phần trăm mất tốt mỗi nước đi, càng có lợi thế.
 
-The computer analysis on Lishogi is powered by Stockfish.</string>
-	<string name="insufficientMaterial">Thua về thời gian, hòa và không đủ quân chiếu hết</string>
-	<string name="lishogiFollowFIDErules">In the event of one player running out of time, that player will usually lose the game. However, the game is drawn if the position is such that the opponent cannot checkmate the player\'s king by any possible series of legal moves (%1$s).
-
-In rare cases this can be difficult to decide automatically (forced lines, fortresses). By default we always side with the player who did not run out of time.
-
-Note that it can be possible to mate with a single knight or bishop if the opponent has a piece that could block the king.</string>
-	<string name="linkToFIDErules">FIDE handbook §6.9, PDF</string>
-	<string name="discoveringEnPassant">Why can a pawn capture another pawn when it is already passed? (en passant)</string>
-	<string name="explainingEnPassant">This is a legal move known as \"en passant\". The Wikipedia article gives a %1$s.
-
-It is described in section 3.7 (d) of the %2$s:
-
-\"A pawn occupying a square on the same rank as and on an adjacent file to an opponent’s pawn which has just advanced two squares in one move from its original square may capture this opponent’s pawn as though the latter had been moved only one square. This capture is only legal on the move following this advance and is called an ‘en passant’ capture.\"
-
-See the %3$s on this move for some practice with it.</string>
+Phân tích máy tính trên Lishogi do Fairy-Stockfish và YaneuraOu cung cấp.</string>
+	<string name="insufficientMaterial">Thua do hết giờ, hòa và không đủ quân chiếu hết</string>
 	<string name="goodIntroduction">lời mở đầu tốt</string>
 	<string name="officialRulesPDF">luật chính thức (PDF)</string>
 	<string name="lishogiTraining">Luyện tập Lishogi</string>
-	<string name="threefoldRepetition">Threefold repetition</string>
-	<string name="threefoldRepetitionExplanation">If a position occurs three times, players can claim a draw by %1$s. Lishogi implements the official FIDE rules, as described in Article 9.2 (d) of the %2$s.</string>
-	<string name="threefoldRepetitionLowerCase">threefold repetition</string>
-	<string name="handBookPDF">cẩm nang (PDF)</string>
-	<string name="notRepeatedMoves">We did not repeat moves. Why was the game still drawn by repetition?</string>
-	<string name="repeatedPositionsThatMatters">Threefold repetition is about repeated %1$s, not moves. Repetition does not have to occur consecutively.</string>
+	<string name="fourfoldRepetition">Lặp cờ 4 lần</string>
+	<string name="handBookPDF">sổ tay (PDF)</string>
+	<string name="notRepeatedMoves">Chúng tôi không lặp lại các nước đi. Tại sao ván đấu vẫn bị xử hòa bởi luật lặp cờ?</string>
+	<string name="repeatedPositionsThatMatters">Lặp lại 4 lần là về %1$s bị lặp lại, không phải các nước đi. Sự lặp lại không nhất thiết phải xảy ra liên tiếp.</string>
 	<string name="positions">thế trận</string>
-	<string name="weRepeatedthreeTimesPosButNoDraw">We repeated a position three times. Why was the game not drawn?</string>
-	<string name="threeFoldHasToBeClaimed">Repetition needs to be claimed by one of the players. You can do so by pressing the button that is shown, or by offering a draw before your final repeating move, it won\'t matter if your opponent rejects the draw offer, the threefold repetition draw will be claimed anyway. You can also %1$s Lishogi to automatically claim repetitions for you. Additionally, fivefold repetition always immediately ends the game.</string>
 	<string name="configure">cấu hình</string>
 	<string name="accounts">Tài khoản</string>
 	<string name="titlesAvailableOnLishogi">Có những danh hiệu nào trên Lishogi?</string>
-	<string name="lishogiRecognizeAllOTBtitles">Lishogi recognises all FIDE titles gained from OTB (over the board) play, as well as %1$s. Here is a list of FIDE titles:</string>
-	<string name="showYourTitle">If you have an OTB title, you can apply to have this displayed on your account by completing the %1$s, including a clear image of an identifying document/card and a selfie of you holding the document/card.
+	<string name="showYourTitle">Nếu bạn có danh hiệu OTB, bạn có thể đăng ký để hiển thị tiêu đề này trên tài khoản của mình bằng cách hoàn thành %1$s, bao gồm hình ảnh rõ ràng của tài liệu/thẻ nhận dạng và ảnh tự chụp của bạn đang cầm tài liệu/thẻ.
 
-Verifying as a titled player on Lishogi gives access to play in the Titled Arena events.
+Việc xác minh là người chơi có danh hiệu trên Lishogi sẽ cho phép bạn chơi trong các sự kiện Titled Arena.
 
-Finally there is an honorary %2$s title.</string>
-	<string name="asWellAsManyNMtitles">nhiều danh hiệu quốc gia</string>
+Cuối cùng là danh hiệu danh dự %2$s.</string>
 	<string name="verificationForm">biểu mẫu xác minh</string>
 	<string name="canIbecomeLM">Tôi có thể nhận danh hiệu Lishogi Master (LM) không?</string>
 	<string name="noUpperCaseDot">Không.</string>
 	<string name="lMtitleComesToYouDoNotRequestIt">Danh hiệu này không chính thức và chỉ tồn tại trên Lishogi.
 
-Chúng tôi hiếm khi trao giải cho những người chơi đáng chú ý, những người là thành viên tốt của Lishogi. Bạn không nhận được danh hiệu LM, danh hiệu đó dành cho bạn. Nếu bạn được chấp nhận, bạn sẽ nhận được tin nhắn của chúng tôi đề cập đến nó và có chấp nhận nó hay không.
+Chúng tôi hiếm khi trao giải cho những người chơi nổi bật là công dân tốt của Lishogi, theo quyết định của chúng tôi. Bạn không nhận được danh hiệu LM, danh hiệu LM tự đến với bạn. Nếu đủ điều kiện, bạn sẽ nhận được tin nhắn từ chúng tôi về điều đó và lựa chọn chấp nhận hoặc từ chối.
 
-Và đừng bao giờ hỏi xin danh hiệu LM.</string>
+Đừng hỏi danh hiệu LM.</string>
 	<string name="whatUsernameCanIchoose">Tôi có thể đặt tên người dùng là gì?</string>
 	<string name="usernamesNotOffensive">Nói chung, tên người dùng không nên công kích, mạo danh người khác hay quảng cáo. Bạn có thể đọc thêm về %1$s.</string>
 	<string name="guidelines">hướng dẫn</string>
-	<string name="uniqueTrophies">Danh hiệu độc nhất</string>
+	<string name="uniqueTrophies">Những danh hiệu độc nhất</string>
 	<string name="ownerUniqueTrophies">Danh hiệu này là duy nhất trong lịch sử của Lishogi, không ai khác ngoài %1$s sẽ có được nó.</string>
-	<string name="wayOfBerserkExplanation">Để có được thành tích này, hiimgosu đã tự tử thách bản thân bằng cách chia đôi thời gian mỗi ván và dành chiến thằng 100% trong tất cả các ván của %s.</string>
 	<string name="aHourlyBulletTournament">một giải đấu cờ siêu chớp hàng giờ</string>
-	<string name="goldenZeeExplanation">ZugAddict đã phát trực tiếp và trong 2 giờ đó anh ấy đã cố gắng đánh bại A.I. cấp độ 8 trong thể loại 1+0, nhưng không thành công. Thibault nói với anh ấy rằng nếu anh ấy làm điều đó thành công trên sóng trực tiếp, anh ấy sẽ nhận được một chiếc cúp độc nhất vô nhị. Một giờ sau, anh ta đánh bại Stockfish, và lời hứa đã được thực hiện.</string>
 	<string name="lishogiRatings">Xếp hạng Lishogi</string>
 	<string name="whichRatingSystemUsedByLishogi">Lishogi sử dụng hệ thống xếp hạng nào?</string>
-	<string name="ratingSystemUsedByLishogi">Xếp hạng được tính toán dựa trên phương pháp Glicko-2 được phát triển bởi Mark Glickman. Đây là một phương pháp tính toán xếp hạng rất nổi tiếng, và cũng được sử dụng bởi đa số các tổ chức cờ vua (FIDE là ngoại lệ, họ vẫn sử dụng hệ thống xếp hạng Elo) 
+	<string name="ratingSystemUsedByLishogi">Xếp hạng được tính bằng phương pháp xếp hạng Glicko-2 do Mark Glickman phát triển. Đây là một phương pháp đánh giá rất phổ biến và được sử dụng bởi một số lượng lớn các tổ chức cờ vua (FIDE là một ví dụ ngược lại đáng chú ý, vì họ vẫn sử dụng hệ thống đánh giá Elo lỗi thời).
 
-Về cơ bản, hệ thống xếp hạng Glicko sử dụng \" khoảng tin cậy \" để tính toán và biểu diễn xếp hạng của bạn. Khi bạn lần đầu tiên bắt đầu sử dụng trang web, xếp hạng của bạn bắt đầu ở 1500 ± 700. 1500 thể hiện xếp hạng của bạn và 700 thể hiện khoảng tin cậy.
+Về cơ bản, xếp hạng Glicko sử dụng \"khoảng tin cậy\" để tính toán và cho ra xếp hạng của bạn. Khi bạn lần đầu tiên bắt đầu sử dụng trang web, hệ số Elo của bạn bắt đầu ở 1500 ± 700. 1500 thể hiện xếp hạng của bạn và 700 thể hiện khoảng tin cậy.
 
-Về cơ bản, hệ thống chắc chắn 90% rằng xếp hạng của bạn nằm trong khoảng 800 đến 2200. Điều này cực kỳ không chắc chắn. Do đó, khi một người chơi mới bắt đầu, xếp hạng của họ sẽ thay đổi rất đáng kể, có thể vài trăm điểm một lúc. Nhưng sau một số trận đấu với những người chơi có kĩ năng, khoảng tin cậy sẽ thu hẹp và số điểm đạt được/mất đi sau mỗi trận đấu sẽ giảm xuống.
+Về cơ bản, hệ thống chắc chắn 90% rằng xếp hạng của bạn nằm trong khoảng 800 đến 2200. Điều này cực kỳ không chắc chắn. Do đó, khi một người chơi mới bắt đầu, xếp hạng của họ sẽ thay đổi rất đáng kể, có thể vài trăm điểm một lúc. Nhưng sau một số trận đấu với những người chơi đã thành danh, khoảng tin cậy sẽ thu hẹp và số điểm đạt được/mất đi sau mỗi trận đấu sẽ giảm xuống.
 
 Một điểm cần lưu ý nữa là, khi thời gian trôi qua, khoảng tin cậy sẽ tăng lên. Điều này cho phép bạn tăng/giảm điểm nhanh hơn để phù hợp với bất kỳ thay đổi nào trong cấp độ kỹ năng của bạn trong thời gian đó.</string>
-	<string name="whatIsProvisionalRating">Tại sao lại có dấu chấm hỏi (?) bên cạnh điểm xếp hạng?</string>
-	<string name="provisionalRatingExplanation">Dấu chấm hỏi có nghĩa là xếp hạng tạm thời. Các lý do bao gồm:</string>
+	<string name="whatIsProvisionalRating">Tại sao lại có dấu chấm hỏi (?) bên cạnh hệ số Elo?</string>
+	<string name="provisionalRatingExplanation">Dấu chấm hỏi có nghĩa là Elo tạm thời. Các lý do bao gồm:</string>
 	<string name="notPlayedEnoughRatedGamesAgainstX">Người chơi vẫn chưa hoàn thành đủ các ván đấu xếp hạng so với %1$s trong danh mục xếp hạng.</string>
 	<string name="similarOpponents">đối thủ có năng lực tương đương</string>
 	<string name="notPlayedRecently">Người chơi không có đủ các ván đấu gần đây. Tùy thuộc vào số ván đấu bạn đã chơi, có thể mất khoảng một năm không hoạt động để xếp hạng của bạn trở lại tạm thời.</string>
@@ -119,17 +92,17 @@ Một điểm cần lưu ý nữa là, khi thời gian trôi qua, khoảng tin c
 	<string name="howDoLeaderoardsWork">Thứ hạng và bảng thành tích hoạt động như thế nào?</string>
 	<string name="inOrderToAppearsYouMust">Để nhận được %1$s, bạn phải:</string>
 	<string name="ratingLeaderboards">thứ hạng trên bảng xếp hạng</string>
-	<string name="havePlayedMoreThanThirtyGamesInThatRating">đã chơi ít nhất 30 ván xếp hạng trong một xếp hạng nhất định,</string>
-	<string name="havePlayedARatedGameAtLeastOneWeekAgo">đã chơi một ván xếp hạng trong tuần trước cho xếp hạng này,</string>
-	<string name="ratingDeviationLowerThanXinChessYinVariants">có độ lệch xếp hạng thấp hơn %1$s, trong cờ Shogi tiêu chuẩn, và thấp hơn %2$s trong các biến thể,</string>
-	<string name="beInTopTen">nằm trong top 10 trong bảng xếp hạng này.</string>
+	<string name="havePlayedMoreThanThirtyGamesInThatRating">Đã chơi ít nhất 30 ván xếp hạng trong một xếp hạng nhất định,</string>
+	<string name="havePlayedARatedGameAtLeastOneWeekAgo">Đã chơi một ván xếp hạng trong tuần trước cho xếp hạng này,</string>
+	<string name="ratingDeviationLowerThanXinShogiYinVariants">Có độ lệch xếp hạng thấp hơn %1$s, trong Shogi tiêu chuẩn và thấp hơn %2$s trong các biến thể,</string>
+	<string name="beInTopTen">Nằm trong top 10 trong bảng xếp hạng này.</string>
 	<string name="secondRequirementToStopOldPlayersTrustingLeaderboards">Yêu cầu thứ hai là những người chơi không còn sử dụng tài khoản sẽ không được đưa vào bảng xếp hạng.</string>
-	<string name="whyAreRatingHigher">Tại sao xếp hạng lại khác khi so sánh với các ví dụ khác, như 81Dojo và Shogi Club 24?</string>
+	<string name="whyAreRatingHigher">Tại sao xếp hạng lại khác khi so sánh với các ví dụ khác như 81Dojo và Shogi Club 24?</string>
 	<string name="whyAreRatingHigherExplanation">Tốt nhất là không nên coi xếp hạng là con số tuyệt đối hoặc so sánh chúng với các tổ chức khác. Các tổ chức khác nhau có các cấp độ người chơi khác nhau, các hệ thống xếp hạng khác nhau (Elo, Glicko, Glicko-2 hoặc một phiên bản sửa đổi đã nói ở trên). Những yếu tố này có thể ảnh hưởng mạnh đến con số tuyệt đối (xếp hạng).
 
 Tốt nhất bạn nên coi xếp hạng là số liệu \"tương đối\" (trái ngược với số liệu \"tuyệt đối\"): Trong một nhóm người chơi, sự khác biệt tương đối về xếp hạng của họ sẽ giúp bạn ước tính ai sẽ thắng / hòa / thua và tần suất ra sao. Nói \"Tôi có xếp hạng X\" chẳng có nghĩa gì trừ khi có người chơi khác so sánh xếp hạng đó với bạn.</string>
-	<string name="howToHideRatingWhilePlaying">Làm thế nào để ẩn xếp hạng trong lúc chơi?</string>
-	<string name="enableZenMode">Bật chế độ Zen trong khi %1$s, hoặc nhấn %2$s trong khi chơi.</string>
+	<string name="howToHideRatingWhilePlaying">Làm thế nào để ẩn hệ số Elo trong lúc chơi?</string>
+	<string name="enableZenMode">Bật chế độ Tập trung (Zen) trong khi %1$s, hoặc nhấn %2$s trong khi chơi.</string>
 	<string name="displayPreferences">tùy chọn hiển thị</string>
 	<string name="connexionLostCanIGetMyRatingBack">Tôi đã thua một ván đấu do lag/mất kết nối. Tôi có thể lấy lại điểm xếp hạng của mình không?</string>
 	<string name="weCannotDoThatEvenIfItIsServerSideButThatsRare">Rất tiếc là không, kể cả vấn đề là do bạn hay do chúng tôi. Cũng lưu ý rằng Lishogi khởi động lại mà điều đó làm bạn thua do hết giờ, chúng tôi sẽ hủy ván cờ để tránh gây mất oan điểm.</string>

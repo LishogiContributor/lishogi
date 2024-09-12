@@ -1,8 +1,8 @@
+import { MaybeVNode, bind } from 'common/snabbdom';
+import { transWithColorName } from 'common/colorName';
+import { VNode, h } from 'snabbdom';
+import { Controller } from '../interfaces';
 import afterView from './after';
-import { bind } from '../util';
-import { Controller, MaybeVNode } from '../interfaces';
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
 
 function viewSolution(ctrl: Controller): VNode {
   return h(
@@ -25,10 +25,9 @@ function viewSolution(ctrl: Controller): VNode {
 function initial(ctrl: Controller): VNode {
   return h('div.puzzle__feedback.play', [
     h('div.player', [
-      h('div.no-square', h('div.color-piece.' + ctrl.vm.pov)),
       h('div.instruction', [
         h('strong', ctrl.trans.noarg('yourTurn')),
-        h('em', ctrl.trans.noarg(ctrl.vm.pov === 'sente' ? 'findTheBestMoveForBlack' : 'findTheBestMoveForWhite')),
+        h('em', transWithColorName(ctrl.trans, 'findTheBestMoveForX', ctrl.vm.pov, false)),
       ]),
     ]),
     viewSolution(ctrl),
@@ -39,10 +38,7 @@ function good(ctrl: Controller): VNode {
   return h('div.puzzle__feedback.good', [
     h('div.player', [
       h('div.icon', '✓'),
-      h('div.instruction', [
-        h('strong', ctrl.trans.noarg('bestMove')),
-        h('em', ctrl.trans.noarg('keepGoing')),
-      ]),
+      h('div.instruction', [h('strong', ctrl.trans.noarg('bestMove')), h('em', ctrl.trans.noarg('keepGoing'))]),
     ]),
     viewSolution(ctrl),
   ]);

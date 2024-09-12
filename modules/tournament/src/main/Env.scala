@@ -31,6 +31,7 @@ final class Env(
     renderer: lila.hub.actors.Renderer,
     chatApi: lila.chat.ChatApi,
     tellRound: lila.round.TellRound,
+    roundSocket: lila.round.RoundSocket,
     lightUserApi: lila.user.LightUserApi,
     onStart: lila.round.OnStart,
     historyApi: lila.history.HistoryApi,
@@ -78,10 +79,11 @@ final class Env(
   private lazy val apiCallbacks = TournamentApi.Callbacks(
     clearJsonViewCache = jsonView.clearCache,
     clearWinnersCache = winners.clearCache,
-    clearTrophyCache = tour => {
-      if (tour.isShield) scheduler.scheduleOnce(10 seconds) { shieldApi.clear() }
-      else if (Revolution is tour) scheduler.scheduleOnce(10 seconds) { revolutionApi.clear() }
-    },
+    clearTrophyCache = tour =>
+      {
+        if (tour.isShield) scheduler.scheduleOnce(10 seconds) { shieldApi.clear() }
+        else if (Revolution is tour) scheduler.scheduleOnce(10 seconds) { revolutionApi.clear() }.unit
+      }.unit,
     indexLeaderboard = leaderboardIndexer.indexOne _
   )
 

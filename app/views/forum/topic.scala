@@ -14,7 +14,7 @@ object topic {
 
   def form(categ: lila.forum.Categ, form: Form[_], captcha: lila.common.Captcha)(implicit ctx: Context) =
     views.html.base.layout(
-      title = "New forum topic",
+      title = trans.createANewTopic.txt(),
       moreCss = cssTag("forum"),
       moreJs = frag(
         jsTag("forum-post.js"),
@@ -30,17 +30,17 @@ object topic {
           h2(dataIcon := "!", cls := "text")(trans.important()),
           p(
             trans.yourQuestionMayHaveBeenAnswered(
-              strong(a(href := routes.Main.faq())(trans.inTheFAQ()))
+              strong(a(href := routes.Main.faq)(trans.inTheFAQ()))
             )
           ),
           p(
             trans.toReportSomeoneForCheatingOrBadBehavior(
-              strong(a(href := routes.Report.form())(trans.useTheReportForm()))
+              strong(a(href := routes.Report.form)(trans.useTheReportForm()))
             )
           ),
           p(
             trans.toRequestSupport(
-              strong(a(href := routes.Main.contact())(trans.tryTheContactPage()))
+              strong(a(href := routes.Main.contact)(trans.tryTheContactPage()))
             )
           )
         ),
@@ -73,7 +73,8 @@ object topic {
       canModCateg: Boolean
   )(implicit ctx: Context) =
     views.html.base.layout(
-      title = s"${topic.name} • page ${posts.currentPage}/${posts.nbPages} • ${categ.name}",
+      title =
+        s"${topic.name} - ${trans.page.txt().toLowerCase} ${posts.currentPage}/${posts.nbPages} - ${categ.name}",
       moreJs = frag(
         jsTag("forum-post.js"),
         formWithCaptcha.isDefined option captchaTag,
@@ -86,17 +87,19 @@ object topic {
           url = s"$netBaseUrl${routes.ForumTopic.show(categ.slug, topic.slug, posts.currentPage).url}",
           description = shorten(posts.currentPageResults.headOption.??(_.text), 152)
         )
-        .some
+        .some,
+      canonicalPath =
+        lila.common.CanonicalPath(routes.ForumTopic.show(categ.slug, topic.slug, posts.currentPage)).some
     ) {
       val teamOnly = categ.team.filterNot(myTeam)
-      val pager    = bits.pagination(routes.ForumTopic.show(categ.slug, topic.slug, 1), posts, showPost = true)
+      val pager = bits.pagination(routes.ForumTopic.show(categ.slug, topic.slug, 1), posts, showPost = true)
 
       main(cls := "forum forum-topic page-small box box-pad")(
         h1(
           a(
-            href := routes.ForumCateg.show(categ.slug),
+            href     := routes.ForumCateg.show(categ.slug),
             dataIcon := "I",
-            cls := "text"
+            cls      := "text"
           ),
           topic.name
         ),
@@ -131,7 +134,7 @@ object topic {
           div(
             unsub.map { uns =>
               postForm(
-                cls := s"unsub ${if (uns) "on" else "off"}",
+                cls    := s"unsub ${if (uns) "on" else "off"}",
                 action := routes.Timeline.unsub(s"forum:${topic.id}")
               )(
                 button(cls := "button button-empty text on", dataIcon := "v", bits.dataUnsub := "off")(
@@ -164,7 +167,7 @@ object topic {
         ),
         formWithCaptcha.map { case (form, captcha) =>
           postForm(
-            cls := "form3 reply",
+            cls    := "form3 reply",
             action := s"${routes.ForumPost.create(categ.slug, topic.slug, posts.currentPage)}#reply",
             novalidate
           )(

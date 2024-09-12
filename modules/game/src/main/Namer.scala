@@ -16,15 +16,15 @@ object Namer {
       playerTextUser(player, _, withRating)
     }
 
-  def playerTextUser(player: Player, user: Option[LightUser], withRating: Boolean = false): String =
-    player.aiLevel.fold(
+  private def playerTextUser(player: Player, user: Option[LightUser], withRating: Boolean): String =
+    player.engineConfig.fold(
       user.fold(player.name | "Anon.") { u =>
         player.rating.ifTrue(withRating).fold(u.titleName) { r =>
           s"${u.titleName} ($r)"
         }
       }
-    ) { level =>
-      s"A.I. level $level"
+    ) { ec =>
+      s"${ec.engine.fullName} level ${ec.level}}" // rework to use i18n?
     }
 
   def gameVsTextBlocking(game: Game, withRatings: Boolean = false)(implicit

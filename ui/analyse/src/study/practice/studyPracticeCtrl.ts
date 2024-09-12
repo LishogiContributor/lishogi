@@ -1,12 +1,12 @@
-import * as xhr from '../studyXhr';
-import { prop } from 'common';
+import { prop } from 'common/common';
 import { storedProp } from 'common/storage';
-import makeSuccess from './studyPracticeSuccess';
-import makeSound from './sound';
-import { readOnlyProp } from '../../util';
-import { StudyPracticeData, Goal, StudyPracticeCtrl } from './interfaces';
-import { StudyData, StudyCtrl } from '../interfaces';
 import AnalyseCtrl from '../../ctrl';
+import { readOnlyProp } from '../../util';
+import { StudyCtrl, StudyData } from '../interfaces';
+import * as xhr from '../studyXhr';
+import { Goal, StudyPracticeCtrl, StudyPracticeData } from './interfaces';
+import makeSound from './sound';
+import makeSuccess from './studyPracticeSuccess';
 
 export default function (root: AnalyseCtrl, studyData: StudyData, data: StudyPracticeData): StudyPracticeCtrl {
   const goal = prop<Goal>(root.data.practiceGoal!),
@@ -26,7 +26,7 @@ export default function (root: AnalyseCtrl, studyData: StudyData, data: StudyPra
     success(null);
     const chapter = studyData.chapter;
     history.replaceState(null, chapter.name, data.url + '/' + chapter.id);
-    analysisUrl('/analysis/standard/' + root.node.fen.replace(/ /g, '_') + '?color=' + root.bottomColor());
+    analysisUrl('/analysis/standard/' + root.node.sfen.replace(/ /g, '_') + '?color=' + root.bottomColor());
   }
   onLoad();
 

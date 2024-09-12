@@ -1,15 +1,15 @@
 package lila.study
 
 import akka.stream.scaladsl._
-import shogi.format.pgn.Tags
 import reactivemongo.akkastream.cursorProducer
-import reactivemongo.api._
 import reactivemongo.api.bson._
 
 import lila.db.AsyncColl
 import lila.db.dsl._
 
-final class ChapterRepo(val coll: AsyncColl)(implicit
+final class ChapterRepo(
+    val coll: AsyncColl
+)(implicit
     ec: scala.concurrent.ExecutionContext,
     mat: akka.stream.Materializer
 ) {
@@ -18,13 +18,11 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
 
   val noRootProjection = $doc("root" -> false)
 
-  def byId(id: Chapter.Id): Fu[Option[Chapter]] = coll(_.byId[Chapter, Chapter.Id](id))
+  def byId(id: Chapter.Id): Fu[Option[Chapter]] =
+    coll(_.byId[Chapter, Chapter.Id](id))
 
   def studyIdOf(chapterId: Chapter.Id): Fu[Option[Study.Id]] =
     coll(_.primitiveOne[Study.Id]($id(chapterId), "studyId"))
-
-  // def metadataById(id: Chapter.Id): Fu[Option[Chapter.Metadata]] =
-  // coll.find($id(id), noRootProjection).one[Chapter.Metadata]
 
   def deleteByStudy(s: Study): Funit = coll(_.delete.one($studyId(s.id))).void
 
@@ -66,23 +64,6 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
         .list()
     }
 
-  def relaysAndTagsByStudyId(studyId: Study.Id): Fu[List[Chapter.RelayAndTags]] =
-    coll {
-      _.find(
-        $studyId(studyId),
-        $doc("relay" -> true, "tags" -> true).some
-      )
-        .cursor[Bdoc]()
-        .list() map { docs =>
-        for {
-          doc   <- docs
-          id    <- doc.getAsOpt[Chapter.Id]("_id")
-          relay <- doc.getAsOpt[Chapter.Relay]("relay")
-          tags  <- doc.getAsOpt[Tags]("tags")
-        } yield Chapter.RelayAndTags(id, relay, tags)
-      }
-    }
-
   def sort(study: Study, ids: List[Chapter.Id]): Funit =
     coll { c =>
       ids.zipWithIndex
@@ -110,12 +91,6 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
   def removeConceal(chapterId: Chapter.Id) =
     coll(_.unsetField($id(chapterId), "conceal")).void
 
-  def setRelay(chapterId: Chapter.Id, relay: Chapter.Relay) =
-    coll(_.updateField($id(chapterId), "relay", relay)).void
-
-  def setRelayPath(chapterId: Chapter.Id, path: Path) =
-    coll(_.updateField($id(chapterId), "relay.path", path)).void
-
   def setTagsFor(chapter: Chapter) =
     coll(_.updateField($id(chapter.id), "tags", chapter.tags)).void
 
@@ -128,7 +103,7 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
   def setGamebook(gamebook: lila.tree.Node.Gamebook) =
     setNodeValue(Node.BsonFields.gamebook, gamebook.nonEmpty option gamebook) _
 
-  def setGlyphs(glyphs: shogi.format.pgn.Glyphs) = setNodeValue(Node.BsonFields.glyphs, glyphs.nonEmpty) _
+  def setGlyphs(glyphs: shogi.format.Glyphs) = setNodeValue(Node.BsonFields.glyphs, glyphs.nonEmpty) _
 
   def setClock(clock: Option[shogi.Centis]) = setNodeValue(Node.BsonFields.clock, clock) _
 
@@ -137,19 +112,23 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
   // insert node and its children
   // and sets the parent order field
   def addSubTree(subTree: Node, newParent: RootOrNode, parentPath: Path)(chapter: Chapter): Funit = {
-    val set = $doc(subTreeToBsonElements(parentPath, subTree)) ++ {
+    val set = $doc(subTreeToBsonElements(chapter.root, parentPath, subTree)) ++ {
       (newParent.children.nodes.sizeIs > 1) ?? $doc(
-        pathToField(parentPath, Node.BsonFields.order) -> newParent.children.nodes.map(_.id)
+        pathToField(chapter.root, parentPath, Node.BsonFields.order) -> newParent.children.nodes.map(_.id)
       )
     }
     coll(_.update.one($id(chapter.id), $set(set))).void
   }
 
-  private def subTreeToBsonElements(parentPath: Path, subTree: Node): Vector[(String, Bdoc)] =
+  private def subTreeToBsonElements(
+      root: Node.Root,
+      parentPath: Path,
+      subTree: Node
+  ): Vector[(String, Bdoc)] =
     (parentPath.depth < Node.MAX_PLIES) ?? {
       val path = parentPath + subTree
-      subTree.children.nodes.flatMap(subTreeToBsonElements(path, _)) appended {
-        path.toDbField -> writeNode(subTree)
+      subTree.children.nodes.flatMap(subTreeToBsonElements(root, path, _)) appended {
+        path.toDbField(root) -> writeNode(subTree)
       }
     }
 
@@ -158,18 +137,24 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
 
     val set: Bdoc = {
       (children.nodes.sizeIs > 1) ?? $doc(
-        pathToField(path, Node.BsonFields.order) -> children.nodes.map(_.id)
+        pathToField(chapter.root, path, Node.BsonFields.order) -> children.nodes.map(_.id)
       )
-    } ++ $doc(childrenTreeToBsonElements(path, children))
+    } ++ $doc(childrenTreeToBsonElements(chapter.root, path, children))
 
     coll(_.update.one($id(chapter.id), $set(set))).void
   }
 
-  private def childrenTreeToBsonElements(parentPath: Path, children: Node.Children): Vector[(String, Bdoc)] =
+  private def childrenTreeToBsonElements(
+      root: Node.Root,
+      parentPath: Path,
+      children: Node.Children
+  ): Vector[(String, Bdoc)] =
     (parentPath.depth < Node.MAX_PLIES) ??
       children.nodes.flatMap { node =>
         val path = parentPath + node
-        childrenTreeToBsonElements(path, node.children) appended (path.toDbField -> writeNode(node))
+        childrenTreeToBsonElements(root, path, node.children) appended (path.toDbField(root) -> writeNode(
+          node
+        ))
       }
 
   private def setNodeValue[A: BSONWriter](
@@ -178,8 +163,8 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
   )(chapter: Chapter, path: Path): Funit =
     coll {
       _.updateOrUnsetField(
-        $id(chapter.id) ++ $doc(path.toDbField $exists true),
-        pathToField(path, field),
+        $id(chapter.id) ++ pathExists(chapter.root, path),
+        pathToField(chapter.root, path, field),
         value
       ).void
     }
@@ -190,22 +175,28 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
       values: List[(String, Option[BSONValue])]
   ): Funit =
     values.collect { case (field, Some(v)) =>
-      pathToField(path, field) -> v
+      pathToField(chapter.root, path, field) -> v
     } match {
       case Nil => funit
       case sets =>
         coll {
           _.update
             .one(
-              $id(chapter.id) ++ $doc(path.toDbField $exists true),
+              $id(chapter.id) ++ pathExists(chapter.root, path),
               $set($doc(sets))
             )
             .void
         }
     }
 
+  private def pathExists(root: Node.Root, path: Path) =
+    !(root.isGameRoot && root.gameMainlinePath.exists(path isOnPathOf _)) ?? ($doc(
+      path.toDbField(root) $exists true
+    ))
+
   // root.path.subField
-  private def pathToField(path: Path, subField: String): String = s"${path.toDbField}.$subField"
+  private def pathToField(root: Node.Root, path: Path, subField: String): String =
+    s"${path.toDbField(root)}.$subField"
 
   private[study] def idNamesByStudyIds(
       studyIds: Seq[Study.Id],
@@ -257,7 +248,6 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
         $id(chapter.id),
         "serverEval",
         Chapter.ServerEval(
-          path = chapter.root.mainlinePath,
           done = false
         )
       )
@@ -269,7 +259,8 @@ final class ChapterRepo(val coll: AsyncColl)(implicit
   def countByStudyId(studyId: Study.Id): Fu[Int] =
     coll(_.countSel($studyId(studyId)))
 
-  def insert(s: Chapter): Funit = coll(_.insert one s).void
+  def insert(c: Chapter): Funit           = coll(_.insert one c).void
+  def bulkInsert(cs: Seq[Chapter]): Funit = coll(_.insert many cs).void
 
   def update(c: Chapter): Funit = coll(_.update.one($id(c.id), c)).void
 

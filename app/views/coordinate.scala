@@ -7,7 +7,6 @@ import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
 import lila.common.String.html.safeJsonValue
 import lila.pref.Pref.Color
-import play.api.i18n.Lang
 
 import controllers.routes
 
@@ -23,19 +22,19 @@ object coordinate {
       ),
       openGraph = lila.app.ui
         .OpenGraph(
-          title = "Shogi board coordinates trainer",
-          url = s"$netBaseUrl${routes.Coordinate.home().url}",
-          description =
-            "Knowing the shogi board coordinates is a very important shogi skill. A square name appears on the board and you must click on the correct square."
+          title = trans.coordinates.coordinateTraining.txt(),
+          url = s"$netBaseUrl${routes.Coordinate.home.url}",
+          description = trans.coordinates.aSquareNameAppears.txt()
         )
         .some,
-      zoomable = true
+      zoomable = true,
+      withHrefLangs = lila.i18n.LangList.All.some
     )(
       main(
-        id := "trainer",
-        cls := "coord-trainer training init",
+        id                      := "trainer",
+        cls                     := "coord-trainer training init",
         attr("data-color-pref") := ctx.pref.coordColorName,
-        attr("data-score-url") := ctx.isAuth.option(routes.Coordinate.score().url)
+        attr("data-score-url")  := ctx.isAuth.option(routes.Coordinate.score.url)
       )(
         div(cls := "coord-trainer__side")(
           div(cls := "box")(
@@ -44,14 +43,14 @@ object coordinate {
               div(cls := "scores")(scoreCharts(score))
             }
           ),
-          form(cls := "color buttons", action := routes.Coordinate.color())(
+          form(cls := "color buttons", action := routes.Coordinate.color)(
             st.group(cls := "radio")(
-              List(Color.GOTE, Color.RANDOM, Color.SENTE).map { id =>
+              List(Color.SENTE, Color.RANDOM, Color.GOTE).map { id =>
                 div(
                   input(
-                    tpe := "radio",
+                    tpe   := "radio",
                     st.id := s"coord_color_$id",
-                    name := "color",
+                    name  := "color",
                     value := id,
                     (id == ctx.pref.coordColor) option checked
                   ),
@@ -61,10 +60,10 @@ object coordinate {
             )
           )
         ),
-        div(cls := "coord-trainer__board main-board")(
+        div(cls   := "coord-trainer__board main-board")(
           div(cls := "next_coord", id := "next_coord0"),
           div(cls := "next_coord", id := "next_coord1"),
-          shogigroundBoard
+          shogigroundEmpty(shogi.variant.Standard, shogi.Color.fromSente(ctx.pref.coordColor != Color.GOTE))
         ),
         div(cls := "coord-trainer__table")(
           div(cls := "explanation")(
@@ -77,11 +76,11 @@ object coordinate {
             p(trans.coordinates.aSquareNameAppears())
           ),
           div(cls := "box current-status")(
-            h1(trans.storm.score()),
+            h2(trans.storm.score()),
             div(cls := "coord-trainer__score")(0)
           ),
           div(cls := "box current-status")(
-            h1(trans.time()),
+            h2(trans.time()),
             div(cls := "coord-trainer__timer")(30.0)
           )
         ),
@@ -98,12 +97,17 @@ object coordinate {
   def scoreCharts(score: lila.coordinate.Score)(implicit ctx: Context) =
     frag(
       List(
-        (trans.coordinates.averageScoreAsWhiteX, score.gote),
-        (trans.coordinates.averageScoreAsBlackX, score.sente)
-      ).map { case (averageScoreX, s) =>
+        (shogi.Color.Sente, score.sente),
+        (shogi.Color.Gote, score.gote)
+      ).map { case (c, s) =>
         div(cls := "chart_container")(
           s.nonEmpty option frag(
-            p(averageScoreX(raw(s"""<strong>${"%.2f".format(s.sum.toDouble / s.size)}</strong>"""))),
+            p(
+              trans.coordinates.averageScoreAsXY(
+                standardColorName(c).toUpperCase,
+                raw(s"""<strong>${"%.2f".format(s.sum.toDouble / s.size)}</strong>""")
+              )
+            ),
             div(cls := "user_chart", attr("data-points") := safeJsonValue(Json toJson s))
           )
         )

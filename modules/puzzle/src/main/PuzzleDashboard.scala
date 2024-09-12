@@ -15,7 +15,6 @@ case class PuzzleDashboard(
 ) {
 
   import PuzzleDashboard._
-  import BsonHandlers._
 
   lazy val (weakThemes, strongThemes) = {
     val all = byTheme.view.filter(_._2.nb > global.nb / 40).toList.sortBy { case (_, res) =>
@@ -43,6 +42,8 @@ object PuzzleDashboard {
   type Days = Int
 
   val dayChoices = List(1, 2, 3, 7, 10, 14, 21, 30, 60, 90)
+
+  def getClosestDay(n: Int): Option[Days] = dayChoices.minByOption(day => math.abs(day - n))
 
   val topThemesNb = 8
 
@@ -96,8 +97,8 @@ final class PuzzleDashboardApi(
   def apply(u: User, days: Days): Fu[Option[PuzzleDashboard]] = cache.get(u.id -> days)
 
   private val cache =
-    cacheApi[(User.ID, Days), Option[PuzzleDashboard]](1024, "puzzle.dashboard") {
-      _.expireAfterWrite(10 seconds).buildAsyncFuture { case (userId, days) =>
+    cacheApi[(User.ID, Days), Option[PuzzleDashboard]](64, "puzzle.dashboard") {
+      _.expireAfterWrite(20 seconds).buildAsyncFuture { case (userId, days) =>
         compute(userId, days)
       }
     }

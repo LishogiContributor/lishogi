@@ -16,7 +16,7 @@ object index {
       div(cls := "account oauth box")(
         div(cls := "box__top")(
           h1(title),
-          st.form(cls := "box-top__actions", action := routes.OAuthToken.create())(
+          st.form(cls        := "box-top__actions", action   := routes.OAuthToken.create)(
             submitButton(cls := "button frameless", st.title := "New access token", dataIcon := "O")
           )
         ),
@@ -26,7 +26,7 @@ object index {
           br,
           br,
           "Instead, ",
-          a(href := routes.OAuthToken.create())("generate a personal token"),
+          a(href := routes.OAuthToken.create)("generate a personal token"),
           " that you can directly use in API requests.",
           br,
           br,
@@ -39,14 +39,12 @@ object index {
           a(href := "https://github.com/lichess-org/api/tree/master/example/oauth-personal-token")(
             "personal token app example"
           ),
-          " and ",
-          a(href := "https://lichess.org/api")(
-            "Lichess' API documentation"
-          ),
-          " to get an idea on how Lishogi's API looks."
+          " and the ",
+          a(href := routes.Api.index)("API documentation (WIP)"),
+          "."
         ),
         tokens.headOption.filter(_.isBrandNew).map { token =>
-          div(cls := "box__pad brand")(
+          div(cls            := "box__pad brand")(
             iconTag("E")(cls := "is-green"),
             div(
               p(
@@ -54,7 +52,7 @@ object index {
                 br,
                 "You won’t be able to see it again!"
               ),
-              code(token.id.value)
+              code(token.plain.secret)
             )
           )
         },
@@ -77,7 +75,7 @@ object index {
               td(cls := "action")(
                 postForm(action := routes.OAuthToken.delete(t.id.value))(
                   submitButton(
-                    cls := "button button-red button-empty confirm",
+                    cls      := "button button-red button-empty confirm",
                     st.title := "Delete this access token"
                   )("Delete")
                 )

@@ -13,7 +13,7 @@
   <string name="doPasswordReset">輸入密碼以移除兩步驟驗證</string>
   <string name="accountSupport">我需要帳戶支援</string>
   <string name="wantTitle">我希望我的稱號顯示在Lishogi上</string>
-  <string name="visitTitleConfirmation">To show your title on your Lishogi profile, and participate in Titled Arenas, contact lishogi at contact@lishogi.org</string>
+  <string name="visitTitleConfirmation">To show your title on your Lishogi profile, and participate in Titled Arenas, contact Lishogi at contact@lishogi.org</string>
   <string name="wantCloseAccount">我想刪除我的帳戶</string>
   <string name="closeYourAccount">您可以在這個頁面刪除你的帳號</string>
   <string name="doNotAskByEmail">請不要透過電子郵件要求我們關閉帳號，我們不會處理</string>
@@ -28,8 +28,8 @@
   <string name="cantClearHistory">我們無法將您的下棋歷史、解題歷史和評分消除</string>
   <string name="wantReport">我想要舉報一位玩家</string>
   <string name="cheating">作弊</string>
-  <string name="sandbagging">通過輸掉比賽來降低其評分</string>
-  <string name="trolling">trolling</string>
+  <string name="sandbagging">刻意降低評分</string>
+  <string name="trolling">戳人</string>
   <string name="insults">侮辱</string>
   <string name="otherReason">其他原因</string>
   <string name="toReportAPlayer">To report a player for %s, use the report form</string>
@@ -45,16 +45,12 @@
   <string name="reportBugInDiscord">在 Lishogi 的 Discord 伺服器</string>
   <string name="howToReportBug">Please describe what the bug looks like, what you expected to happen instead, and the steps to reproduce the bug.</string>
   <string name="illegalPawnCapture">Illegal pawn capture</string>
-  <string name="calledEnPassant">It is called \"en passant\" and is one of the rules of chess.</string>
   <string name="tryEnPassant">Try this little interactive game to learn more about \"en passant\".</string>
   <string name="illegalCastling">Illegal or impossible castling</string>
   <string name="castlingPrevented">Castling is only prevented if the king goes through a controlled square.</string>
   <string name="castlingRules">Make sure you understand the castling rules</string>
-  <string name="tryCastling">Try this little interactive game to practice castling in chess</string>
   <string name="castlingImported">If you imported the game, or started it from a position, make sure you correctly set the castling rights.</string>
   <string name="insufficientMaterial">Insufficient mating material</string>
-  <string name="fideMate">According to the FIDE Laws of Chess §6.9, if a checkmate is possible with any legal sequence of moves, then the game is not a draw</string>
-  <string name="knightMate">It is possible to checkmate with only a knight or a bishop, if the opponent has more than a king on the board.</string>
   <string name="noRatingPoints">不會得到評分</string>
   <string name="ratedGame">Make sure you played a rated game. Casual games do not affect the players ratings.</string>
   <string name="errorPage">錯誤頁面</string>

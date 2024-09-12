@@ -22,25 +22,13 @@ object show {
 
   def apply(
       c: lila.coach.Coach.WithUser,
-      coachReviews: lila.coach.CoachReview.Reviews,
-      studies: Seq[lila.study.Study.WithChaptersAndLiked],
-      myReview: Option[lila.coach.CoachReview]
+      studies: Seq[lila.study.Study.WithChaptersAndLiked]
   )(implicit ctx: Context) = {
     val profile   = c.coach.profile
     val coachName = s"${c.user.title.??(t => s"$t ")}${c.user.realNameOrUsername}"
     val title     = xCoachesStudents.txt(coachName)
     views.html.base.layout(
       title = title,
-      moreJs = frag(
-        jsAt("vendor/bar-rating/dist/jquery.barrating.min.js"),
-        ctx.isAuth option embedJsUnsafe("""$(function() {
-$(".bar-rating").barrating();
-$('.coach-review-form .toggle').click(function() {
-$(this).remove();
-$('.coach-review-form form').show();
-});
-});""")
-      ),
       moreCss = cssTag("coach"),
       openGraph = lila.app.ui
         .OpenGraph(
@@ -61,16 +49,14 @@ $('.coach-review-form form').show();
             frag(
               if (c.coach.isListed) p("This page is now public.")
               else "This page is not public yet. ",
-              a(href := routes.Coach.edit(), cls := "text", dataIcon := "m")("Edit my coach profile")
+              a(href := routes.Coach.edit, cls := "text", dataIcon := "m")("Edit my coach profile")
             )
           else
             a(
-              cls := "text button button-empty",
+              cls      := "text button button-empty",
               dataIcon := "c",
-              href := s"${routes.Msg.convo(c.user.username)}"
-            )(sendPM()),
-          ctx.me.exists(_.id != c.user.id) option review.form(c, myReview),
-          review.list(coachReviews)
+              href     := s"${routes.Msg.convo(c.user.username)}"
+            )(sendPM())
         ),
         div(cls := "coach-show__main coach-main box")(
           div(cls := "coach-widget")(widget(c, link = false)),
@@ -99,9 +85,9 @@ $('.coach-review-form form').show();
             div(cls := "list")(
               profile.youtubeUrls.map { url =>
                 iframe(
-                  width := "256",
-                  height := "192",
-                  src := url.value,
+                  width               := "256",
+                  height              := "192",
+                  src                 := url.value,
                   attr("frameborder") := "0",
                   frame.allowfullscreen
                 )

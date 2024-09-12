@@ -1,36 +1,30 @@
-import { Piece } from 'shogiground/types';
-import { VNode } from 'snabbdom/vnode';
+import { Piece } from 'shogiops/types';
 import { Clock } from './clock';
 import { Combo } from './combo';
 import CurrentPuzzle from './current';
 
-export type MaybeVNode = VNode | string | null | undefined;
-export type MaybeVNodes = MaybeVNode[];
 export type Redraw = () => void;
 
-export interface Promotion {
-  start(orig: Key, dest: Key, callback: (orig: Key, dest: Key, prom: boolean) => void): boolean;
-  cancel(): void;
-  view(): MaybeVNode;
-}
-
 export interface PuzPrefs {
-  coords: 0 | 1 | 2;
-  is3d: boolean;
+  coords: 0 | 1 | 2 | 3;
   destination: boolean;
   dropDestination: boolean;
   moveEvent: number;
-  highlight: boolean;
+  highlightLastDests: boolean;
+  highlightCheck: boolean;
+  squareOverlay: boolean;
+  resizeHandler: number;
 }
 
-export type UserMove = (orig: Key, dest: Key) => void;
+export type UserMove = (orig: Key, dest: Key, prom: boolean) => void;
 export type UserDrop = (piece: Piece, dest: Key) => void;
 
 export interface Puzzle {
   id: string;
-  fen: string;
+  sfen: string;
   line: string;
   rating: number;
+  ambPromotions?: number[];
 }
 
 export interface Run {

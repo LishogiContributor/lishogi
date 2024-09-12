@@ -33,25 +33,24 @@ object captcha {
         )(
           div(cls := "challenge")(
             div(
-              cls := "mini-board cg-wrap parse-fen is2d",
+              cls          := "mini-board parse-sfen",
               dataPlayable := "1",
-              dataX := encodeFen(safeJsonValue(Json.toJson(captcha.moves))),
-              dataY := encodeFen(if (captcha.sente) {
+              dataX        := encodeSfen(safeJsonValue(Json.toJson(captcha.moves))),
+              dataY := encodeSfen(if (captcha.sente) {
                 "sente"
               } else {
                 "gote"
               }),
-              dataZ := encodeFen(captcha.fen)
-            )(cgWrapContent)
+              dataZ := encodeSfen(captcha.sfenBoard)
+            )(div("sg-wrap"))
           ),
           div(cls := "captcha-explanation")(
             label(cls := "form-label")(
-              if (captcha.sente) trans.blackCheckmatesInOneMove()
-              else trans.whiteCheckmatesInOneMove()
+              transWithColorName(trans.xCheckmatesInOneMove, shogi.Color.fromSente(captcha.sente), false)
             ),
             br,
             br,
-            trans.thisIsAChessCaptcha(),
+            trans.thisIsAShogiCaptcha(),
             br,
             trans.clickOnTheBoardToMakeYourMove(),
             br,

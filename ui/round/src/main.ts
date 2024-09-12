@@ -1,16 +1,12 @@
+import LishogiChat from 'chat';
+import menuHover from 'common/menuHover';
 import { Shogiground } from 'shogiground';
-import { init } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import klass from 'snabbdom/modules/class';
-import attributes from 'snabbdom/modules/attributes';
-
-import { RoundOpts } from './interfaces';
+import { VNode, attributesModule, classModule, init } from 'snabbdom';
+import boot from './boot';
 import RoundController from './ctrl';
+import { RoundOpts } from './interfaces';
 import MoveOn from './moveOn';
 import { main as view } from './view/main';
-import LishogiChat from 'chat';
-import boot from './boot';
-import { menuHover } from 'common/menuHover';
 
 export interface RoundApi {
   socketReceive(typ: string, data: any): boolean;
@@ -21,9 +17,8 @@ export interface RoundMain {
   app: (opts: RoundOpts) => RoundApi;
 }
 
+const patch = init([classModule, attributesModule]);
 export function app(opts: RoundOpts): RoundApi {
-  const patch = init([klass, attributes]);
-
   let vnode: VNode, ctrl: RoundController;
 
   function redraw() {
@@ -38,7 +33,7 @@ export function app(opts: RoundOpts): RoundApi {
 
   window.addEventListener('resize', redraw); // col1 / col2+ transition
 
-  ctrl.isPlaying() && menuHover();
+  if (ctrl.isPlaying()) menuHover();
 
   return {
     socketReceive: ctrl.socket.receive,

@@ -64,7 +64,7 @@ final class JsonView(
               "limit"     -> clock.limitSeconds,
               "increment" -> clock.incrementSeconds,
               "byoyomi"   -> clock.byoyomiSeconds,
-              "periods"   -> clock.periods,
+              "periods"   -> clock.periodsTotal,
               "show"      -> clock.show
             )
           case TimeControl.Correspondence(d) =>
@@ -81,10 +81,10 @@ final class JsonView(
         )
       )
       .add("direction" -> direction.map(_.name))
-      .add("initialFen" -> c.initialFen)
+      .add("initialSfen" -> c.initialSfen)
 
   private def iconChar(c: Challenge) =
-    if (c.variant == shogi.variant.FromPosition) '*'
+    if (c.initialSfen.isDefined) '*'
     else c.perfType.iconChar
 
   private val i18nKeys = List(
@@ -94,6 +94,14 @@ final class JsonView(
     trans.accept,
     trans.decline,
     trans.viewInFullSize,
-    trans.cancel
+    trans.cancel,
+    trans.unlimited,
+    trans.nbDays,
+    trans.standard,
+    trans.minishogi,
+    trans.chushogi,
+    trans.annanshogi,
+    trans.kyotoshogi,
+    trans.checkshogi
   ).map(_.key)
 }

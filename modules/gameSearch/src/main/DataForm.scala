@@ -1,6 +1,6 @@
 package lila.gameSearch
 
-import shogi.{ Mode }
+import shogi.Mode
 import org.joda.time.DateTime
 import play.api.data._
 import play.api.data.Forms._
@@ -24,8 +24,8 @@ final private[gameSearch] class DataForm {
       "perf"        -> optional(numberIn(lila.rating.PerfType.nonPuzzle.map(_.id))),
       "source"      -> optional(numberIn(Query.sources)),
       "mode"        -> optional(numberIn(Query.modes)),
-      "turnsMin"    -> optional(numberIn(Query.turns)),
-      "turnsMax"    -> optional(numberIn(Query.turns)),
+      "pliesMin"    -> optional(numberIn(Query.plies)),
+      "pliesMax"    -> optional(numberIn(Query.plies)),
       "ratingMin"   -> optional(numberIn(Query.averageRatings)),
       "ratingMax"   -> optional(numberIn(Query.averageRatings)),
       "hasAi"       -> optional(numberIn(Query.hasAis)),
@@ -65,8 +65,8 @@ private[gameSearch] case class SearchData(
     perf: Option[Int] = None,
     source: Option[Int] = None,
     mode: Option[Int] = None,
-    turnsMin: Option[Int] = None,
-    turnsMax: Option[Int] = None,
+    pliesMin: Option[Int] = None,
+    pliesMax: Option[Int] = None,
     ratingMin: Option[Int] = None,
     ratingMax: Option[Int] = None,
     hasAi: Option[Int] = None,
@@ -94,12 +94,12 @@ private[gameSearch] case class SearchData(
       perf = perf,
       source = source,
       rated = mode flatMap Mode.apply map (_.rated),
-      turns = Range(turnsMin, turnsMax),
+      plies = Range(pliesMin, pliesMax),
       averageRating = Range(ratingMin, ratingMax),
       hasAi = hasAi map (_ == 1),
       aiLevel = Range(aiLevelMin, aiLevelMax),
       duration = Range(durationMin, durationMax),
-      clock = Clocking(clock.initMin, clock.initMax, clock.incMin, clock.incMax),
+      clock = Clocking(clock.initMin, clock.initMax, clock.incMin, clock.incMax, clock.byoMin, clock.byoMax),
       date = Range(dateMin, dateMax),
       status = status,
       analysed = analysed map (_ == 1),

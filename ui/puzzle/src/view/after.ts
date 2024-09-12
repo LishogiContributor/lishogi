@@ -1,7 +1,6 @@
-import { bind, dataIcon } from '../util';
+import { bind, dataIcon } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import { Controller } from '../interfaces';
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
 
 const renderVote = (ctrl: Controller): VNode =>
   h(
@@ -52,17 +51,19 @@ export default function (ctrl: Controller): VNode {
       h('a', {
         attrs: {
           'data-icon': '',
-          href: `/analysis/${ctrl.vm.node.fen.replace(/ /g, '_')}?color=${ctrl.vm.pov}#practice`,
+          href: `/analysis/${ctrl.vm.node.sfen.replace(/ /g, '_')}?color=${ctrl.vm.pov}#practice`,
           title: ctrl.trans.noarg('playWithTheMachine'),
         },
       }),
-      h(
-        'a',
-        {
-          hook: bind('click', ctrl.nextPuzzle),
-        },
-        ctrl.trans.noarg('continueTraining')
-      ),
+      ctrl.getData().user
+        ? h(
+            'a',
+            {
+              hook: bind('click', ctrl.nextPuzzle),
+            },
+            ctrl.trans.noarg('continueTraining')
+          )
+        : undefined,
     ]),
   ]);
 }

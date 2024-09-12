@@ -42,19 +42,19 @@ object watcher {
         roundTag,
         embedJsUnsafe(s"""lishogi=window.lishogi||{};customWS=true;onload=function(){
 LishogiRound.boot(${safeJsonValue(
-          Json.obj(
-            "data" -> data,
-            "i18n" -> jsI18n(pov.game),
-            "chat" -> chatJson
-          )
-        )})}""")
+            Json.obj(
+              "data" -> data,
+              "i18n" -> jsI18n(pov.game),
+              "chat" -> chatJson
+            )
+          )})}""")
       ),
       openGraph = povOpenGraph(pov).some,
       shogiground = false
     )(
-      main(cls := "round")(
+      main(cls := s"round ${mainVariantClass(pov.game.variant)}")(
         st.aside(cls := "round__side")(
-          bits.side(pov, data, tour, simul, userTv, bookmarked),
+          bits.side(pov, tour, simul, userTv, bookmarked),
           chatOption.map(_ => chat.frag)
         ),
         bits.roundAppPreload(pov, false),
@@ -64,7 +64,7 @@ LishogiRound.boot(${safeJsonValue(
     )
   }
 
-  def crawler(pov: Pov, initialFen: Option[shogi.format.FEN], pgn: shogi.format.pgn.Pgn)(implicit
+  def crawler(pov: Pov, kif: shogi.format.Notation)(implicit
       ctx: Context
   ) =
     bits.layout(
@@ -74,16 +74,16 @@ LishogiRound.boot(${safeJsonValue(
       shogiground = false
     )(
       frag(
-        main(cls := "round")(
+        main(cls := s"round ${mainVariantClass(pov.game.variant)}")(
           st.aside(cls := "round__side")(
-            game.side(pov, initialFen, none, simul = none, userTv = none, bookmarked = false),
+            game.side(pov, none, simul = none, userTv = none, bookmarked = false),
             div(cls := "for-crawler")(
               h1(titleGame(pov.game)),
               p(describePov(pov)),
-              div(cls := "pgn")(pgn.render)
+              div(cls := "kif")(kif.render)
             )
           ),
-          div(cls := "round__board main-board")(shogiground(pov))
+          div(cls := s"round__board main-board ${variantClass(pov.game.variant)}")(shogiground(pov))
         )
       )
     )

@@ -14,7 +14,6 @@ object Environment
     with PaginatorHelper
     with FormHelper
     with SetupHelper
-    with AiHelper
     with GameHelper
     with UserHelper
     with ForumHelper
@@ -23,14 +22,15 @@ object Environment
     with TeamHelper
     with TournamentHelper
     with FlashHelper
-    with ShogigroundHelper {
+    with ShogigroundHelper
+    with ColorNameHelper {
 
   // #TODO holy shit fix me
   // requires injecting all the templates!!
   private var envVar: Option[Env] = None
-  def setEnv(e: Env) = { envVar = Some(e) }
-  def destroy() = { envVar = None }
-  def env: Env = envVar.get
+  def setEnv(e: Env)              = { envVar = Some(e) }
+  def destroy()                   = { envVar = None }
+  def env: Env                    = envVar.get
 
   type FormWithCaptcha = (play.api.data.Form[_], lila.common.Captcha)
 
@@ -43,8 +43,8 @@ object Environment
 
   def apiVersion = lila.api.Mobile.Api.currentVersion
 
-  lazy val explorerEndpoint  = env.explorerEndpoint
-  lazy val tablebaseEndpoint = env.tablebaseEndpoint
+  lazy val insightsEndpoint = env.insightsEndpoint
+  lazy val insightsSecret   = env.insightsSecret
 
   def contactEmail = env.net.email.value
 
@@ -55,6 +55,9 @@ object Environment
   def blockingReportNbOpen: Int = env.report.api.nbOpen.awaitOrElse(20.millis, "nbReports", 0)
 
   val spinner: Frag = raw(
-    """<div class="spinner"><svg viewBox="0 0 40 40"><circle cx=20 cy=20 r=18 fill="none"></circle></svg></div>"""
+    """<div class="spinner"><svg viewBox="-2.5 -2.5 45 55" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 20 0 L 33 4 L 40 50 L 0 50 L 7 4 Z"
+    style="fill:none;stroke-width:2.5;stroke-opacity:1;" />
+</svg></div>"""
   )
 }

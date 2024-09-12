@@ -1,3 +1,5 @@
+@import '../base/scrollbar';
+
 $c-mselect: $c-primary;
 
 .mselect {
@@ -7,18 +9,19 @@ $c-mselect: $c-primary;
     @include hide;
   }
   &__label {
-    @extend %box-neat, %metal, %flex-between;
+    @extend %box-radius, %flex-between;
+    background: $c-bg-box;
+    border: $border;
     flex-flow: row nowrap;
     padding: 0.3rem 0.3rem 0.3rem 1rem;
     cursor: pointer;
-    &:hover {
-      @extend %metal-hover;
-    }
     &::after {
       @extend %data-icon;
       content: 'u';
       font-size: 70%;
       color: $c-mselect;
+      margin-left: 0.4em;
+      margin-inline: 0.4em 0;
     }
   }
   &__toggle:checked ~ .mselect__label {
@@ -26,7 +29,7 @@ $c-mselect: $c-primary;
     opacity: 0;
   }
   &__list {
-    @extend %base-font, %box-radius, %popup-shadow, %flex-column;
+    @extend %base-font, %box-radius, %flex-column;
     position: absolute;
     top: 0;
     left: 0;
@@ -39,7 +42,8 @@ $c-mselect: $c-primary;
     transform-origin: top;
     @include transition(transform);
     .current {
-      background: $c-bg-zebra;
+      background: $c-mselect;
+      color: #fff;
       @extend %flex-between-nowrap;
       &::after {
         @extend %data-icon;
@@ -51,12 +55,11 @@ $c-mselect: $c-primary;
     > * {
       white-space: nowrap;
       display: block;
-      padding: 0.3em 1em;
+      padding: 0.5em 1em;
       @include transition();
       color: $c-mselect;
-      &:hover {
-        background: $c-mselect;
-        color: #fff;
+      &:not(.current):hover {
+        @extend %metal-hover;
       }
       &::before {
         margin-right: 0.4em;
@@ -65,7 +68,7 @@ $c-mselect: $c-primary;
     }
     .mselect__toggle:checked ~ & {
       transform: scale(1, 1);
-      @include breakpoint($mq-not-small) {
+      @include breakpoint($mq-col1-uniboard) {
         position: fixed;
         top: 50%;
         transform: translateY(-50%) scale(1, 1);

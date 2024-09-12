@@ -23,7 +23,7 @@ object indexStripe {
       main(cls := "box box-pad plan")(
         h1(
           userLink(me),
-          " • ",
+          " - ",
           if (patron.isLifetime) strong(lifetimePatron())
           else patronForMonths(me.plan.months)
         ),
@@ -44,7 +44,7 @@ object indexStripe {
                   showDate(info.nextInvoice.dateTime)
                 ),
                 br,
-                a(href := s"${routes.Plan.list()}#onetime")(makeAdditionalDonation())
+                a(href := s"${routes.Plan.list}#onetime")(makeAdditionalDonation())
               )
             ),
             tr(
@@ -56,21 +56,21 @@ object indexStripe {
                   ),
                   a(dataForm := "cancel")(cancelSupport())
                 ),
-                postForm(cls := "switch", action := routes.Plan.switch())(
+                postForm(cls := "switch", action := routes.Plan.switch)(
                   p(decideHowMuch()),
                   "USD $ ",
                   input(
-                    tpe := "number",
-                    min := 1,
-                    max := 100000,
-                    step := "0.01",
-                    name := "usd",
+                    tpe   := "number",
+                    min   := 1,
+                    max   := 100000,
+                    step  := "0.01",
+                    name  := "usd",
                     value := info.subscription.plan.usd.toString
                   ),
                   submitButton(cls := "button")(trans.apply()),
                   a(dataForm := "switch")(trans.cancel())
                 ),
-                postForm(cls := "cancel", action := routes.Plan.cancel())(
+                postForm(cls := "cancel", action := routes.Plan.cancel)(
                   p(stopPayments()),
                   submitButton(cls := "button button-red")(noLongerSupport()),
                   a(dataForm := "cancel")(trans.cancel())
@@ -104,7 +104,7 @@ object indexStripe {
             ),
             tr(
               th,
-              td(a(href := routes.Plan.list())(viewOthers()))
+              td(a(href := routes.Plan.list)(viewOthers()))
             )
           )
         )

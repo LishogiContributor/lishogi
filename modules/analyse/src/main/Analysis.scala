@@ -7,6 +7,7 @@ import org.joda.time.DateTime
 case class Analysis(
     id: String, // game ID, or chapter ID if studyId is set
     studyId: Option[String],
+    postGameStudies: Set[Analysis.PostGameStudy],
     infos: List[Info],
     startPly: Int,
     uid: Option[String], // requester lishogi ID
@@ -42,7 +43,7 @@ case class Analysis(
   def valid = infos.nonEmpty
 
   def nbEmptyInfos       = infos.count(_.isEmpty)
-  def emptyRatio: Double = nbEmptyInfos.toDouble / infos.size
+  def emptyRatio: Double = nbEmptyInfos.toDouble / infos.size.atLeast(1)
 }
 
 object Analysis {
@@ -52,7 +53,11 @@ object Analysis {
 
   case class Analyzed(game: lila.game.Game, analysis: Analysis)
 
+  case class PostGameStudy(studyId: String, chapterId: String)
+
   type ID = String
+
+  implicit private[analyse] val postGameStudyBSONHandler = Macros.handler[PostGameStudy]
 
   implicit private[analyse] val analysisBSONHandler = new BSON[Analysis] {
     def reads(r: BSON.Reader) = {
@@ -61,7 +66,8 @@ object Analysis {
       Analysis(
         id = r str "_id",
         studyId = r strO "studyId",
-        infos = Info.decodeList(raw, startPly) err s"Invalid analysis data $raw",
+        postGameStudies = r.getD[Set[PostGameStudy]]("pgs", Set.empty[PostGameStudy]),
+        infos = Info.decodeList(raw, startPly),
         startPly = startPly,
         uid = r strO "uid",
         by = r strO "by",
@@ -72,6 +78,7 @@ object Analysis {
       BSONDocument(
         "_id"     -> o.id,
         "studyId" -> o.studyId,
+        "pgs"     -> (o.postGameStudies.nonEmpty).option(o.postGameStudies),
         "data"    -> Info.encodeList(o.infos),
         "ply"     -> w.intO(o.startPly),
         "uid"     -> o.uid,

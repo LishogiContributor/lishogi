@@ -1,8 +1,8 @@
+import { ops as treeOps, path as treePath } from 'tree';
+import { makeShapesFromUsi } from '../../autoShape';
 import AnalyseCtrl from '../../ctrl';
-import { path as treePath, ops as treeOps } from 'tree';
-import { makeShapesFromUci } from '../../autoShape';
 
-type Feedback = 'play' | 'good' | 'bad' | 'end';
+export type Feedback = 'play' | 'good' | 'bad' | 'end';
 
 export interface State {
   feedback: Feedback;
@@ -103,7 +103,9 @@ export default class GamebookPlayCtrl {
   };
 
   solution = () => {
-    this.root.shogiground.setShapes(makeShapesFromUci(this.root.turnColor(), this.root.node.children[0].uci!, 'green'));
+    this.root.shogiground.setShapes(
+      makeShapesFromUsi(this.root.turnColor(), this.root.node.children[0].usi!, 'engine')
+    );
   };
 
   canJumpTo = (path: Tree.Path) => treePath.contains(this.root.path, path);
@@ -111,7 +113,7 @@ export default class GamebookPlayCtrl {
   onJump = () => {
     this.makeState();
     // wait for the root ctrl to make the move
-    setTimeout(() => this.root.withCg(cg => cg.playPremove()), 100);
+    setTimeout(() => this.root.shogiground.playPremove(), 100);
   };
 
   onShapeChange = (shapes: Tree.Shape[]) => {

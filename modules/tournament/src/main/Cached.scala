@@ -19,7 +19,7 @@ final private[tournament] class Cached(
 
   val nameCache = cacheApi.sync[(Tournament.ID, Lang), Option[String]](
     name = "tournament.name",
-    initialCapacity = 32768,
+    initialCapacity = 4096,
     compute = { case (id, lang) =>
       tournamentRepo byId id dmap2 { _.name()(lang) }
     },
@@ -29,7 +29,7 @@ final private[tournament] class Cached(
   )
 
   val onHomepage = cacheApi.unit[List[Tournament]] {
-    _.refreshAfterWrite(2 seconds)
+    _.refreshAfterWrite(10 seconds)
       .buildAsyncFuture(_ => tournamentRepo.onHomepage)
   }
 
@@ -57,6 +57,19 @@ final private[tournament] class Cached(
     _.expireAfterAccess(1 hour)
       .maximumSize(2048)
       .buildAsyncFuture(playerRepo.computeRanking)
+  }
+
+  object battle {
+
+    val teamStanding =
+      cacheApi[Tournament.ID, List[TeamBattle.RankedTeam]](32, "tournament.teamStanding") {
+        _.expireAfterWrite(1 second)
+          .buildAsyncFuture { id =>
+            tournamentRepo teamBattleOf id flatMap {
+              _ ?? { playerRepo.bestTeamIdsByTour(id, _) }
+            }
+          }
+      }
   }
 
   private[tournament] object sheet {

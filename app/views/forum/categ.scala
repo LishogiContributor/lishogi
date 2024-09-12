@@ -16,21 +16,21 @@ object categ {
       moreCss = cssTag("forum"),
       openGraph = lila.app.ui
         .OpenGraph(
-          title = "Lishogi community forum",
-          url = s"$netBaseUrl${routes.ForumCateg.index().url}",
-          description = "Shogi discussions and feedback about Lishogi development"
+          title = trans.forum.txt(),
+          url = s"$netBaseUrl${routes.ForumCateg.index.url}",
+          description = trans.forumDescription.txt()
         )
         .some
     ) {
       main(cls := "forum index box")(
         div(cls := "box__top")(
-          h1(dataIcon := "d", cls := "text")("Lishogi Forum"),
+          h1(dataIcon := "d", cls := "text")(s"Lishogi ${trans.forum.txt()}"),
           bits.searchForm()
         ),
         showCategs(categs.filterNot(_.categ.isTeam)),
         if (categs.exists(_.categ.isTeam))
           frag(
-            h1("Your teams boards"),
+            h1(trans.yourTeamBoards()),
             showCategs(categs.filter(_.categ.isTeam))
           )
       )
@@ -45,8 +45,8 @@ object categ {
 
     val newTopicButton = canWrite option
       a(
-        href := routes.ForumTopic.form(categ.slug),
-        cls := "button button-empty button-green text",
+        href     := routes.ForumTopic.form(categ.slug),
+        cls      := "button button-empty button-green text",
         dataIcon := "m"
       )(
         trans.createANewTopic()
@@ -56,7 +56,6 @@ object categ {
         td(cls := "subject")(
           a(href := routes.ForumTopic.show(categ.slug, topic.slug))(topic.name)
         ),
-        td(cls := "right")(topic.views.localize),
         td(cls := "right")(topic.nbReplies.localize),
         td(
           topic.lastPost.map { post =>
@@ -65,7 +64,7 @@ object categ {
                 momentFromNow(post.createdAt)
               ),
               br,
-              authorLink(post)
+              authorLink(post, modIcon = ~post.modIcon)
             )
           }
         )
@@ -80,7 +79,7 @@ object categ {
       moreCss = cssTag("forum"),
       openGraph = lila.app.ui
         .OpenGraph(
-          title = s"Forum: ${categ.name}",
+          title = s"${trans.forum.txt()}: ${categ.name}",
           url = s"$netBaseUrl${routes.ForumCateg.show(categ.slug).url}",
           description = categ.desc
         )
@@ -89,9 +88,9 @@ object categ {
       main(cls := "forum forum-categ box")(
         h1(
           a(
-            href := categ.team.fold(routes.ForumCateg.index())(routes.Team.show(_)),
+            href     := categ.team.fold(routes.ForumCateg.index)(routes.Team.show(_)),
             dataIcon := "I",
-            cls := "text"
+            cls      := "text"
           ),
           categ.team.fold(frag(categ.name))(teamIdToName)
         ),
@@ -100,7 +99,6 @@ object categ {
           thead(
             tr(
               th,
-              th(cls := "right")(trans.views()),
               th(cls := "right")(trans.replies()),
               th(trans.lastPost())
             )

@@ -1,9 +1,14 @@
-import { h, thunk } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { colorName, transWithColorName } from 'common/colorName';
+import { onInsert } from 'common/snabbdom';
 import throttle from 'common/throttle';
-import { option, onInsert } from '../util';
+import { isHandicap } from 'shogiops/handicaps';
+import { VNode, h, thunk } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
-import { StudyCtrl, StudyChapter } from './interfaces';
+import { option } from '../util';
+import { StudyChapter, StudyCtrl } from './interfaces';
+import { tagToKif } from '../notationExport';
+
+const unwantedTags = ['Result', 'SenteElo', 'SenteTitle', 'GoteElo', 'GoteTitle'];
 
 function editable(value: string, submit: (v: string, el: HTMLInputElement) => void): VNode {
   return h('input', {
@@ -31,12 +36,13 @@ let selectedType: string;
 
 type TagRow = (string | VNode)[];
 
-function renderPgnTags(chapter: StudyChapter, submit, types: string[], trans: Trans): VNode {
+function renderTags(chapter: StudyChapter, submit, types: string[], trans: Trans): VNode {
   let rows: TagRow[] = [];
-  if (chapter.setup.variant.key !== 'standard') rows.push(['Variant', fixed(chapter.setup.variant.name)]);
-  rows = rows.concat(chapter.tags.map(tag => [tag[0], submit ? editable(tag[1], submit(tag[0])) : fixed(tag[1])]));
+  const wantedTags = chapter.tags.filter(t => !unwantedTags.includes(t[0])),
+    handicap = isHandicap({ rules: chapter.setup.variant.key, sfen: chapter.initialSfen });
+  rows = rows.concat(wantedTags.map(tag => [tag[0], submit ? editable(tag[1], submit(tag[0])) : fixed(tag[1])]));
   if (submit) {
-    const existingTypes = chapter.tags.map(t => t[0]);
+    const existingTypes = wantedTags.map(t => t[0]);
     rows.push([
       h(
         'select',
@@ -57,10 +63,12 @@ function renderPgnTags(chapter: StudyChapter, submit, types: string[], trans: Tr
         },
         [
           h('option', trans.noarg('newTag')),
-          ...types.map(t => {
-            if (!existingTypes.includes(t)) return option(t, '', t);
-            return undefined;
-          }),
+          ...types
+            .filter(t => !unwantedTags.includes(t))
+            .map(t => {
+              if (!existingTypes.includes(t)) return option(t, '', translateTag(trans, t, handicap));
+              return undefined;
+            }),
         ]
       ),
       editable('', (value, el) => {
@@ -77,12 +85,17 @@ function renderPgnTags(chapter: StudyChapter, submit, types: string[], trans: Tr
     h(
       'tbody',
       rows.map(function (r) {
+        const tag = typeof r[0] === 'string' ? translateTag(trans, r[0], handicap) : r[0];
+
         return h(
           'tr',
           {
             key: '' + r[0],
           },
-          [h('th', [r[0]]), h('td', [r[1]])]
+          [
+            h('th', { attrs: { title: (typeof r[0] === 'string' ? tagToKif(r[0], handicap) : undefined) || '' } }, tag),
+            h('td', r[1]),
+          ]
         );
       })
     )
@@ -109,13 +122,30 @@ export function ctrl(root: AnalyseCtrl, getChapter: () => StudyChapter, types) {
 function doRender(root: StudyCtrl): VNode {
   return h(
     'div',
-    renderPgnTags(root.tags.getChapter(), root.vm.mode.write && root.tags.submit, root.tags.types, root.trans)
+    renderTags(root.tags.getChapter(), root.vm.mode.write && root.tags.submit, root.tags.types, root.trans)
   );
+}
+
+function translateTag(trans: Trans, tag: string, handicap: boolean): string {
+  const transformString = str => `${str[0].toLowerCase()}${str.slice(1)}`;
+  if (tag === 'Sente' || tag === 'Gote') {
+    return colorName(trans.noarg, tag.toLowerCase() as Color, handicap);
+  } else if (tag.startsWith('Sente') || tag.startsWith('Gote')) {
+    return transWithColorName(
+      trans,
+      (tag.replace(/^(Sente|Gote)/, 'x') + 'Tag') as I18nKey,
+      tag.startsWith('Sente') ? 'sente' : 'gote',
+      handicap
+    );
+  } else return trans.noarg((transformString(tag) + 'Tag') as I18nKey);
 }
 
 export function view(root: StudyCtrl): VNode {
   const chapter = root.tags.getChapter(),
-    tagKey = chapter.tags.map(t => t[1]).join(','),
+    tagKey = chapter.tags
+      .filter(t => !unwantedTags.includes(t[0]))
+      .map(t => t[1])
+      .join(','),
     key = chapter.id + root.data.name + chapter.name + root.data.likes + tagKey + root.vm.mode.write;
   return thunk('div.' + chapter.id, doRender, [root, key]);
 }

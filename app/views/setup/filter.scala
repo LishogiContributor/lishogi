@@ -13,7 +13,6 @@ object filter {
 
   def apply(form: Form[_])(implicit ctx: Context) =
     frag(
-      cssTag("lobby.setup"),
       st.form(novalidate)(
         table(
           tbody(
@@ -23,37 +22,51 @@ object filter {
                 renderCheckboxes(
                   form,
                   "variant",
-                  translatedVariantChoicesWithVariants(_.key)
+                  translatedVariantChoices(_.key)
                 )
               )
             ),
-            tr(
+            tr(cls := "f-real_time")(
               td(trans.timeControl()),
               td(renderCheckboxes(form, "speed", translatedSpeedChoices))
             ),
-            tr(cls := "inline")(
+            tr(cls := "inline f-real_time")(
               td(trans.byoyomi()),
               td(
                 renderCheckboxes(
                   form,
                   "byoyomi",
-                  translatedByoyomiChoices
+                  translatedBooleanFilterChoices
                 )
               )
             ),
-            tr(cls := "inline")(
+            tr(cls := "inline f-real_time")(
               td(trans.increment()),
               td(
                 renderCheckboxes(
                   form,
                   "increment",
-                  translatedIncrementChoices
+                  translatedBooleanFilterChoices
                 )
               )
+            ),
+            tr(cls := "f-seeks days")(
+              td(trans.daysPerTurn()),
+              td(renderCheckboxes(form, "days", translatedCorresDaysChoices))
             ),
             ctx.isAuth option tr(cls := "inline")(
               td(trans.mode()),
               td(renderCheckboxes(form, "mode", translatedModeChoices))
+            ),
+            ctx.isAuth option tr(cls := "inline f-real_time")(
+              td(trans.anonymous()),
+              td(
+                renderCheckboxes(
+                  form,
+                  "anonymous",
+                  translatedBooleanYesFilterChoice
+                )
+              )
             ),
             ctx.isAuth option tr(
               td(trans.ratingRange()),
@@ -103,9 +116,9 @@ object filter {
   ) =
     label(title := hint)(
       input(
-        tpe := "checkbox",
-        cls := "regular-checkbox",
-        name := s"${form(key).name}[$index]",
+        tpe      := "checkbox",
+        cls      := "regular-checkbox",
+        name     := s"${form(key).name}[$index]",
         st.value := value,
         checks(value) option checked
       )(content)

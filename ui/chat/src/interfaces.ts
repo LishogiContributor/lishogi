@@ -1,6 +1,6 @@
-import { VNode } from 'snabbdom/vnode';
+import { Prop } from 'common/common';
+import { VNode } from 'snabbdom';
 import { PresetCtrl } from './preset';
-import { Prop } from 'common';
 
 export interface ChatOpts {
   data: ChatData;
@@ -85,7 +85,7 @@ export interface ChatPalantir {
 export interface ViewModel {
   tab: Tab;
   enabled: boolean;
-  placeholderKey: string;
+  placeholderKey: I18nKey;
   loading: boolean;
   timeout: boolean;
   writeable: boolean;
@@ -127,9 +127,7 @@ export interface ModerationData {
   username: string;
   text: string;
   games?: number;
-  troll?: boolean;
-  engine?: boolean;
-  booster?: boolean;
+  tos?: boolean;
   history?: ModerationHistoryEntry[];
 }
 

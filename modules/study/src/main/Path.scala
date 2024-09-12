@@ -1,24 +1,31 @@
 package lila.study
 
-import shogi.format.UciCharPair
+import shogi.format.usi.UsiCharPair
 
-case class Path(ids: Vector[UciCharPair]) extends AnyVal {
+case class Path(ids: Vector[UsiCharPair]) extends AnyVal {
 
-  def head: Option[UciCharPair] = ids.headOption
+  def head: Option[UsiCharPair] = ids.headOption
 
   // def tail: Path = Path(ids drop 1)
 
   def parent: Path = Path(ids dropRight 1)
 
-  def split: Option[(UciCharPair, Path)] = head.map(_ -> Path(ids.drop(1)))
+  def take(i: Int) = Path(ids take i)
+
+  def drop(i: Int) = Path(ids drop i)
+
+  def split: Option[(UsiCharPair, Path)] = head.map(_ -> Path(ids.drop(1)))
 
   def isEmpty = ids.isEmpty
 
-  def +(id: UciCharPair): Path = Path(ids appended id)
+  def isOnPathOf(other: Path): Boolean =
+    other.ids.startsWith(this.ids)
+
+  def +(id: UsiCharPair): Path = Path(ids appended id)
   def +(node: Node): Path      = Path(ids appended node.id)
   def +(more: Path): Path      = Path(ids appendedAll more.ids)
 
-  def prepend(id: UciCharPair) = Path(ids prepended id)
+  def prepend(id: UsiCharPair) = Path(ids prepended id)
 
   def intersect(other: Path): Path =
     Path {
@@ -27,9 +34,17 @@ case class Path(ids: Vector[UciCharPair]) extends AnyVal {
       } map (_._1)
     }
 
-  def toDbField =
-    if (ids.isEmpty) s"root.${Path.rootDbKey}"
-    else s"root.${Path encodeDbKey this}"
+  def toDbField(root: Node.Root) =
+    root.gameMainlinePath.fold {
+      if (ids.isEmpty) s"root.${Path.rootDbKey}"
+      else s"root.${Path encodeDbKey this}"
+    } { gmp =>
+      val intersection = this.intersect(gmp)
+      if (intersection == this)
+        s"root.${Path.gameMainlineExtensionDbKey}.${this.depth + root.ply}"
+      else
+        s"root.${intersection.depth + root.ply}${Path.gameMainlineSep}${Path encodeDbKey this.drop(intersection.depth)}"
+    }
 
   def depth = ids.size
 
@@ -44,7 +59,7 @@ object Path {
         .grouped(2)
         .flatMap { p =>
           p lift 1 map { b =>
-            UciCharPair(p(0), b)
+            UsiCharPair(p(0), b)
           }
         }
         .toVector
@@ -57,9 +72,16 @@ object Path {
   // mongodb objects don't support empty keys
   val rootDbKey = 255.toChar.toString
 
+  val gameMainlineDbKey          = 254.toChar.toString
+  val gameMainlineExtensionDbKey = 253.toChar.toString
+  // $ply$gameMainlineSep$path
+  val gameMainlineSep = gameMainlineDbKey
+
+  val dbKeys = List(rootDbKey, gameMainlineDbKey, gameMainlineExtensionDbKey)
+
   // mongodb objects don't support '.' and '$' in keys
   def encodeDbKey(path: Path): String        = encodeDbKey(path.ids.mkString)
-  def encodeDbKey(pair: UciCharPair): String = encodeDbKey(pair.toString)
+  def encodeDbKey(pair: UsiCharPair): String = encodeDbKey(pair.toString)
   def encodeDbKey(pathStr: String): String   = pathStr.replace('.', 251.toChar).replace('$', 252.toChar)
   def decodeDbKey(key: String): String       = key.replace(251.toChar, '.').replace(252.toChar, '$')
 

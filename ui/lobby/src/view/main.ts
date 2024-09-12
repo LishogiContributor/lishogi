@@ -1,12 +1,10 @@
-import { h } from 'snabbdom';
-import { VNodeData } from 'snabbdom/vnode';
-import renderTabs from './tabs';
-//import * as renderPools from './pools';
-import renderRealTime from './realTime/main';
-import renderSeeks from './correspondence';
-import renderPlaying from './playing';
-import { spinner } from './util';
+import spinner from 'common/spinner';
+import { VNodeData, h } from 'snabbdom';
 import LobbyController from '../ctrl';
+import renderPlaying from './playing';
+import renderTable from './table/main';
+import * as renderPresets from './presets';
+import renderTabs from './tabs';
 
 export default function (ctrl: LobbyController) {
   let body,
@@ -14,15 +12,13 @@ export default function (ctrl: LobbyController) {
   if (ctrl.redirecting) body = spinner();
   else
     switch (ctrl.tab) {
-      case 'pools':
-        //body = renderPools.render(ctrl);
-        //data = { hook: renderPools.hooks(ctrl) };
+      case 'presets':
+        body = renderPresets.render(ctrl);
+        data = { hook: renderPresets.presetHooks(ctrl) };
         break;
       case 'real_time':
-        body = renderRealTime(ctrl);
-        break;
       case 'seeks':
-        body = renderSeeks(ctrl);
+        body = renderTable(ctrl);
         break;
       case 'now_playing':
         body = renderPlaying(ctrl);

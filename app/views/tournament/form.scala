@@ -28,15 +28,14 @@ object form {
             if (fields.isTeamBattle) "New Team Battle"
             else trans.createANewTournament()
           ),
-          postForm(cls := "form3", action := routes.Tournament.create())(
+          postForm(cls := "form3", action := routes.Tournament.create)(
+            form3.globalError(form),
             fields.name,
             form3.split(fields.rated, fields.variant),
-            //fields.startPosition,
             fields.clock1,
             fields.clock2,
             form3.split(fields.minutes, fields.waitMinutes),
-            fields.description,
-            form3.globalError(form),
+            form3.split(fields.description(true), fields.startPosition),
             fieldset(cls := "conditions")(
               fields.advancedSettings,
               div(cls := "form")(
@@ -46,7 +45,7 @@ object form {
             ),
             fields.isTeamBattle option form3.hidden(form("teamBattleByTeam")),
             form3.actions(
-              a(href := routes.Tournament.home())(trans.cancel()),
+              a(href := routes.Tournament.home)(trans.cancel()),
               form3.submit(trans.createANewTournament(), icon = "g".some)
             )
           )
@@ -71,7 +70,6 @@ object form {
           postForm(cls := "form3", action := routes.Tournament.update(tour.id))(
             form3.split(fields.name, tour.isCreated option fields.startDate),
             form3.split(fields.rated, fields.variant),
-            fields.startPosition,
             fields.clock1,
             fields.clock2,
             form3.split(
@@ -81,7 +79,7 @@ object form {
                   form3.input(_)(tpe := "number")
                 )
             ),
-            fields.description,
+            form3.split(fields.description(true), fields.startPosition),
             form3.globalError(form),
             fieldset(cls := "conditions")(
               fields.advancedSettings,
@@ -120,7 +118,7 @@ object form {
     frag(
       form3.split(
         fields.password,
-        (auto && tour.isEmpty && teams.size > 0) option {
+        (auto && tour.isEmpty && teams.nonEmpty) option {
           val baseField = form("conditions.teamMember.teamId")
           val field = ctx.req.queryString get "team" flatMap (_.headOption) match {
             case None       => baseField
@@ -193,31 +191,27 @@ object form {
     )
 
   def startingPosition(field: Field, tour: Option[Tournament]) =
-    st.select(
-      id := form3.id(field),
-      st.name := field.name,
-      cls := "form-control",
-      tour.exists(t => !t.isCreated && t.position.initial).option(disabled := true)
-    )(
-      option(
-        value := shogi.StartingPosition.initial.fen,
-        field.value.has(shogi.StartingPosition.initial.fen) option selected
-      )(shogi.StartingPosition.initial.name),
-      shogi.StartingPosition.categories.map { categ =>
-        optgroup(attr("label") := categ.name)(
-          categ.positions.map { v =>
-            option(value := v.fen, field.value.has(v.fen) option selected)(v.fullName)
-          }
-        )
-      }
+    form3.input(field)(
+      tour.exists(t => !t.isCreated && t.position.isEmpty).option(disabled := true)
     )
+
+  val positionInputHelp = frag(
+    "Paste a valid SFEN to start every game from a given position.",
+    br,
+    "You can use the ",
+    a(href := routes.Editor.index, target := "_blank")("board editor"),
+    " to generate a SFEN position, then paste it here.",
+    br,
+    "Leave empty to start games from the normal initial position."
+  )
 }
 
 final private class TourFields(form: Form[_], tour: Option[Tournament])(implicit ctx: Context) {
 
   def isTeamBattle = tour.exists(_.isTeamBattle) || form("teamBattleByTeam").value.nonEmpty
 
-  def disabledAfterStart = tour.exists(!_.isCreated)
+  private def disabledAfterStart  = tour.exists(!_.isCreated)
+  private def disabledAfterCreate = tour.isDefined
 
   def name =
     form3.group(form("name"), trans.name()) { f =>
@@ -249,12 +243,18 @@ final private class TourFields(form: Form[_], tour: Option[Tournament])(implicit
     form3.group(form("variant"), trans.variant(), half = true)(
       form3.select(
         _,
-        translatedVariantChoicesWithVariants.map(x => x._1 -> x._2),
-        disabled = disabledAfterStart
+        translatedVariantChoices.map(x => x._1 -> x._2),
+        disabled = disabledAfterCreate
       )
     )
   def startPosition =
-    form3.group(form("position"), trans.startPosition(), klass = "position")(
+    form3.group(
+      form("position"),
+      trans.startPosition(),
+      klass = "position",
+      half = true,
+      help = tournament.form.positionInputHelp.some
+    )(
       views.html.tournament.form.startingPosition(_, tour)
     )
   def clock1 =
@@ -283,20 +283,22 @@ final private class TourFields(form: Form[_], tour: Option[Tournament])(implicit
     form3.group(form("waitMinutes"), trans.timeBeforeTournamentStarts(), half = true)(
       form3.select(_, DataForm.waitMinuteChoices)
     )
-  def description =
+  def description(half: Boolean) =
     form3.group(
       form("description"),
       frag("Tournament description"),
-      help = frag("Anything special you want to tell the participants? Try to keep it short.").some
+      help = frag(
+        "Anything special you want to tell the participants? Try to keep it short."
+      ).some,
+      half = half
     )(form3.textarea(_)(rows := 2))
   def password =
-    !isTeamBattle option
-      form3.group(
-        form("password"),
-        trans.password(),
-        help = trans.makePrivateTournament().some,
-        half = true
-      )(form3.input(_)(autocomplete := "off"))
+    form3.group(
+      form("password"),
+      trans.password(),
+      help = trans.makePrivateTournament().some,
+      half = true
+    )(form3.input(_)(autocomplete := "off"))
   def startDate =
     form3.group(
       form("startDate"),

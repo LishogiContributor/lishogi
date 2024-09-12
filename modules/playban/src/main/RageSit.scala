@@ -28,11 +28,10 @@ object RageSit {
   def imbalanceInc(game: Game, loser: Color) =
     Inc {
       {
-        import shogi.variant._
-        (game.shogi.board.materialImbalance, game.variant) match {
-          case (a, _) if a >= 4        => 1
-          case (a, _) if a <= -4       => -1
-          case _                       => 0
+        (game.shogi.situation.materialImbalance) match {
+          case a if a >= 4  => 1
+          case a if a <= -4 => -1
+          case _            => 0
         }
       } * {
         if (loser.sente) 1 else -1

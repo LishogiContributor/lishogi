@@ -3,7 +3,6 @@ package lila.streamer
 import akka.actor._
 import akka.pattern.ask
 import makeTimeout.short
-import play.api.mvc.RequestHeader
 import scala.concurrent.duration._
 
 import lila.memo.CacheApi._
@@ -18,16 +17,15 @@ case class LiveStreams(streams: List[Stream]) {
 
   def get(streamer: Streamer) = streams.find(_ is streamer)
 
-  def homepage(max: Int, req: RequestHeader, user: Option[User]) =
+  def homepage(max: Int) =
     LiveStreams {
-      //val langs = req.acceptLanguages.view.map(_.language).toSet + "en" ++ user.flatMap(_.lang).toSet
       streams
         .takeWhile(_.streamer.approval.tier > 0)
         .foldLeft(Vector.empty[Stream]) {
-          case (selected, s) if { //langs(s.lang) && {
-                selected.size < max || s.streamer.approval.tier == Streamer.maxTier
+          case (selected, s) if {
+                selected.sizeIs < max || s.streamer.approval.tier == Streamer.maxTier
               } && {
-                s.streamer.approval.tier > 1 || selected.size < 2
+                s.streamer.approval.tier > 1 || selected.sizeIs < 2
               } =>
             selected :+ s
           case (selected, _) => selected
@@ -83,8 +81,8 @@ final class LiveStreamApi(
   private var userIdsCache = Set.empty[User.ID]
 
   def all: Fu[LiveStreams] = cache.getUnit
-  //import org.joda.time.DateTime
-  //def all: Fu[LiveStreams] =
+  // import org.joda.time.DateTime
+  // def all: Fu[LiveStreams] =
   //  fuccess(
   //    LiveStreams(
   //      List(

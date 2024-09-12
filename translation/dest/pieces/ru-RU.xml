@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="pawn">Пешка</string>
+  <string name="lance">Копье</string>
+  <string name="knight">Конь</string>
+  <string name="silver">Серебро</string>
+  <string name="gold">Золото</string>
+  <string name="bishop">Слон</string>
+  <string name="rook">Ладья</string>
+  <string name="king">Король</string>
+  <string name="tokin">Токин</string>
+  <string name="promotedlance">Перевернутая стрелка</string>
+  <string name="promotedknight">Перевёрнутый конь</string>
+  <string name="promotedsilver">Перевернутое серебро</string>
+  <string name="horse">Лошадь</string>
+  <string name="dragon">Дракон</string>
+  <string comment="Chushogi piece - not tokin" name="promotedpawn">Перевернутая пешка</string>
+  <string comment="Chushogi piece, low priority for translation" name="leopard">Леопард</string>
+  <string comment="Chushogi piece, low priority for translation" name="copper">Медный</string>
+  <string comment="Chushogi piece, low priority for translation" name="elephant">Слон</string>
+  <string comment="Chushogi piece, low priority for translation" name="chariot">Контрстрелка</string>
+  <string comment="Chushogi piece, low priority for translation" name="tiger">Тигр</string>
+  <string comment="Chushogi piece, low priority for translation" name="kirin">Единорог</string>
+  <string comment="Chushogi piece, low priority for translation" name="phoenix">Феникс</string>
+  <string comment="Chushogi piece, low priority for translation" name="sidemover">Горизонтальный ходок</string>
+  <string comment="Chushogi piece, low priority for translation" name="verticalmover">Вертикальный ходок</string>
+  <string comment="Chushogi piece, low priority for translation" name="lion">Лев</string>
+  <string comment="Chushogi piece, low priority for translation" name="queen">Ферзь</string>
+  <string comment="Chushogi piece, low priority for translation" name="gobetween">Посредник</string>
+  <string comment="Chushogi piece, low priority for translation" name="whitehorse">Белый конь</string>
+  <string comment="Chushogi piece, low priority for translation" name="lionpromoted">Перевернутый лев</string>
+  <string comment="Chushogi piece, low priority for translation" name="queenpromoted">Перевернутый ферзь</string>
+  <string comment="Chushogi piece, low priority for translation" name="bishoppromoted">Кронпринц</string>
+  <string comment="Chushogi piece, low priority for translation" name="sidemoverpromoted">Бегающий вепрь</string>
+  <string comment="Chushogi piece, low priority for translation" name="verticalmoverpromoted">Летающий бык</string>
+  <string comment="Chushogi piece, low priority for translation" name="rookpromoted">Перевёрнутая ладья</string>
+  <string comment="Chushogi piece, low priority for translation" name="prince">Принц</string>
+  <string comment="Chushogi piece, low priority for translation" name="whale">Кит</string>
+  <string comment="Chushogi piece, low priority for translation" name="horsepromoted">Рогатый сокол</string>
+  <string comment="Chushogi piece, low priority for translation" name="elephantpromoted">Кронпринц</string>
+  <string comment="Chushogi piece, low priority for translation" name="stag">Летающий олень</string>
+  <string comment="Chushogi piece, low priority for translation" name="boar">Бегающий вепрь</string>
+  <string comment="Chushogi piece, low priority for translation" name="ox">Летающий бык</string>
+  <string comment="Chushogi piece, low priority for translation" name="falcon">Рогатый сокол</string>
+  <string comment="Chushogi piece, low priority for translation" name="eagle">Парящий орел</string>
+  <string comment="Chushogi piece, low priority for translation" name="dragonpromoted">Перевернутый дракон</string>
+</resources>

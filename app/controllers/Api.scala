@@ -125,8 +125,7 @@ final class Api(
     lila.api.GameApi.WithFlags(
       analysis = getBool("with_analysis", req),
       moves = getBool("with_moves", req),
-      fens = getBool("with_fens", req),
-      opening = getBool("with_opening", req),
+      sfens = getBool("with_sfens", req),
       moveTimes = getBool("with_movetimes", req),
       token = get("token", req)
     )
@@ -219,13 +218,13 @@ final class Api(
           val config = GameApiV2.ByTournamentConfig(
             tournamentId = tour.id,
             format = GameApiV2.Format byRequest req,
-            flags = gameC.requestPgnFlags(req, extended = false),
+            flags = gameC.requestNotationFlags(req, extended = false),
             perSecond = MaxPerSecond(20)
           )
           GlobalConcurrencyLimitPerIP(HTTPRequest lastRemoteAddress req)(
             env.api.gameApiV2.exportByTournament(config)
           ) { source =>
-            val filename = env.api.gameApiV2.filename(tour, config.format)
+            val filename = env.api.gameApiV2.filename(tour, config)
             Ok.chunked(source)
               .withHeaders(
                 noProxyBufferHeader,
@@ -245,7 +244,7 @@ final class Api(
           val nb = getInt("nb", req) | Int.MaxValue
           jsonStream {
             env.tournament.api
-              .resultStream(tour, MaxPerSecond(50), nb)
+              .resultStream(tour, MaxPerSecond(40), nb)
               .map(playerResultWrites.writes)
           }.fuccess
         }
@@ -256,7 +255,7 @@ final class Api(
     Action.async {
       env.tournament.tournamentRepo byId id flatMap {
         _ ?? { tour =>
-          env.tournament.jsonView.getTeamStanding(tour) map { arr =>
+          env.tournament.jsonView.apiTeamStanding(tour) map { arr =>
             JsonOk(
               Json.obj(
                 "id"    -> tour.id,
@@ -283,31 +282,6 @@ final class Api(
       }
     }
 
-  def swissGames(id: String) =
-    Action.async { req =>
-      env.swiss.api byId lila.swiss.Swiss.Id(id) flatMap {
-        _ ?? { swiss =>
-          val config = GameApiV2.BySwissConfig(
-            swissId = swiss.id,
-            format = GameApiV2.Format byRequest req,
-            flags = gameC.requestPgnFlags(req, extended = false),
-            perSecond = MaxPerSecond(20)
-          )
-          GlobalConcurrencyLimitPerIP(HTTPRequest lastRemoteAddress req)(
-            env.api.gameApiV2.exportBySwiss(config)
-          ) { source =>
-            val filename = env.api.gameApiV2.filename(swiss, config.format)
-            Ok.chunked(source)
-              .withHeaders(
-                noProxyBufferHeader,
-                CONTENT_DISPOSITION -> s"attachment; filename=$filename"
-              )
-              .as(gameC gameContentType config)
-          }.fuccess
-        }
-      }
-    }
-
   def gamesByUsersStream =
     AnonOrScopedBody(parse.tolerantText)()(
       anon = gamesByUsers(300),
@@ -316,11 +290,11 @@ final class Api(
 
   def cloudEval =
     Action.async { req =>
-      get("fen", req).fold(notFoundJson("Missing FEN")) { fen =>
+      get("sfen", req).fold(notFoundJson("Missing SFEN")) { sfen =>
         JsonOptionOk(
           env.evalCache.api.getEvalJson(
             shogi.variant.Variant orDefault ~get("variant", req),
-            shogi.format.FEN(fen),
+            shogi.format.forsyth.Sfen.clean(sfen),
             getInt("multiPv", req) | 1
           )
         )
@@ -384,7 +358,7 @@ final class Api(
   def toHttp(result: ApiResult): Result =
     result match {
       case Limited        => tooManyRequests
-      case NoData         => NotFound
+      case NoData         => notFoundJsonSync()
       case Custom(result) => result
       case Data(json)     => Ok(json) as JSON
     }

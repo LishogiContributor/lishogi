@@ -3,11 +3,11 @@ package lila.simul
 import org.joda.time.DateTime
 import reactivemongo.api.bson._
 
-import shogi.{ StartingPosition, Status }
+import shogi.Status
 import shogi.variant.Variant
 import lila.db.BSON
-import lila.db.BSON.BSONJodaDateTimeHandler
 import lila.db.dsl._
+import lila.user.User
 
 final private[simul] class SimulRepo(simulColl: Coll)(implicit ec: scala.concurrent.ExecutionContext) {
 
@@ -15,9 +15,9 @@ final private[simul] class SimulRepo(simulColl: Coll)(implicit ec: scala.concurr
     { case BSONInteger(v) => SimulStatus(v) toTry s"No such simul status: $v" },
     x => BSONInteger(x.id)
   )
-  implicit private val ChessStatusBSONHandler = lila.game.BSONHandlers.StatusBSONHandler
-  implicit private val VariantBSONHandler = tryHandler[Variant](
-    { case BSONInteger(v) => Variant(v) toTry s"No such variant: $v" },
+  implicit private val ShogiStatusBSONHandler = lila.game.BSONHandlers.StatusBSONHandler
+  implicit private val VariantBSONHandler = quickHandler[Variant](
+    { case BSONInteger(v) => Variant.orDefault(v) },
     x => BSONInteger(x.id)
   )
   import shogi.Clock.Config
@@ -32,7 +32,7 @@ final private[simul] class SimulRepo(simulColl: Coll)(implicit ec: scala.concurr
         gameId = r str "gameId",
         status = r.get[Status]("status"),
         wins = r boolO "wins",
-        hostColor = r.strO("hostColor").flatMap(shogi.Color.apply) | shogi.Sente
+        hostColor = r.strO("hostColor").flatMap(shogi.Color.fromName) | shogi.Sente
       )
     def writes(w: BSON.Writer, o: SimulPairing) =
       $doc(
@@ -43,10 +43,6 @@ final private[simul] class SimulRepo(simulColl: Coll)(implicit ec: scala.concurr
         "hostColor" -> o.hostColor.name
       )
   }
-  implicit private val PositionHandler = tryHandler[StartingPosition](
-    { case BSONString(v) => Simul.fenIndex.get(v) toTry s"No such simul starting position: $v" },
-    p => BSONString(p.fen)
-  )
 
   implicit private val SimulBSONHandler = Macros.handler[Simul]
 
@@ -76,7 +72,7 @@ final private[simul] class SimulRepo(simulColl: Coll)(implicit ec: scala.concurr
   private val featurableSelect = $doc("featurable" -> true)
 
   def allCreatedFeaturable: Fu[List[Simul]] =
-    simulColl.ext
+    simulColl
       .find(
         // hits partial index hostSeenAt_-1
         createdSelect ++ featurableSelect ++ $doc(
@@ -85,12 +81,19 @@ final private[simul] class SimulRepo(simulColl: Coll)(implicit ec: scala.concurr
       )
       .sort(createdSort)
       .cursor[Simul]()
-      .list() map {
+      .list(10) map {
       _.foldLeft(List.empty[Simul]) {
-        case (acc, sim) if acc.exists(_.hostId == sim.hostId) => acc
-        case (acc, sim)                                       => sim :: acc
-      }.reverse
+        case (acc, sim)
+            if !acc.exists(_.hostId == sim.hostId) && (sim.popular || sim.createdAt.isAfter(
+              DateTime.now.minusHours(4)
+            )) =>
+          sim :: acc
+        case (acc, _) => acc
+      }.sortBy(-_.nbAccepted)
     }
+
+  def hostId(id: Simul.ID): Fu[Option[User.ID]] =
+    simulColl.primitiveOne[User.ID]($id(id), "hostId")
 
   def allStarted: Fu[List[Simul]] =
     simulColl.ext
@@ -115,7 +118,13 @@ final private[simul] class SimulRepo(simulColl: Coll)(implicit ec: scala.concurr
     } void
 
   def update(simul: Simul) =
-    simulColl.update.one($id(simul.id), $set(SimulBSONHandler writeTry simul get)).void
+    simulColl.update
+      .one(
+        $id(simul.id),
+        $set(SimulBSONHandler writeTry simul get) ++
+          simul.estimatedStartAt.isEmpty ?? ($unset("estimatedStartAt"))
+      )
+      .void
 
   def remove(simul: Simul) =
     simulColl.delete.one($id(simul.id)).void

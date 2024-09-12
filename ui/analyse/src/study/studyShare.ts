@@ -1,18 +1,20 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { bind, baseUrl } from '../util';
-import { prop, Prop } from 'common';
+import { Prop, prop } from 'common/common';
+import { bind } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import { renderIndexAndMove } from '../moveView';
-import { StudyData, StudyChapterMeta } from './interfaces';
+import { baseUrl } from '../util';
+import { StudyChapterMeta, StudyData } from './interfaces';
 
 interface StudyShareCtrl {
   studyId: string;
   chapter: () => StudyChapterMeta;
   isPrivate(): boolean;
   currentNode: () => Tree.Node;
+  onMainline: () => boolean;
   withPly: Prop<boolean>;
-  relay: boolean;
   cloneable: boolean;
+  offset: number;
+  gameId?: string;
   redraw: () => void;
   trans: Trans;
 }
@@ -20,29 +22,32 @@ interface StudyShareCtrl {
 function fromPly(ctrl: StudyShareCtrl): VNode {
   const renderedMove = renderIndexAndMove(
     {
+      variant: ctrl.chapter().variant,
       withDots: true,
       showEval: false,
+      offset: ctrl.offset,
     },
-    ctrl.currentNode(),
-    0
+    ctrl.currentNode()
   );
   return h(
     'div.ply-wrap',
-    h('label.ply', [
-      h('input', {
-        attrs: { type: 'checkbox' },
-        hook: bind(
-          'change',
-          e => {
-            ctrl.withPly((e.target as HTMLInputElement).checked);
-          },
-          ctrl.redraw
-        ),
-      }),
-      ...(renderedMove
-        ? ctrl.trans.vdom('startAtX', h('strong', renderedMove))
-        : [ctrl.trans.noarg('startAtInitialPosition')]),
-    ])
+    ctrl.onMainline()
+      ? h('label.ply', [
+          h('input', {
+            attrs: { type: 'checkbox' },
+            hook: bind(
+              'change',
+              e => {
+                ctrl.withPly((e.target as HTMLInputElement).checked);
+              },
+              ctrl.redraw
+            ),
+          }),
+          ...(renderedMove
+            ? ctrl.trans.vdom('startAtX', h('strong', renderedMove))
+            : [ctrl.trans.noarg('startAtInitialPosition')]),
+        ])
+      : null
   );
 }
 
@@ -50,8 +55,9 @@ export function ctrl(
   data: StudyData,
   currentChapter: () => StudyChapterMeta,
   currentNode: () => Tree.Node,
-  relay: boolean,
+  onMainline: () => boolean,
   redraw: () => void,
+  offset: number,
   trans: Trans
 ): StudyShareCtrl {
   const withPly = prop(false);
@@ -62,21 +68,23 @@ export function ctrl(
       return data.visibility === 'private';
     },
     currentNode,
+    onMainline,
     withPly,
-    relay,
     cloneable: data.features.cloneable,
     redraw,
     trans,
+    offset,
+    gameId: data.chapter.gameLength ? data.chapter.setup.gameId : undefined,
   };
 }
 
 export function view(ctrl: StudyShareCtrl): VNode {
   const studyId = ctrl.studyId,
     chapter = ctrl.chapter();
-  let fullUrl = `${baseUrl()}/study/${studyId}/${chapter.id}`;
-  let embedUrl = `${baseUrl()}/study/embed/${studyId}/${chapter.id}`;
+  let fullUrl = `${baseUrl()}/study/${studyId}/${chapter.id}`,
+    embedUrl = `${baseUrl()}/study/embed/${studyId}/${chapter.id}`;
   const isPrivate = ctrl.isPrivate();
-  if (ctrl.withPly()) {
+  if (ctrl.withPly() && ctrl.onMainline()) {
     const p = ctrl.currentNode().ply;
     fullUrl += '#' + p;
     embedUrl += '#' + p;
@@ -84,7 +92,7 @@ export function view(ctrl: StudyShareCtrl): VNode {
   return h('div.study__share', [
     h('form.form3', [
       h('div.form-group', [
-        h('label.form-label', ctrl.trans.noarg(ctrl.relay ? 'broadcastUrl' : 'studyUrl')),
+        h('label.form-label', ctrl.trans.noarg('studyUrl')),
         h('input.form-control.autoselect', {
           attrs: {
             readonly: true,
@@ -93,7 +101,7 @@ export function view(ctrl: StudyShareCtrl): VNode {
         }),
       ]),
       h('div.form-group', [
-        h('label.form-label', ctrl.trans.noarg(ctrl.relay ? 'currentGameUrl' : 'currentChapterUrl')),
+        h('label.form-label', ctrl.trans.noarg('currentChapterUrl')),
         h('input.form-control.autoselect', {
           attrs: {
             readonly: true,
@@ -111,6 +119,17 @@ export function view(ctrl: StudyShareCtrl): VNode {
             )
           : null,
       ]),
+      ctrl.gameId
+        ? h('div.form-group', [
+            h('label.form-label', ctrl.trans.noarg('currentGameUrl')),
+            h('input.form-control.autoselect', {
+              attrs: {
+                readonly: true,
+                value: `${baseUrl()}/${ctrl.gameId}`,
+              },
+            }),
+          ])
+        : null,
       h(
         'div.form-group',
         [
@@ -148,12 +167,36 @@ export function view(ctrl: StudyShareCtrl): VNode {
         h('input.form-control.autoselect', {
           attrs: {
             readonly: true,
-            value: ctrl.currentNode().fen,
+            value: ctrl.currentNode().sfen,
           },
         }),
       ]),
     ]),
     h('div.downloads', [
+      h(
+        'a.button.text',
+        {
+          attrs: {
+            'data-icon': 'x',
+            href: `/study/${studyId}/${chapter.id}.kif`,
+            download: true,
+          },
+        },
+        ctrl.trans.noarg('chapterKif')
+      ),
+      'standard' === chapter.variant
+        ? h(
+            'a.button.text',
+            {
+              attrs: {
+                'data-icon': 'x',
+                href: `/study/${studyId}/${chapter.id}.csa`,
+                download: true,
+              },
+            },
+            ctrl.trans.noarg('chapterCsa')
+          )
+        : null,
       ctrl.cloneable
         ? h(
             'a.button.text',
@@ -164,6 +207,19 @@ export function view(ctrl: StudyShareCtrl): VNode {
               },
             },
             ctrl.trans.noarg('cloneStudy')
+          )
+        : null,
+      'standard' === chapter.variant
+        ? h(
+            'a.button.text',
+            {
+              attrs: {
+                'data-icon': 'x',
+                href: `/study/${studyId}/${chapter.id}.gif`,
+                download: true,
+              },
+            },
+            'GIF'
           )
         : null,
     ]),

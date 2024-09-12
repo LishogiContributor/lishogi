@@ -3,27 +3,24 @@ package lila.game
 import org.joda.time.DateTime
 import scala.util.Try
 
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.Usi
 import shogi.variant.Variant
-import shogi.{ ToOptionOpsFromOption => _, _ }
-import shogi.format.Uci
+import shogi.{ Centis, Clock, ClockPlayer, Color, Gote, Piece, PieceMap, Sente, Situation, Timestamp }
 import org.lishogi.compression.clock.{ Encoder => ClockEncoder }
 
 import lila.db.ByteArray
 
 object BinaryFormat {
-
-  object pgn {
-
-    def write(moves: PgnMoves): ByteArray =
+  object usi {
+    def write(usis: Usis, variant: Variant): ByteArray =
       ByteArray {
-        format.pgn.Binary.writeMoves(moves).get
+        shogi.format.usi.Binary.encode(usis, variant)
       }
 
-    def read(ba: ByteArray): PgnMoves =
-      format.pgn.Binary.readMoves(ba.value.toList).get.toVector
+    def read(ba: ByteArray, variant: Variant): Usis =
+      shogi.format.usi.Binary.decode(ba.value.toList, variant, Game.maxPlies(variant))
 
-    def read(ba: ByteArray, nb: Int): PgnMoves =
-      format.pgn.Binary.readMoves(ba.value.toList, nb).get.toVector
   }
 
   object clockHistory {
@@ -40,11 +37,11 @@ object BinaryFormat {
       if (flagged) decoded :+ Centis(0) else decoded
     }
 
-    def read(start: Centis, bw: ByteArray, bb: ByteArray, pe: PeriodEntries, flagged: Option[Color]) =
+    def read(start: Centis, bs: ByteArray, bg: ByteArray, pe: PeriodEntries, flagged: Option[Color]) =
       Try {
         ClockHistory(
-          readSide(start, bw, flagged has Sente),
-          readSide(start, bb, flagged has Gote),
+          readSide(start, bs, flagged has Sente),
+          readSide(start, bg, flagged has Gote),
           pe
         )
       }.fold(
@@ -78,12 +75,12 @@ object BinaryFormat {
         .toArray
     }
 
-    def read(ba: ByteArray, turns: Int): Vector[Centis] = {
+    def read(ba: ByteArray, plies: Int): Vector[Centis] = {
       def dec(x: Int) = decodeMap.getOrElse(x, decodeMap(size - 1))
       ba.value map toInt flatMap { k =>
         Array(dec(k >> 4), dec(k & 15))
       }
-    }.view.take(turns).map(Centis.apply).toVector
+    }.view.take(plies).map(Centis.apply).toVector
   }
 
   case class clock(start: Timestamp) {
@@ -100,31 +97,37 @@ object BinaryFormat {
         writeSignedInt24(legacyElapsed(clock, Gote).centis) ++
         clock.timer.fold(Array.empty[Byte])(writeTimer) ++ Array(
           clock.byoyomiSeconds.toByte,
-          clock.periods.toByte
+          clock.periodsTotal.toByte
         )
     }
 
-    def read(ba: ByteArray, senteBerserk: Boolean, goteBerserk: Boolean): Color => Clock =
+    def read(
+        ba: ByteArray,
+        periodEntries: PeriodEntries,
+        senteBerserk: Boolean,
+        goteBerserk: Boolean
+    ): Color => Clock =
       color => {
-        val ia = ba.value map toInt
+        val ia   = ba.value map toInt
+        val size = ia.sizeIs
 
         // ba.size might be greater than 12 with 5 bytes timers
         // ba.size might be 8 if there was no timer.
         // #TODO remove 5 byte timer case! But fix the DB first!
         val timer = {
-          if (ia.size >= 12) readTimer(readInt(ia(8), ia(9), ia(10), ia(11)))
+          if (size >= 12) readTimer(readInt(ia(8), ia(9), ia(10), ia(11)))
           else None
         }
 
         val byo = {
-          if (ia.size == 14) ia(12)
-          else if (ia.size == 10) ia(8)
+          if (size == 14) ia(12)
+          else if (size == 10) ia(8)
           else 0
         }
 
         val per = {
-          if (ia.size == 14) ia(13)
-          else if (ia.size == 10) ia(9)
+          if (size == 14) ia(13)
+          else if (size == 10) ia(9)
           else 1
         }
 
@@ -140,11 +143,13 @@ object BinaryFormat {
                 ClockPlayer
                   .withConfig(config)
                   .copy(berserk = senteBerserk)
-                  .setRemaining(computeRemaining(config, legacySente)),
+                  .setRemaining(computeRemaining(config, legacySente))
+                  .setPeriods(periodEntries(Sente).size atLeast config.initPeriod),
                 ClockPlayer
                   .withConfig(config)
                   .copy(berserk = goteBerserk)
                   .setRemaining(computeRemaining(config, legacyGote))
+                  .setPeriods(periodEntries(Gote).size atLeast config.initPeriod)
               ),
               timer = timer
             )
@@ -204,84 +209,51 @@ object BinaryFormat {
       val pairs = ba.value.grouped(2)
       (pairs map (backToInt _)).toVector
     }
-    def read(bw: ByteArray, bb: ByteArray) =
+    def read(bs: ByteArray, bg: ByteArray) =
       Try {
-        PeriodEntries(readSide(bw), readSide(bb))
+        PeriodEntries(readSide(bs), readSide(bg))
       }.fold(
         e => { logger.warn(s"Exception decoding period entries", e); none },
         some
       )
   }
 
-  object piece {
-
-    private val groupedPos = Pos.all grouped 2 collect { case List(p1, p2) =>
-      (p1, p2)
-    } toArray
-
-    def write(pieces: PieceMap): ByteArray = {
-      def posInt(pos: Pos): Int =
-        (pieces get pos).fold(0) { piece =>
-          piece.color.fold(0, 16) + roleToInt(piece.role)
+  object pieces {
+    def read(
+        usis: Usis,
+        initialSfen: Option[Sfen],
+        variant: Variant
+    ): PieceMap = {
+      val init = initialSfen.flatMap { sfen =>
+        sfen.toSituation(variant)
+      } | Situation(variant)
+      val mm    = collection.mutable.Map(init.board.pieces.toSeq: _*)
+      var color = init.color
+      usis.foreach { case usi =>
+        usi match {
+          case Usi.Move(orig, dest, prom, None) => {
+            mm.remove(orig) map { piece =>
+              val mp = piece.updateRole(variant.promote).filter(_ => prom).getOrElse(piece)
+              mm update (dest, mp)
+              color = !color
+            }
+          }
+          case Usi.Move(orig, dest, prom, Some(ms)) => {
+            mm.remove(orig) map { piece =>
+              val mp = piece.updateRole(variant.promote).filter(_ => prom).getOrElse(piece)
+              mm update (dest, mp)
+              mm remove ms
+              color = !color
+            }
+          }
+          case Usi.Drop(role, pos) => {
+            mm update (pos, Piece(color, role))
+            color = !color
+          }
         }
-      ByteArray(Pos.all.toArray map { case p1 =>
-        posInt(p1).toByte
-      })
-    }
-
-    def read(ba: ByteArray, variant: Variant): PieceMap = {
-      def splitInts(b: Byte) = b.toInt
-      def intPiece(int: Int): Option[Piece] =
-        intToRole(int & 15, variant) map { role =>
-          Piece(Color((int & 16) == 0), role)
-        }
-      val pieceInts = ba.value map splitInts
-      (Pos.all zip pieceInts).view
-        .flatMap { case (pos, int) =>
-          intPiece(int) map (pos -> _)
-        }
-        .to(Map)
-    }
-
-    // cache standard start position
-    val standard = write(Board.init(shogi.variant.Standard).pieces)
-
-    private def intToRole(int: Int, variant: Variant): Option[Role] =
-      int match {
-        case 1  => Some(King)
-        case 2  => Some(Gold)
-        case 3  => Some(Silver)
-        case 4  => Some(Knight)
-        case 5  => Some(Lance)
-        case 6  => Some(Bishop)
-        case 7  => Some(Rook)
-        case 8  => Some(Tokin)
-        case 9  => Some(PromotedLance)
-        case 10 => Some(PromotedKnight)
-        case 11 => Some(PromotedSilver)
-        case 12 => Some(Horse)
-        case 13 => Some(Dragon)
-        case 14 => Some(Pawn)
-        case _  => None
       }
-    private def roleToInt(role: Role): Int =
-      role match {
-        case King           => 1
-        case Gold           => 2
-        case Silver         => 3
-        case Knight         => 4
-        case Lance          => 5
-        case Bishop         => 6
-        case Rook           => 7
-        case Tokin          => 8
-        case PromotedLance  => 9
-        case PromotedKnight => 10
-        case PromotedSilver => 11
-        case Horse          => 12
-        case Dragon         => 13
-        case Pawn           => 14
-        case _              => 15
-      }
+      mm.toMap
+    }
   }
 
   @inline private def toInt(b: Byte): Int = b & 0xff

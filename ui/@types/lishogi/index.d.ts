@@ -18,10 +18,13 @@ interface Lishogi {
   loadedCss: { [key: string]: boolean };
   loadCss(path: string): void;
   loadCssPath(path: string): void;
+  loadChushogiPieceSprite(): void;
+  loadKyotoshogiPieceSprite(): void;
   compiledScript(path: string): string;
   loadScript(url: string, opts?: AssetUrlOpts): Promise<unknown>;
   hopscotch: any;
   slider(): any;
+  spectrum: any;
   makeChat(data: any, callback?: (chat: any) => void): void;
   formAjax(form: JQuery): any;
   numberFormat(n: number): string;
@@ -41,7 +44,7 @@ interface Lishogi {
   reverse(s: string): string;
   sound: any;
   userAutocomplete: any;
-  parseFen(el: any): void;
+  parseSfen(el: any): void;
   challengeApp: any;
   ab?: any;
 
@@ -50,7 +53,7 @@ interface Lishogi {
     (url: string, version: number | false, cfg: any): any;
     defaults: {
       events: {
-        fen(e: any): void;
+        sfen(e: any): void;
       };
     };
   };
@@ -65,17 +68,13 @@ interface Lishogi {
   // misc
   advantageChart?: {
     update(data: any): void;
-    (data: any, trans: Trans, el: HTMLElement, notation: any): void;
+    (data: any, trans: Trans, el: HTMLElement): void;
   };
   movetimeChart: any;
-  RoundNVUI?(
-    redraw: () => void
-  ): {
+  RoundNVUI?(redraw: () => void): {
     render(ctrl: any): any;
   };
-  AnalyseNVUI?(
-    redraw: () => void
-  ): {
+  AnalyseNVUI?(redraw: () => void): {
     render(ctrl: any): any;
   };
   playMusic(): any;
@@ -87,8 +86,7 @@ interface Lishogi {
 }
 
 interface LishogiSpeech {
-  say(t: string, cut: boolean): void;
-  step(s: { san?: San; uci?: Uci }, cut: boolean): void;
+  notation(notation: string | undefined, cut: boolean): void;
 }
 
 interface PalantirOpts {
@@ -108,18 +106,22 @@ interface Cookie {
 interface AssetUrlOpts {
   sameDomain?: boolean;
   noVersion?: boolean;
+  version?: string;
 }
 
 declare type SocketSend = (type: string, data?: any, opts?: any, noRetry?: boolean) => void;
 
-type TransNoArg = (key: string) => string;
+type I18nKey = import('./i18n').I18nKey;
+
+type TransNoArg = (key: I18nKey) => string;
 
 interface Trans {
-  (key: string, ...args: Array<string | number>): string;
+  (key: I18nKey, ...args: Array<string | number>): string;
   noarg: TransNoArg;
-  plural(key: string, count: number, ...args: Array<string | number>): string;
-  vdom<T>(key: string, ...args: T[]): (string | T)[];
-  vdomPlural<T>(key: string, count: number, countArg: T, ...args: T[]): (string | T)[];
+  noargOrCapitalize: (key: I18nKey | string) => string;
+  plural(key: I18nKey, count: number, ...args: Array<string | number>): string;
+  vdom<T>(key: I18nKey, ...args: T[]): (string | T)[];
+  vdomPlural<T>(key: I18nKey, count: number, countArg: T, ...args: T[]): (string | T)[];
 }
 
 type PubsubCallback = (...data: any[]) => void;
@@ -200,108 +202,53 @@ interface Navigator {
   deviceMemory: number;
 }
 
-declare type VariantKey = 'standard' | 'fromPosition';
+declare type VariantKey = 'standard' | 'minishogi' | 'chushogi' | 'annanshogi' | 'kyotoshogi' | 'checkshogi';
 
-declare type Speed = 'bullet' | 'blitz' | 'classical' | 'correspondence' | 'unlimited';
+declare type Speed = 'ultraBullet' | 'bullet' | 'blitz' | 'rapid' | 'classical' | 'correspondence' | 'unlimited';
 
-declare type Perf = 'bullet' | 'blitz' | 'classical' | 'correspondence' | 'fromPosition';
+declare type Perf =
+  | 'ultraBullet'
+  | 'bullet'
+  | 'blitz'
+  | 'rapid'
+  | 'classical'
+  | 'correspondence'
+  | 'minishogi'
+  | 'chushogi'
+  | 'annanshogi'
+  | 'kyotoshogi'
+  | 'checkshogi';
 
 declare type Color = 'sente' | 'gote';
 
-declare type Key =
-  | 'a0'
-  | 'a1'
-  | 'b1'
-  | 'c1'
-  | 'd1'
-  | 'e1'
-  | 'f1'
-  | 'g1'
-  | 'h1'
-  | 'i1'
-  | 'a2'
-  | 'b2'
-  | 'c2'
-  | 'd2'
-  | 'e2'
-  | 'f2'
-  | 'g2'
-  | 'h2'
-  | 'i2'
-  | 'a3'
-  | 'b3'
-  | 'c3'
-  | 'd3'
-  | 'e3'
-  | 'f3'
-  | 'g3'
-  | 'h3'
-  | 'i3'
-  | 'a4'
-  | 'b4'
-  | 'c4'
-  | 'd4'
-  | 'e4'
-  | 'f4'
-  | 'g4'
-  | 'h4'
-  | 'i4'
-  | 'a5'
-  | 'b5'
-  | 'c5'
-  | 'd5'
-  | 'e5'
-  | 'f5'
-  | 'g5'
-  | 'h5'
-  | 'i5'
-  | 'a6'
-  | 'b6'
-  | 'c6'
-  | 'd6'
-  | 'e6'
-  | 'f6'
-  | 'g6'
-  | 'h6'
-  | 'i6'
-  | 'a7'
-  | 'b7'
-  | 'c7'
-  | 'd7'
-  | 'e7'
-  | 'f7'
-  | 'g7'
-  | 'h7'
-  | 'i7'
-  | 'a8'
-  | 'b8'
-  | 'c8'
-  | 'd8'
-  | 'e8'
-  | 'f8'
-  | 'g8'
-  | 'h8'
-  | 'i8'
-  | 'a9'
-  | 'b9'
-  | 'c9'
-  | 'd9'
-  | 'e9'
-  | 'f9'
-  | 'g9'
-  | 'h9'
-  | 'i9';
-declare type Uci = string;
+declare type Files =
+  | '1'
+  | '2'
+  | '3'
+  | '4'
+  | '5'
+  | '6'
+  | '7'
+  | '8'
+  | '9'
+  | '10'
+  | '11'
+  | '12'
+  | '13'
+  | '14'
+  | '15'
+  | '16';
+declare type Ranks = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p';
+declare type Key = `${Files}${Ranks}`;
+
+declare type MoveNotation = string;
 declare type Usi = string;
-declare type San = string;
-declare type Fen = string;
+declare type Sfen = string;
 declare type Ply = number;
 
 interface Variant {
   key: VariantKey;
   name: string;
-  short: string;
-  title?: string;
 }
 
 interface Paginator<A> {
@@ -317,24 +264,38 @@ interface Paginator<A> {
 declare namespace Tree {
   export type Path = string;
 
-  export interface ClientEval {
-    fen: Fen;
-    maxDepth: number;
-    depth: number;
-    knps: number;
-    nodes: number;
-    millis: number;
-    pvs: PvData[];
-    cloud?: boolean;
+  interface EvalScore {
     cp?: number;
     mate?: number;
-    retried?: boolean;
   }
 
-  export interface ServerEval {
-    cp?: number;
-    mate?: number;
-    best?: Uci;
+  interface ClientEvalBase extends EvalScore {
+    sfen: Sfen;
+    depth: number;
+    nodes: number;
+    pvs: PvData[];
+  }
+  export interface CloudEval extends ClientEvalBase {
+    cloud: true;
+    maxDepth: undefined;
+    millis: undefined;
+  }
+  export interface LocalEval extends ClientEvalBase {
+    cloud?: false;
+    enteringKingRule: boolean;
+    maxDepth: number;
+    knps: number;
+    millis: number;
+  }
+  export type ClientEval = CloudEval | LocalEval;
+
+  export interface ServerEval extends EvalScore {
+    best?: Usi;
+    sfen: Sfen;
+    path: string;
+    knodes: number;
+    depth: number;
+    pvs: PvDataServer[];
   }
 
   export interface PvData {
@@ -343,23 +304,27 @@ declare namespace Tree {
     cp?: number;
   }
 
+  export interface PvDataServer extends EvalScore {
+    moves: string;
+  }
+
   export interface TablebaseHit {
     winner: Color | undefined;
-    best?: Uci;
+    best?: Usi;
   }
 
   export interface Node {
     id: string;
     ply: Ply;
-    uci?: Uci;
-    fen: Fen;
+    usi?: Usi;
+    notation?: string;
+    sfen: Sfen;
     children: Node[];
     comments?: Comment[];
     gamebook?: Gamebook;
-    dests?: string;
-    drops?: string | null;
-    check?: Key;
-    threat?: ClientEval;
+    check?: boolean;
+    capture?: boolean;
+    threat?: LocalEval;
     ceval?: ClientEval;
     eval?: ServerEval;
     tbhit?: TablebaseHit | null;
@@ -369,19 +334,9 @@ declare namespace Tree {
     forceVariation?: boolean;
     shapes?: Shape[];
     comp?: boolean;
-    san?: string;
-    threefold?: boolean;
+    fourfold?: boolean;
     fail?: boolean;
-    puzzle?: 'win' | 'fail' | 'good' | 'retry';
-    crazy?: NodeCrazy;
-  }
-
-  export interface NodeCrazy {
-    pockets: [CrazyPocket, CrazyPocket];
-  }
-
-  export interface CrazyPocket {
-    [role: string]: number;
+    puzzle?: 'win' | 'fail' | 'good';
   }
 
   export interface Comment {
@@ -420,7 +375,7 @@ interface JQueryStatic {
 }
 
 interface LishogiModal {
-  (html: string | JQuery, cls?: string, onClose?: () => void): JQuery;
+  (html: string | JQuery, cls?: string, onClose?: () => void, withDataAndEvents?: boolean): JQuery;
   close(): void;
 }
 
@@ -434,7 +389,9 @@ interface JQuery {
   highcharts(conf?: any): any;
   slider(key: string, value: any): any;
   slider(opts: any): any;
+  spectrum(opts: any): any;
   flatpickr(opts: any): any;
+  multipleSelect(opts: any): any;
 }
 
 declare namespace PowerTip {

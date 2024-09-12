@@ -1,7 +1,8 @@
 package lila.app
 package templating
 
-import shogi.{ Board, Color, Pos }
+import shogi.{ Color, Hand, Pos, Situation }
+import shogi.variant.Variant
 import lila.api.Context
 
 import lila.app.ui.ScalatagsTemplate._
@@ -9,53 +10,78 @@ import lila.game.Pov
 
 trait ShogigroundHelper {
 
-  private val cgWrap      = div(cls := "cg-wrap")
-  private val cgHelper    = tag("cg-helper")
-  private val cgContainer = tag("cg-container")
-  private val cgBoard     = tag("cg-board")
-  val cgWrapContent       = cgHelper(cgContainer(cgBoard))
+  private val sgBoard   = tag("sg-board")
+  private val sgSquares = tag("sg-squares")
+  private val sgPieces  = tag("sg-pieces")
 
-  def shogiground(board: Board, orient: Color, lastMove: List[Pos] = Nil)(implicit ctx: Context): Frag =
-    div(cls := s"cg-wrap orientation-${orient.name}") {
-      cgBoard {
-        raw {
-          if (ctx.pref.is3d) ""
-          else {
-            def top(p: Pos)  = orient.fold(9 - p.y, p.y - 1) * 11.11
-            def left(p: Pos) = orient.fold(p.x - 1, 9 - p.x) * 11.11
-            val highlights = ctx.pref.highlight ?? lastMove.distinct.map { pos =>
-              s"""<square class="last-move" style="top:${top(pos)}%;left:${left(pos)}%"></square>"""
-            } mkString ""
-            val pieces =
+  private val sgHandTop    = tag("sg-hand-wrap")(cls := "hand-top")
+  private val sgHandBottom = tag("sg-hand-wrap")(cls := "hand-bottom")
+  private val sgHand       = tag("sg-hand")
+
+  def shogiground(sit: Situation, orient: Color, @scala.annotation.unused lastUsi: List[Pos] = Nil)(implicit
+      ctx: Context
+  ): Frag =
+    sgWrap(sit.variant, orient) {
+      frag(
+        sit.variant.supportsDrops option sgHandTop(
+          sgHand(shogigroundHandPieces(sit.variant, sit.hands(!orient), !orient))
+        ),
+        sgBoard(
+          sgSquares,
+          sgPieces {
+            raw {
+              val scale = 50
+              def x(p: Pos) =
+                orient.fold(sit.variant.numberOfFiles - p.file.index - 1, p.file.index) * scale
+              def y(p: Pos) =
+                orient.fold(p.rank.index, sit.variant.numberOfRanks - p.rank.index - 1) * scale
               if (ctx.pref.isBlindfold) ""
               else
-                board.pieces.map { case (pos, piece) =>
+                sit.board.pieces.map { case (pos, piece) =>
                   val klass = s"${piece.color.name} ${piece.role.name}"
-                  s"""<piece class="$klass" style="top:${top(pos)}%;left:${left(pos)}%"></piece>"""
+                  s"""<piece class="$klass" style="transform: translate(${x(pos)}%, ${y(
+                      pos
+                    )}%) scale(0.5)"></piece>"""
                 } mkString ""
-            s"$highlights$pieces"
+            }
           }
-        }
-      }
+        ),
+        sit.variant.supportsDrops option sgHandBottom(
+          sgHand(shogigroundHandPieces(sit.variant, sit.hands(orient), orient))
+        )
+      )
     }
 
   def shogiground(pov: Pov)(implicit ctx: Context): Frag =
     shogiground(
-      board = pov.game.board,
+      sit = pov.game.situation,
       orient = pov.color,
-      lastMove = pov.game.history.lastMove.map(_.origDest) ?? { case (orig, dest) =>
-        List(orig, dest)
-      }
+      lastUsi = ~pov.game.history.lastUsi.map(_.positions)
     )
 
-  private def wrap(content: Frag): Frag =
-    cgWrap {
-      cgHelper {
-        cgContainer {
-          content
-        }
-      }
+  def shogigroundEmpty(variant: Variant, orient: Color) =
+    sgWrap(variant, orient)(
+      frag(
+        variant.supportsDrops option sgHandTop(sgHand),
+        sgBoard(sgSquares),
+        variant.supportsDrops option sgHandBottom(sgHand)
+      )
+    )
+
+  private def shogigroundHandPieces(variant: Variant, hand: Hand, color: Color): Frag =
+    raw {
+      variant.handRoles.map { role =>
+        s"""<sg-hp-wrap data-nb="${hand(
+            role
+          )}"><piece class="${color.name} ${role.name}"></piece></sg-hp-wrap>"""
+      } mkString ""
     }
 
-  lazy val shogigroundBoard = wrap(cgBoard)
+  private def sgWrap(variant: Variant, orient: Color)(content: Frag): Frag =
+    div(
+      cls := s"sg-wrap d-${variant.numberOfFiles}x${variant.numberOfRanks} orientation-${orient.name} preload"
+    )(
+      content
+    )
+
 }

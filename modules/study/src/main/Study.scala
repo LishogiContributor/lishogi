@@ -13,6 +13,7 @@ case class Study(
     visibility: Study.Visibility,
     settings: Settings,
     from: Study.From,
+    postGameStudy: Option[Study.PostGameStudy],
     likes: Study.Likes,
     description: Option[String] = None,
     topics: Option[StudyTopics] = None,
@@ -27,6 +28,9 @@ case class Study(
   def owner = members get ownerId
 
   def isOwner(id: User.ID) = ownerId == id
+
+  def isPostGameStudyWithOpponentPlayer(id: User.ID) =
+    isOwner(User.lishogiId) && postGameStudy.exists(pgs => pgs.withOpponent && pgs.findPlayer(id).isDefined)
 
   def isMember(id: User.ID) = members contains id
 
@@ -89,7 +93,10 @@ object Study {
   implicit val nameIso = lila.common.Iso.string[Name](Name.apply, _.value)
 
   case class IdName(_id: Id, name: Name) {
+    def id = _id
+  }
 
+  case class MiniStudy(_id: Id, name: String, likes: Likes, createdAt: DateTime) {
     def id = _id
   }
 
@@ -119,22 +126,38 @@ object Study {
       }
     private def likesToHours(likes: Likes): Int =
       if (likes.value < 1) 0
-      else (5 * math.log(likes.value) + 1).toInt.min(likes.value) * 24
+      else (10 * math.log(likes.value) + 1).toInt * 24 * 10
+  }
+
+  case class GamePlayer(playerId: lila.game.Player.ID, userId: lila.game.Player.UserId)
+  object GamePlayer {
+    def fromGamePlayer(gp: lila.game.Player) =
+      GamePlayer(gp.id, gp.userId)
+  }
+
+  case class PostGameStudy(
+      gameId: lila.game.Game.ID,
+      withOpponent: Boolean,
+      sentePlayer: GamePlayer,
+      gotePlayer: GamePlayer
+  ) {
+    def players = List(sentePlayer, gotePlayer)
+    def findPlayer(userId: User.ID): Option[GamePlayer] =
+      players.find(_.userId.exists(_ == userId))
   }
 
   sealed trait From
   object From {
-    case object Scratch                      extends From
-    case class Game(id: String)              extends From
-    case class Study(id: Id)                 extends From
-    case class Relay(clonedFrom: Option[Id]) extends From
+    case object Scratch         extends From
+    case class Game(id: String) extends From
+    case class Study(id: Id)    extends From
+    case object Unknown         extends From
   }
 
   case class Data(
       name: String,
       visibility: String,
       computer: String,
-      explorer: String,
       cloneable: String,
       chat: String,
       sticky: String,
@@ -145,12 +168,11 @@ object Study {
     def settings =
       for {
         comp <- UserSelection.byKey get computer
-        expl <- UserSelection.byKey get explorer
         clon <- UserSelection.byKey get cloneable
         chat <- UserSelection.byKey get chat
         stic = sticky == "true"
         desc = description == "true"
-      } yield Settings(comp, expl, clon, chat, stic, desc)
+      } yield Settings(comp, clon, chat, stic, desc)
   }
 
   case class WithChapter(study: Study, chapter: Chapter)
@@ -170,22 +192,27 @@ object Study {
   def makeId = Id(lila.common.ThreadLocalRandom nextString idSize)
 
   def make(
-      user: User,
+      name: Name,
+      ownerId: User.ID,
       from: From,
       id: Option[Study.Id] = None,
-      name: Option[Name] = None,
-      settings: Option[Settings] = None
+      settings: Option[Settings] = None,
+      members: Option[List[StudyMember]] = None,
+      postGameStudy: Option[PostGameStudy] = None
   ) = {
-    val owner = StudyMember(id = user.id, role = StudyMember.Role.Write)
+    val membersMap = members.fold(
+      Map(ownerId -> StudyMember(id = ownerId, role = StudyMember.Role.Write))
+    )(_.map(m => (m.id -> m)).toMap)
     Study(
       _id = id | makeId,
-      name = name | Name(s"${user.username}'s Study"),
-      members = StudyMembers(Map(user.id -> owner)),
+      name = name,
+      members = StudyMembers(membersMap),
       position = Position.Ref(Chapter.Id(""), Path.root),
-      ownerId = user.id,
+      ownerId = ownerId,
       visibility = Visibility.Public,
       settings = settings | Settings.init,
       from = from,
+      postGameStudy = postGameStudy,
       likes = Likes(1),
       createdAt = DateTime.now,
       updatedAt = DateTime.now

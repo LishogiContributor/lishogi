@@ -11,9 +11,8 @@
 @import '../../../tree/css/tree';
 @import '../../../ceval/css/ceval';
 @import '../../../ceval/css/eval-gauge';
-@import '../../../chess/css/control';
-@import '../../../chess/css/promotion';
-@import '../../../chess/css/blindfold';
-@import '../../../chess/css/zh-pocket';
+@import '../../../analyse/css/controls';
+@import '../../../common/css/vendor/shogiground/blindfold';
+@import '../../../keyboardMove/css/keyboardMove';
 
 @import '../puzzle';

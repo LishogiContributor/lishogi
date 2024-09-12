@@ -1,6 +1,5 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { bind, dataIcon } from '../../util';
+import { bind, dataIcon } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../../ctrl';
 import { StudyCtrl } from '../interfaces';
 
@@ -11,29 +10,28 @@ export function playButtons(root: AnalyseCtrl): VNode | undefined {
   const state = ctrl.state,
     fb = state.feedback,
     myTurn = fb === 'play';
-  return h('div.gamebook-buttons', [
-    root.path
-      ? h(
-          'a.fbt.text.back',
-          {
-            attrs: dataIcon('I'),
-            hook: bind('click', () => root.userJump(''), ctrl.redraw),
-          },
-          'Back'
-        )
-      : null,
-    myTurn
-      ? h(
-          'a.fbt.text.solution',
-          {
-            attrs: dataIcon('G'),
-            hook: bind('click', ctrl.solution, ctrl.redraw),
-          },
-          'View the solution'
-        )
-      : undefined,
-    overrideButton(study),
-  ]);
+  return h(
+    'div.study__buttons.gamebook-buttons',
+    h('div.right', [
+      h(
+        'div.text.back',
+        {
+          attrs: { 'data-icon': 'I', disabled: !root.path },
+          hook: bind('click', () => root.userJump(''), ctrl.redraw),
+        },
+        root.trans.noarg('back')
+      ),
+      h(
+        'div.text.solution',
+        {
+          attrs: { 'data-icon': 'G', disabled: !myTurn },
+          hook: bind('click', ctrl.solution, ctrl.redraw),
+        },
+        root.trans.noarg('viewTheSolution')
+      ),
+      overrideButton(study),
+    ])
+  );
 }
 
 export function overrideButton(study: StudyCtrl): VNode | undefined {
@@ -53,7 +51,7 @@ export function overrideButton(study: StudyCtrl): VNode | undefined {
             study.redraw
           ),
         },
-        'Preview'
+        study.trans.noarg('preview')
       );
     else {
       const isAnalyse = o === 'analyse',
@@ -72,7 +70,7 @@ export function overrideButton(study: StudyCtrl): VNode | undefined {
               study.redraw
             ),
           },
-          'Analyse'
+          study.trans.noarg('analyse')
         );
     }
   }

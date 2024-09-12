@@ -14,32 +14,60 @@ $c-slider: $c-setup;
   form > div {
     padding: 0.5em 1em;
   }
+  form {
+    margin-bottom: 1em;
+  }
   group.radio {
-    margin: 0 auto 1em auto;
+    margin: auto;
     width: 70%;
     .disabled {
       opacity: 0.4;
-      cursor: default;
+      cursor: not-allowed;
     }
     input:checked + label {
       background: $c-setup;
     }
   }
-  .optional_config {
-    border-bottom: $border;
+  .mode_choice,
+  .sfen_position {
+    group.radio div {
+      flex-basis: 50%;
+    }
   }
   .mode_choice {
-    margin-top: 1em;
+    margin: 0.5em 0;
   }
   .optional_config,
   .ratings {
     background: $c-bg-zebra;
     border-top: $border;
+    border-bottom: $border;
+  }
+  .sfen_position {
+    border-bottom: none;
+  }
+  .ai_info {
+    padding-top: 3px;
   }
   .advanced_toggle {
-    font-size: 20px;
-    color: #629924;
-    padding: 1rem 0;
+    display: none;
+    &.show-inline-block {
+      display: inline-block !important;
+    }
+    border: solid $c-setup;
+    border-width: 0 8px 8px 0;
+    border-radius: 3px;
+    padding: 5px;
+    transform: rotate(45deg);
+    margin-top: 1rem;
+    cursor: pointer;
+    &.active {
+      margin-top: 1.5rem;
+      transform: rotate(-135deg);
+    }
+  }
+  .advanced_setup #config_periods {
+    margin-top: 6px;
   }
   .label_select {
     @extend %flex-center;
@@ -56,34 +84,42 @@ $c-slider: $c-setup;
       font-weight: bold;
     }
   }
-  .handicap.label_select {
-    label {
-      flex: 0 0 20%;
+  .sfen_position {
+    .handicap.label_select {
+      @extend %flex-center-nowrap;
+      margin-top: 1rem;
+      label {
+        text-align: left;
+        flex: unset;
+      }
+      select {
+        flex-grow: 1;
+      }
     }
-    #sf_handicap {
-      flex-grow: 1;
-    }
-  }
-  .fen_position {
-    display: none;
-    .board_editor {
-      display: block;
-      width: 50%;
-      margin: 0.5em 0 0 0;
-    }
-    .fen_form {
+    .sfen_form {
       margin-top: 0.5em;
       @extend %flex-center-nowrap;
+      input {
+        flex-grow: 1;
+        margin-left: 0.8em;
+        &.success {
+          border-color: $c-good;
+        }
+        &.failure {
+          background: mix($c-bg-box, $c-bad, 80%);
+          box-shadow: 0 0 13px $c-bad;
+        }
+      }
     }
-    .fen_form input {
-      flex: 1 1 100%;
+    .board_editor {
+      display: block;
+      width: 55%;
+      min-height: 200px;
+      margin: 0.5em auto;
+      .spinner {
+        padding-top: 55px;
+      }
     }
-  }
-  input#fen.success {
-    border-color: $c-good;
-  }
-  input#fen.failure {
-    border-color: $c-bad;
   }
   .ui-slider {
     margin: 0.5em 1em;
@@ -96,9 +132,11 @@ $c-slider: $c-setup;
     }
   }
   .ratings {
-    padding: 1em;
+    @extend %box-radius-bottom;
+    padding: 0.5em;
     width: 100%;
     text-align: center;
+    border-bottom: none;
   }
   .ratings div {
     display: none;
@@ -107,14 +145,21 @@ $c-slider: $c-setup;
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    margin: 1em auto;
+    padding: 0;
     text-align: center;
     position: relative;
+    margin-top: 0.5em;
     &__button {
       margin: 0 0.5em;
       width: 64px;
       height: 64px;
       padding: 7px;
+      @if $theme == 'transp' {
+        background: $c-bg-input;
+        &:hover {
+          background: darken($c-bg-input, 3) !important;
+        }
+      }
       i {
         display: block;
         padding: 0;
@@ -139,18 +184,16 @@ $c-slider: $c-setup;
           height: 65px;
         }
       }
-      &.nope {
-        visibility: hidden;
-      }
       &:disabled {
         opacity: 0.3;
+        cursor: not-allowed;
       }
     }
-    .spinner {
-      width: 85px;
-      height: 85px;
-      margin: 10px auto 20px auto;
-    }
+  }
+  .spinner {
+    height: 85px;
+    width: 85px;
+    padding: 1rem 1.4rem;
   }
   .submit-error-message {
     position: absolute;

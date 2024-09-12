@@ -3,7 +3,7 @@
 	<string name="lishogiCoaches">Lishogi coaches</string>
 	<string name="lishogiCoach">Lishogi coach</string>
 	<string name="areYouCoach">Are you a great shogi coach with a %s?</string>
-	<string name="becomeACoach">Are you a great shogi coach with experience and do you want to be featured on lishogi?</string>
+	<string name="becomeACoach">Are you a great shogi coach with experience and do you want to be featured on Lishogi?</string>
 	<string name="nmOrFideTitle">title</string>
 	<string name="confirmTitle">Bevestig hier je titel en we zullen je aanvraag bekijken.</string>
 	<string name="sendApplication">Mail ons via %s en we zullen je aanvraag bekijken.</string>
@@ -25,12 +25,4 @@
 	<string name="teachingMethod">Leermethode</string>
 	<string name="publicStudies">Openbare studies</string>
 	<string name="youtubeVideos">YouTube-video\'s</string>
-	<plurals name="studentReviews">
-		<item quantity="one">Beoordeling door één student</item>
-		<item quantity="other">Beoordeling door %s studenten</item>
-	</plurals>
-	<string name="thankYouForReview">Bedankt voor je beoordeling!</string>
-	<string name="xWillApproveIt">%s zal dit zeer binnenkort goedkeuren, anders bekijkt een toezichthouder het.</string>
-	<string name="reviewCoach">Beoordeel deze trainer</string>
-	<string name="describeExperienceWith">Beschrijf je ervaringen met %s</string>
 </resources>

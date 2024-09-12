@@ -8,11 +8,12 @@ import scala.concurrent.duration._
 import lila.api.Context
 import lila.app._
 import lila.challenge.{ Challenge => ChallengeModel }
-import lila.common.{ HTTPRequest, IpAddress }
+import lila.common.{ Bearer, HTTPRequest, IpAddress }
 import lila.game.{ AnonCookie, Pov }
 import lila.socket.Socket.SocketVersion
 import lila.user.{ User => UserModel }
 import views.html
+import play.api.mvc.RequestHeader
 
 final class Challenge(
     env: Env
@@ -63,7 +64,7 @@ final class Challenge(
           }
           else
             (c.challengerUserId ?? env.user.repo.named) map { user =>
-              Ok(html.challenge.theirs(c, json, user, get("color") flatMap shogi.Color.apply))
+              Ok(html.challenge.theirs(c, json, user, get("color") flatMap shogi.Color.fromName))
             },
         api = _ => Ok(json).fuccess
       ) flatMap withChallengeAnonCookie(mine && c.challengerIsAnon, c, true)
@@ -71,7 +72,7 @@ final class Challenge(
 
   private def isMine(challenge: ChallengeModel)(implicit ctx: Context) =
     challenge.challenger match {
-      case lila.challenge.Challenge.Challenger.Anonymous(secret)     => HTTPRequest sid ctx.req contains secret
+      case lila.challenge.Challenge.Challenger.Anonymous(secret) => HTTPRequest sid ctx.req contains secret
       case lila.challenge.Challenge.Challenger.Registered(userId, _) => ctx.userId contains userId
       case lila.challenge.Challenge.Challenger.Open                  => false
     }
@@ -82,7 +83,7 @@ final class Challenge(
   def accept(id: String, color: Option[String]) =
     Open { implicit ctx =>
       OptionFuResult(api byId id) { c =>
-        val cc = color flatMap shogi.Color.apply
+        val cc = color flatMap shogi.Color.fromName
         isForMe(c) ?? api
           .accept(c, ctx.me, HTTPRequest sid ctx.req, cc)
           .flatMap {
@@ -190,7 +191,8 @@ final class Challenge(
               username =>
                 ChallengeIpRateLimit(HTTPRequest lastRemoteAddress req) {
                   env.user.repo named username flatMap {
-                    case None => Redirect(routes.Challenge.show(c.id)).fuccess
+                    case None                       => Redirect(routes.Challenge.show(c.id)).fuccess
+                    case Some(dest) if ctx.is(dest) => Redirect(routes.Challenge.show(c.id)).fuccess
                     case Some(dest) =>
                       env.challenge.granter(ctx.me, dest, c.perfType.some) flatMap {
                         case Some(denied) =>
@@ -224,7 +226,7 @@ final class Challenge(
                   } getOrElse TimeControl.Unlimited
                   val challenge = lila.challenge.Challenge.make(
                     variant = config.variant,
-                    initialFen = config.position,
+                    initialSfen = config.sfen,
                     timeControl = timeControl,
                     mode = config.mode,
                     color = config.color.name,
@@ -261,10 +263,11 @@ final class Challenge(
       dest: UserModel,
       challenge: lila.challenge.Challenge,
       strToken: String
-  ) =
-    env.security.api.oauthScoped(
-      lila.oauth.AccessToken.Id(strToken),
-      List(lila.oauth.OAuthScope.Challenge.Write)
+  )(implicit req: RequestHeader) =
+    env.oAuth.server.auth(
+      Bearer(strToken),
+      List(lila.oauth.OAuthScope.Challenge.Write),
+      req.some
     ) flatMap {
       _.fold(
         err => BadRequest(jsonError(err.message)).fuccess,
@@ -275,7 +278,7 @@ final class Challenge(
               case Some(g) =>
                 Ok(
                   Json.obj(
-                    "game" -> env.game.jsonView(g, challenge.initialFen)
+                    "game" -> env.game.jsonView(g)
                   )
                 )
             }
@@ -296,7 +299,7 @@ final class Challenge(
               val challenge = lila.challenge.Challenge
                 .make(
                   variant = config.variant,
-                  initialFen = config.position,
+                  initialSfen = config.sfen,
                   timeControl = config.clock.fold[TimeControl](TimeControl.Unlimited) {
                     TimeControl.Clock.apply
                   },

@@ -5,25 +5,19 @@ import org.joda.time.DateTime
 
 import shogi.{ Clock, Gote, Sente }
 
-import lila.common.Future
-import lila.game.{ Game, GameRepo, UciMemo }
+import lila.game.Game
 import ornicar.scalalib.Random.approximately
 
 final class Player(
     moveDb: MoveDB,
-    gameRepo: GameRepo,
-    uciMemo: UciMemo,
     val maxPlies: Int
 )(implicit
-    ec: scala.concurrent.ExecutionContext,
-    system: akka.actor.ActorSystem
+    ec: scala.concurrent.ExecutionContext
 ) {
 
   def apply(game: Game): Funit =
-    game.aiLevel ?? { level =>
-      Future.delay(delayFor(game) | 0.millis) {
-        makeWork(game, level) addEffect moveDb.add void
-      }
+    game.aiEngine ?? { engine =>
+      makeWork(game, engine) addEffect moveDb.add void
     } recover { case e: Exception =>
       logger.info(e.getMessage)
     }
@@ -39,33 +33,37 @@ final class Player(
         clock     = g.clock | defaultClock
         totalTime = clock.estimateTotalTime.centis
         if totalTime > 20 * 100
-        delay = (clock.remainingTime(pov.color).centis atMost totalTime) * delayFactor
-        accel = 1 - ((g.turns - 20) atLeast 0 atMost 100) / 150f
+        delay = (clock.currentClockFor(pov.color).time.centis atMost totalTime) * delayFactor
+        accel = 1 - ((g.plies - 20) atLeast 0 atMost 100) / 150f
         sleep = (delay * accel) atMost 500
         if sleep > 25
         millis     = sleep * 10
         randomized = approximately(0.5f)(millis)
-        divided    = randomized / (if (g.turns > 9) 1 else 2)
+        divider    = (if (g.hasBot) 1 else if (g.plies > 10) 2 else 4)
+        divided    = randomized / divider
       } yield divided.millis
 
-  private def makeWork(game: Game, level: Int): Fu[Work.Move] =
-    if (game.situation playable true)
-      if (game.turns <= maxPlies) gameRepo.initialFen(game) zip uciMemo.get(game) map {
-        case (initialFen, moves) =>
+  private def makeWork(game: Game, ec: lila.game.EngineConfig): Fu[Work.Move] =
+    if (game.situation.playable(true, true))
+      if (game.plies <= maxPlies)
+        fuccess(
           Work.Move(
             _id = Work.makeId,
+            ply = game.plies,
             game = Work.Game(
               id = game.id,
-              initialFen = initialFen,
+              initialSfen = game.initialSfen,
               studyId = none,
               variant = game.variant,
-              moves = moves mkString " "
+              moves = game.usis.map(_.usi) mkString " "
             ),
-            level = level,
+            currentSfen = game.shogi.toSfen,
+            level = ec.level,
+            engine = ec.engine.name,
             clock = game.clock.map { clk =>
               Work.Clock(
-                btime = clk.remainingTime(Sente).centis,
-                wtime = clk.remainingTime(Gote).centis,
+                btime = clk.currentClockFor(Sente).time.centis,
+                wtime = clk.currentClockFor(Gote).time.centis,
                 inc = clk.incrementSeconds,
                 byo = clk.byoyomiSeconds
               )
@@ -73,9 +71,10 @@ final class Player(
             tries = 0,
             lastTryByKey = none,
             acquired = none,
+            delayMillis = delayFor(game).map(_.toMillis.toInt),
             createdAt = DateTime.now
           )
-      }
-      else fufail(s"[fishnet] Too many moves (${game.turns}), won't play ${game.id}")
+        )
+      else fufail(s"[fishnet] Too many moves (${game.plies}), won't play ${game.id}")
     else fufail(s"[fishnet] invalid position on ${game.id}")
 }

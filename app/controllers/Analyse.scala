@@ -1,13 +1,12 @@
 package controllers
 
-import play.api.libs.json._
 import play.api.mvc._
 
-import shogi.format.FEN
+import shogi.format.forsyth.Sfen
 import lila.api.Context
 import lila.app._
 import lila.common.HTTPRequest
-import lila.game.{ PgnDump, Pov }
+import lila.game.{ NotationDump, Pov }
 import lila.round.JsonView.WithFlags
 import views._
 
@@ -24,8 +23,9 @@ final class Analyse(
           game,
           lila.fishnet.Work.Sender(
             userId = me.id.some,
+            postGameStudy = none,
             ip = HTTPRequest.lastRemoteAddress(ctx.req).some,
-            mod = isGranted(_.Hunter) || isGranted(_.Relay),
+            mod = isGranted(_.Hunter),
             system = false
           )
         ) map {
@@ -38,20 +38,19 @@ final class Analyse(
   def replay(pov: Pov, userTv: Option[lila.user.User])(implicit ctx: Context) =
     if (HTTPRequest isCrawler ctx.req) replayBot(pov)
     else
-      env.game.gameRepo initialFen pov.gameId flatMap { initialFen =>
-        gameC.preloadUsers(pov.game) >> RedirectAtFen(pov, initialFen) {
-          (env.analyse.analyser get pov.game) zip
-            (!pov.game.metadata.analysed ?? env.fishnet.api.userAnalysisExists(pov.gameId)) zip
-            (pov.game.simulId ?? env.simul.repo.find) zip
-            roundC.getWatcherChat(pov.game) zip
-            (ctx.noBlind ?? env.game.crosstableApi.withMatchup(pov.game)) zip
-            env.bookmark.api.exists(pov.game, ctx.me) zip
-            env.api.pgnDump(
-              pov.game,
-              initialFen,
-              analysis = none,
-              PgnDump.WithFlags(clocks = false)
-            ) flatMap { case analysis ~ analysisInProgress ~ simul ~ chat ~ crosstable ~ bookmarked ~ pgn =>
+      gameC.preloadUsers(pov.game) >> RedirectAtSfen(pov) {
+        (env.analyse.analyser get pov.game) zip
+          (!pov.game.metadata.analysed ?? env.fishnet.api.userAnalysisExists(pov.gameId)) zip
+          (pov.game.simulId ?? env.simul.repo.find) zip
+          roundC.getWatcherChat(pov.game) zip
+          (ctx.noBlind ?? env.game.crosstableApi.withMatchup(pov.game)) zip
+          env.bookmark.api.exists(pov.game, ctx.me) zip
+          env.api.notationDump(
+            pov.game,
+            analysis = none,
+            NotationDump.WithFlags(clocks = false)
+          ) flatMap {
+            case ((((((analysis, analysisInProgress), simul), chat), crosstable), bookmarked), kif) =>
               env.api.roundApi.review(
                 pov,
                 lila.api.Mobile.Api.currentVersion,
@@ -59,73 +58,55 @@ final class Analyse(
                   lila.round.OnUserTv(u.id)
                 },
                 analysis,
-                initialFenO = initialFen.some,
                 withFlags = WithFlags(
                   movetimes = true,
                   clocks = true,
-                  division = true,
-                  opening = true
+                  division = true
                 )
               ) map { data =>
-                val finalPgn = env.analyse.annotator(
-                  pgn,
-                  analysis,
-                  pov.game.opening,
-                  pov.game.winnerColor,
-                  pov.game.status
-                )
-                val movesSeq = data("treeParts").as[JsArray].value.tail map { move: JsValue =>
-                  val nodeMap = move.as[JsObject].value
-                  (nodeMap("uci").as[JsString].value, nodeMap("san").as[JsString].value)
-                }
-                EnableSharedArrayBuffer(
-                  Ok(
-                    html.analyse.replay(
-                      pov,
-                      data,
-                      initialFen,
-                      finalPgn.renderAsKifu(movesSeq, pov.game.createdAt),
-                      analysis,
-                      analysisInProgress,
-                      simul,
-                      crosstable,
-                      userTv,
-                      chat,
-                      bookmarked = bookmarked
-                    )
+                Ok(
+                  html.analyse.replay(
+                    pov,
+                    data,
+                    kif.render,
+                    analysis,
+                    analysisInProgress,
+                    simul,
+                    crosstable,
+                    userTv,
+                    chat,
+                    bookmarked = bookmarked
                   )
-                )
+                ).enableSharedArrayBuffer
               }
-            }
-        }
+          }
       }
 
   def embed(gameId: String, color: String) =
     Action.async { implicit req =>
-      env.game.gameRepo.gameWithInitialFen(gameId) flatMap {
-        case Some((game, initialFen)) =>
-          val pov = Pov(game, shogi.Color(color == "sente"))
+      env.game.gameRepo.game(gameId) flatMap {
+        case Some(game) =>
+          val pov = Pov(game, shogi.Color.fromSente(color == "sente"))
           env.api.roundApi.embed(
             pov,
             lila.api.Mobile.Api.currentVersion,
-            initialFenO = initialFen.some,
-            withFlags = WithFlags(opening = true)
+            withFlags = WithFlags()
           ) map { data =>
-            Ok(html.analyse.embed(pov, data))
+            Ok(html.analyse.embed(pov, data)).enableSharedArrayBuffer
           }
         case _ => fuccess(NotFound(html.analyse.embed.notFound))
-      } dmap EnableSharedArrayBuffer
+      }
     }
 
-  private def RedirectAtFen(pov: Pov, initialFen: Option[FEN])(or: => Fu[Result])(implicit ctx: Context) =
-    get("fen").fold(or) { atFen =>
+  private def RedirectAtSfen(pov: Pov)(or: => Fu[Result])(implicit ctx: Context) =
+    get("sfen").map(Sfen.clean).fold(or) { atSfen =>
       val url = routes.Round.watcher(pov.gameId, pov.color.name)
       fuccess {
         shogi.Replay
-          .plyAtFen(pov.game.pgnMoves, initialFen.map(_.value), pov.game.variant, atFen)
+          .plyAtSfen(pov.game.usis, pov.game.initialSfen, pov.game.variant, atSfen)
           .fold(
             err => {
-              lila.log("analyse").info(s"RedirectAtFen: ${pov.gameId} $atFen $err")
+              lila.log("analyse").info(s"RedirectAtSfen: ${pov.gameId} $atSfen $err")
               Redirect(url)
             },
             ply => Redirect(s"$url#$ply")
@@ -135,18 +116,14 @@ final class Analyse(
 
   private def replayBot(pov: Pov)(implicit ctx: Context) =
     for {
-      initialFen <- env.game.gameRepo initialFen pov.gameId
       analysis   <- env.analyse.analyser get pov.game
       simul      <- pov.game.simulId ?? env.simul.repo.find
       crosstable <- env.game.crosstableApi.withMatchup(pov.game)
-      pgn        <- env.api.pgnDump(pov.game, initialFen, analysis, PgnDump.WithFlags(clocks = false))
+      kif        <- env.api.notationDump(pov.game, analysis, NotationDump.WithFlags(clocks = false))
     } yield Ok(
       html.analyse.replayBot(
         pov,
-        initialFen,
-        env.analyse
-          .annotator(pgn, analysis, pov.game.opening, pov.game.winnerColor, pov.game.status)
-          .toString,
+        kif.render,
         simul,
         crosstable
       )

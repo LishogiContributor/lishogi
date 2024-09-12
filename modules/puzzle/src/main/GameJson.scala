@@ -1,13 +1,10 @@
 package lila.puzzle
 
-import shogi.format.Forsyth
-import shogi.format.UciCharPair
 import play.api.libs.json._
 import scala.concurrent.duration._
 
 import lila.game.{ Game, GameRepo, PerfPicker }
 import lila.i18n.defaultLang
-import lila.tree.Node.{ minimalNodeJsonWriter, partitionTreeJsonWriter }
 
 final private class GameJson(
     gameRepo: GameRepo,
@@ -15,13 +12,8 @@ final private class GameJson(
     lightUserApi: lila.user.LightUserApi
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
-  def apply(gameId: Game.ID, plies: Int, bc: Boolean): Fu[JsObject] =
-    (if (bc) bcCache else cache) get writeKey(gameId, plies)
-
-  def noCacheBc(game: Game, plies: Int): Fu[JsObject] =
-    lightUserApi preloadMany game.userIds map { _ =>
-      generateBc(game, plies)
-    }
+  def apply(gameId: Game.ID, plies: Int): Fu[JsObject] =
+    cache get writeKey(gameId, plies)
 
   private def readKey(k: String): (Game.ID, Int) =
     k.drop(Game.gameIdSize).toIntOption match {
@@ -30,42 +22,31 @@ final private class GameJson(
     }
   private def writeKey(id: Game.ID, ply: Int) = s"$id$ply"
 
-  private val cache = cacheApi[String, JsObject](4096, "puzzle.gameJson") {
+  private val cache = cacheApi[String, JsObject](512, "puzzle.gameJson") {
     _.expireAfterAccess(5 minutes)
       .maximumSize(1024)
       .buildAsyncFuture(key =>
         readKey(key) match {
-          case (id, plies) => generate(id, plies, false)
+          case (id, plies) => generate(id, plies)
         }
       )
   }
 
-  private val bcCache = cacheApi[String, JsObject](64, "puzzle.bc.gameJson") {
-    _.expireAfterAccess(5 minutes)
-      .maximumSize(1024)
-      .buildAsyncFuture(key =>
-        readKey(key) match {
-          case (id, plies) => generate(id, plies, true)
-        }
-      )
-  }
-
-  private def generate(gameId: Game.ID, plies: Int, bc: Boolean): Fu[JsObject] =
+  private def generate(gameId: Game.ID, plies: Int): Fu[JsObject] =
     gameRepo game gameId orFail s"Missing puzzle game $gameId!" flatMap { game =>
       lightUserApi preloadMany game.userIds map { _ =>
-        if (bc) generateBc(game, plies)
-        else generate(game, plies)
+        gameJson(game, plies)
       }
     }
 
-  private def generate(game: Game, plies: Int): JsObject =
+  private def gameJson(game: Game, plies: Int): JsObject =
     Json
       .obj(
         "id"      -> game.id,
         "perf"    -> perfJson(game),
         "rated"   -> game.rated,
         "players" -> playersJson(game),
-        "pgn"     -> game.shogi.pgnMoves.take(plies + 1).mkString(" ")
+        "moves"   -> game.shogi.usis.take(plies + 1).map(_.usi).mkString(" ")
       )
       .add("clock", game.clock.map(_.config.show))
 
@@ -88,35 +69,7 @@ final private class GameJson(
       )
       .add("title" -> user.title)
       .add("ai" -> p.aiLevel)
+      .add("aiCode" -> p.aiCode)
   })
 
-  private def generateBc(game: Game, plies: Int): JsObject =
-    Json
-      .obj(
-        "id"      -> game.id,
-        "perf"    -> perfJson(game),
-        "players" -> playersJson(game),
-        "rated"   -> game.rated,
-        "treeParts" -> {
-          val pgnMoves = game.pgnMoves.take(plies + 1)
-          for {
-            pgnMove <- pgnMoves.lastOption
-            situation <- shogi.Replay
-              .situations(pgnMoves, None, game.variant)
-              .valueOr { err =>
-                sys.error(s"GameJson.generateBc ${game.id} $err")
-              }
-              .lastOption
-            uciMove <- situation.board.history.lastMove
-          } yield Json.obj(
-            "fen"   -> Forsyth.>>(situation),
-            "ply"   -> (plies + 1),
-            "san"   -> pgnMove,
-            "id"    -> UciCharPair(uciMove).toString,
-            "uci"   -> uciMove.uci,
-            "crazy" -> Forsyth.exportCrazyPocket(situation.board)
-          )
-        }
-      )
-      .add("clock", game.clock.map(_.config.show))
 }

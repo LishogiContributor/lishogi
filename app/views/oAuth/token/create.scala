@@ -9,14 +9,14 @@ import lila.app.ui.ScalatagsTemplate._
 
 object create {
 
-  def apply(form: Form[lila.oauth.OAuthForm.token.Data], me: lila.user.User)(implicit ctx: Context) = {
+  def apply(form: Form[lila.oauth.OAuthTokenForm.Data], me: lila.user.User)(implicit ctx: Context) = {
 
     val title = "New personal API access token"
 
     views.html.account.layout(title = title, active = "oauth.token")(
       div(cls := "account oauth box box-pad")(
         h1(title),
-        postForm(cls := "form3", action := routes.OAuthToken.create())(
+        postForm(cls := "form3", action := routes.OAuthToken.create)(
           div(cls := "form-group")(
             "Personal access tokens function like ordinary Lishogi OAuth access tokens. ",
             "They can be used to authenticate to the API over Basic Authentication."
@@ -30,7 +30,7 @@ object create {
           br,
           h2("Scopes define the access for personal tokens:"),
           div(cls := "scopes")(
-            lila.oauth.OAuthScope.all.map { scope =>
+            lila.oauth.OAuthScope.allButWeb.map { scope =>
               val disabled = {
                 me.noBot && scope == lila.oauth.OAuthScope.Bot.Play && me.count.game > 0
               } || {
@@ -52,13 +52,13 @@ object create {
             }
           ),
           form3.actions(
-            a(href := routes.OAuthToken.index())("Cancel"),
+            a(href := routes.OAuthToken.index)("Cancel"),
             form3.submit(trans.apply())
           ),
           br,
           div {
             val url =
-              s"${netBaseUrl}${routes.OAuthToken.create()}?scopes[]=challenge:write&scopes[]=preference:read&description=Prefilled+token+example"
+              s"${netBaseUrl}${routes.OAuthToken.create}?scopes[]=challenge:write&scopes[]=preference:read&description=Prefilled+token+example"
             frag(
               h2("Note for the attention of developers only:"),
               p(

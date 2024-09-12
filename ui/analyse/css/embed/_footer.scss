@@ -1,10 +1,16 @@
 footer {
-  @extend %flex-center-nowrap, %metal;
+  @extend %flex-center-nowrap;
   font-size: 0.9em;
   border: $border;
-  border-top: none;
   height: 2.5rem;
   padding: 0 1vw;
+  background: $c-bg-zebra;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+
   .left {
     @extend %nowrap-ellipsis;
     flex: 1 1 100%;

@@ -2,21 +2,20 @@ package views
 package html.puzzle
 
 import controllers.routes
-import play.api.i18n.Lang
 
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
 import lila.common.paginator.Paginator
 import lila.puzzle.PuzzleHistory.{ PuzzleSession, SessionRound }
-import lila.puzzle.{ PuzzleRound, PuzzleTheme }
+import lila.puzzle.PuzzleTheme
 import lila.user.User
 
 object history {
 
-  def apply(user: User, page: Int, pager: Paginator[PuzzleSession])(implicit ctx: Context) =
+  def apply(user: User, pager: Paginator[PuzzleSession])(implicit ctx: Context) =
     views.html.base.layout(
-      title = "Puzzle history",
+      title = trans.puzzle.history.txt(),
       moreCss = cssTag("puzzle.dashboard"),
       moreJs = infiniteScrollTag
     )(
@@ -45,7 +44,7 @@ object history {
 
   private def renderRound(r: SessionRound)(implicit ctx: Context) =
     a(cls := "puzzle-history__round", href := routes.Puzzle.show(r.puzzle.id.value))(
-      views.html.game.bits.miniTag(r.puzzle.fenAfterInitialMove, r.puzzle.color, r.puzzle.lastMove)(
+      views.html.puzzle.bits.miniTag(r.puzzle.sfenAfterInitialMove, r.puzzle.color, r.puzzle.lastUsi)(
         span(cls := "puzzle-history__round__puzzle")
       ),
       span(cls := "puzzle-history__round__meta")(

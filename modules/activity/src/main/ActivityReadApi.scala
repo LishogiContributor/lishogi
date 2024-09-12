@@ -25,14 +25,14 @@ final class ActivityReadApi(
 
   private val recentNb = 7
 
-  def recent(u: User, nb: Int = recentNb): Fu[Vector[ActivityView]] =
+  def recent(u: User): Fu[Vector[ActivityView]] =
     for {
       activities <-
         coll.ext
           .find(regexId(u.id))
           .sort($sort desc "_id")
           .cursor[Activity](ReadPreference.secondaryPreferred)
-          .vector(nb)
+          .vector(recentNb)
           .dmap(_.filterNot(_.isEmpty))
           .mon(_.user segment "activity.raws")
       practiceStructure <- activities.exists(_.practice.isDefined) ?? {
@@ -123,7 +123,7 @@ final class ActivityReadApi(
       case ((false, as), a) if a.interval contains at => (true, as :+ a.copy(signup = true))
       case ((found, as), a)                           => (found, as :+ a)
     }
-    if (!found && views.size < recentNb && DateTime.now.minusDays(8).isBefore(at))
+    if (!found && views.sizeIs < recentNb && DateTime.now.minusDays(8).isBefore(at))
       views :+ ActivityView(
         interval = new Interval(at.withTimeAtStartOfDay, at.withTimeAtStartOfDay plusDays 1),
         signup = true

@@ -1,42 +1,58 @@
-import { Ctrl } from '../interfaces';
+import { Status } from '../interfaces';
+import { transWithColorName } from 'common/colorName';
 
-export default function status(ctrl: Ctrl): string {
-  const noarg = ctrl.trans.noarg,
-    d = ctrl.data;
-  switch (d.game.status.name) {
+export default function status(trans: Trans, status: Status, winner: Color | undefined, isHandicap: boolean): string {
+  const noarg = trans.noarg;
+  switch (status.name) {
     case 'started':
       return noarg('playingRightNow');
+    case 'paused':
+      return noarg('gameAdjourned');
     case 'aborted':
       return noarg('gameAborted');
     case 'mate':
       return noarg('checkmate');
     case 'resign':
-      return noarg(d.game.winner == 'sente' ? 'whiteResigned' : 'blackResigned');
+      return winner
+        ? transWithColorName(trans, 'xResigned', winner === 'sente' ? 'gote' : 'sente', isHandicap)
+        : noarg('finished');
     case 'stalemate':
       return noarg('stalemate');
-    case 'impasse':
-      return 'Impasse (Try Rule)';
+    case 'impasse27':
+      return noarg('impasse');
+    case 'tryRule':
+      return 'Try rule';
     case 'perpetualCheck':
-      return 'Perpetual check (Illegal move)';
+      return noarg('perpetualCheck');
+    case 'repetition':
+      return noarg('repetition');
     case 'timeout':
-      switch (d.game.winner) {
+      switch (winner) {
         case 'sente':
-          return noarg('whiteLeftTheGame');
         case 'gote':
-          return noarg('blackLeftTheGame');
+          return transWithColorName(trans, 'xLeftTheGame', winner === 'sente' ? 'gote' : 'sente', isHandicap);
+        default:
+          return noarg('draw');
       }
-      return noarg('draw');
     case 'draw':
       return noarg('draw');
     case 'outoftime':
       return noarg('timeOut');
     case 'noStart':
-      return (d.game.winner == 'sente' ? 'Gote' : 'Sente') + " didn't move";
+      return winner
+        ? transWithColorName(trans, 'xDidntMove', winner === 'sente' ? 'gote' : 'sente', isHandicap)
+        : noarg('finished');
     case 'cheat':
       return noarg('cheatDetected');
-    case 'variantEnd':
-      return noarg('variantEnding');
+    case 'unknownFinish':
+      return noarg('finished');
+    case 'royalsLost':
+      return noarg('royalsLost');
+    case 'bareKing':
+      return noarg('bareKing');
+    case 'specialVariantEnd':
+      return noarg('check'); // enough for now
     default:
-      return d.game.status.name;
+      return status.name;
   }
 }

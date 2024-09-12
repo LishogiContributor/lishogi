@@ -10,13 +10,9 @@ final class Dev(env: Env) extends LilaController(env) {
   private lazy val settingsList = List[lila.memo.SettingStore[_]](
     env.security.ugcArmedSetting,
     env.security.spamKeywordsSetting,
-    env.irwin.irwinThresholdsSetting,
-    env.explorer.indexFlowSetting,
     env.report.scoreThresholdSetting,
-    env.report.slackScoreThresholdSetting,
     env.streamer.homepageMaxSetting,
     env.streamer.alwaysFeaturedSetting,
-    env.streamer.twitchCredentialsSetting,
     env.rating.ratingFactorsSetting,
     env.plan.donationGoalSetting,
     env.apiTimelineSetting,
@@ -37,15 +33,7 @@ final class Dev(env: Env) extends LilaController(env) {
           .bindFromRequest()
           .fold(
             _ => BadRequest(html.dev.settings(settingsList)).fuccess,
-            v => {
-              setting.setString(v.toString) inject {
-                (setting.id, setting.get()) match {
-                  case ("friendListToggle", v: Boolean) => env.api.influxEvent.friendListToggle(v)
-                  case _                                =>
-                }
-                Redirect(routes.Dev.settings())
-              }
-            }
+            v => setting.setString(v.toString) inject Redirect(routes.Dev.settings)
           )
       }
     }
@@ -84,5 +72,5 @@ final class Dev(env: Env) extends LilaController(env) {
 
   private def runAs(user: lila.user.User.ID, command: String): Fu[String] =
     env.mod.logApi.cli(user, command) >>
-      env.api.cli(command.split(" ").toList)
+      env.api.cli(command.split(" ").toList, user)
 }

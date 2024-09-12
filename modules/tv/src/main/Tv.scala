@@ -37,20 +37,23 @@ final class Tv(
   }
 
   def getGames(channel: Tv.Channel, max: Int): Fu[List[Game]] =
-    trouper.ask[List[Game.ID]](TvTrouper.GetGameIds(channel, max, _)) flatMap {
+    getGameIds(channel, max) flatMap {
       _.map(roundProxyGame).sequenceFu.map(_.flatten)
     }
 
-  def getBestGame = getGame(Tv.Channel.Best) orElse gameRepo.random
+  def getGameIds(channel: Tv.Channel, max: Int): Fu[List[Game.ID]] =
+    trouper.ask[List[Game.ID]](TvTrouper.GetGameIds(channel, max, _))
 
-  def getBestAndHistory = getGameAndHistory(Tv.Channel.Best)
+  def getBestGame = getGame(Tv.Channel.Standard) orElse gameRepo.randomStandard
+
+  def getBestAndHistory = getGameAndHistory(Tv.Channel.Standard)
 
   def getChampions: Fu[Champions] =
     trouper.ask[Champions](TvTrouper.GetChampions.apply)
 }
 
 object Tv {
-  import shogi.{ Speed => S, variant => V }
+  import shogi.{ variant => V }
   import lila.rating.{ PerfType => P }
 
   case class Champion(user: LightUser, rating: Int, gameId: Game.ID)
@@ -58,90 +61,68 @@ object Tv {
     def get = channels.get _
   }
 
-  private[tv] case class Candidate(game: Game, hasBot: Boolean)
-  private[tv] def toCandidate(lightUser: LightUser.GetterSync)(game: Game) =
-    Tv.Candidate(
-      game = game,
-      hasBot = game.userIds.exists { userId =>
-        lightUser(userId).exists(_.isBot)
-      }
-    )
-
   sealed abstract class Channel(
-      val name: String,
+      val key: String,
       val icon: String,
-      val secondsSinceLastMove: Int,
-      filters: Seq[Candidate => Boolean]
+      filters: Seq[Game => Boolean]
   ) {
-    def isFresh(g: Game): Boolean     = fresh(secondsSinceLastMove, g)
-    def filter(c: Candidate): Boolean = filters.forall { _(c) } && isFresh(c.game)
-    val key                           = s"${toString.head.toLower}${toString.drop(1)}"
+
+    def filter(g: Game): Boolean = filters.forall { _(g) }
+
   }
+
   object Channel {
-    case object Best
+
+    case object Standard
         extends Channel(
-          name = "Top Rated",
+          key = V.Standard.key,
           icon = "C",
-          secondsSinceLastMove = 60 * 3,
-          filters = Seq(minRating(1400), standardShogiRules)
+          filters = Seq(variant(V.Standard), someHuman)
         )
-    case object Bullet
+    case object Minishogi
         extends Channel(
-          name = S.Bullet.name,
-          icon = P.Bullet.iconChar.toString,
-          secondsSinceLastMove = 60,
-          filters = Seq(speed(S.Bullet), standardShogiRules)
+          key = V.Minishogi.key,
+          icon = P.Minishogi.iconChar.toString,
+          filters = Seq(variant(V.Minishogi), someHuman)
         )
-    case object Blitz
+    case object Chushogi
         extends Channel(
-          name = S.Blitz.name,
-          icon = P.Blitz.iconChar.toString,
-          secondsSinceLastMove = 60 * 3,
-          filters = Seq(speed(S.Blitz), standardShogiRules)
+          key = V.Chushogi.key,
+          icon = P.Chushogi.iconChar.toString,
+          filters = Seq(variant(V.Chushogi), someHuman)
         )
-    case object Rapid
+    case object Annanshogi
         extends Channel(
-          name = S.Rapid.name,
-          icon = P.Rapid.iconChar.toString,
-          secondsSinceLastMove = 60 * 5,
-          filters = Seq(speed(S.Rapid), standardShogiRules)
+          key = V.Annanshogi.key,
+          icon = P.Annanshogi.iconChar.toString,
+          filters = Seq(variant(V.Annanshogi), someHuman)
         )
-    case object Classical
+    case object Kyotoshogi
         extends Channel(
-          name = S.Classical.name,
-          icon = P.Classical.iconChar.toString,
-          secondsSinceLastMove = 60 * 8,
-          filters = Seq(speed(S.Classical), standardShogiRules)
+          key = V.Kyotoshogi.key,
+          icon = P.Kyotoshogi.iconChar.toString,
+          filters = Seq(variant(V.Kyotoshogi), someHuman)
         )
-    case object UltraBullet
+    case object Checkshogi
         extends Channel(
-          name = S.UltraBullet.name,
-          icon = P.UltraBullet.iconChar.toString,
-          secondsSinceLastMove = 30,
-          filters = Seq(speed(S.UltraBullet), standardShogiRules)
-        )
-    case object Bot
-        extends Channel(
-          name = "Bot",
-          icon = "n",
-          secondsSinceLastMove = 60 * 2,
-          filters = Seq(standardShogiRules, hasBot)
+          key = V.Checkshogi.key,
+          icon = P.Checkshogi.iconChar.toString,
+          filters = Seq(variant(V.Checkshogi), someHuman)
         )
     case object Computer
         extends Channel(
-          name = "Computer",
+          key = "computer",
           icon = "n",
-          secondsSinceLastMove = 60 * 2,
-          filters = Seq(computerStandardRules)
+          filters = Seq(someComputer)
         )
+
     val all = List(
-      Best,
-      Bullet,
-      Blitz,
-      Rapid,
-      Classical,
-      UltraBullet,
-      Bot,
+      Standard,
+      Minishogi,
+      Chushogi,
+      Annanshogi,
+      Kyotoshogi,
+      Checkshogi,
       Computer
     )
     val byKey = all.map { c =>
@@ -149,20 +130,10 @@ object Tv {
     }.toMap
   }
 
-  private def rated(min: Int)                         = (c: Candidate) => c.game.rated && hasMinRating(c.game, min)
-  private def minRating(min: Int)                     = (c: Candidate) => hasMinRating(c.game, min)
-  private def speed(speed: shogi.Speed)               = (c: Candidate) => c.game.speed == speed
-  private def variant(variant: shogi.variant.Variant) = (c: Candidate) => c.game.variant == variant
-  private def standardShogiRules(c: Candidate) =
-    c.game.variant == V.Standard || c.game.variant == V.FromPosition
-  private def computerStandardRules(c: Candidate) = c.game.hasAi && standardShogiRules(c)
-  private def hasBot(c: Candidate)                = c.hasBot
-  private def noBot(c: Candidate)                 = !c.hasBot
+  private def someComputer(g: Game) = g.hasBot || g.hasAi
+  private def someHuman(g: Game)    = g.hasHuman
 
-  private def fresh(seconds: Int, game: Game): Boolean = {
-    game.isBeingPlayed && !game.olderThan(seconds)
-  } || {
-    game.finished && !game.olderThan(10)
-  } // rematch time
-  private def hasMinRating(g: Game, min: Int) = g.players.exists(_.rating.exists(_ >= min))
+  private def variant(variant: shogi.variant.Variant) =
+    (g: Game) => g.variant == variant
+
 }

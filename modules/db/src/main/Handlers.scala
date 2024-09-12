@@ -4,10 +4,11 @@ import org.joda.time.DateTime
 import reactivemongo.api.bson._
 import reactivemongo.api.bson.exceptions.TypeDoesNotMatchException
 import scala.util.{ Failure, Success, Try }
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 import lila.common.Iso._
 import lila.common.{ EmailAddress, IpAddress, Iso, NormalizedEmailAddress }
+import shogi.format.forsyth.Sfen
 
 trait Handlers {
 
@@ -29,7 +30,7 @@ trait Handlers {
   def stringAnyValHandler[A](to: A => String, from: String => A): BSONHandler[A] =
     stringIsoHandler(Iso(from, to))
 
-  def intIsoHandler[A](implicit iso: IntIso[A]): BSONHandler[A]         = BSONIntegerHandler.as[A](iso.from, iso.to)
+  def intIsoHandler[A](implicit iso: IntIso[A]): BSONHandler[A] = BSONIntegerHandler.as[A](iso.from, iso.to)
   def intAnyValHandler[A](to: A => Int, from: Int => A): BSONHandler[A] = intIsoHandler(Iso(from, to))
 
   def booleanIsoHandler[A](implicit iso: BooleanIso[A]): BSONHandler[A] =
@@ -113,5 +114,7 @@ trait Handlers {
   implicit val normalizedEmailAddressHandler =
     isoHandler[NormalizedEmailAddress, String](normalizedEmailAddressIso)
 
-  implicit val colorBoolHandler = BSONBooleanHandler.as[shogi.Color](shogi.Color.apply, _.sente)
+  implicit val colorBoolHandler = BSONBooleanHandler.as[shogi.Color](shogi.Color.fromSente, _.sente)
+
+  implicit val SfenHandler: BSONHandler[Sfen] = stringAnyValHandler[Sfen](_.value, Sfen.apply)
 }

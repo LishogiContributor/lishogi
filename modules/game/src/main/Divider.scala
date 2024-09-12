@@ -5,7 +5,7 @@ import scala.concurrent.duration._
 
 import shogi.Division
 import shogi.variant.Variant
-import shogi.format.FEN
+import shogi.format.forsyth.Sfen
 
 final class Divider {
 
@@ -13,22 +13,23 @@ final class Divider {
     .expireAfterAccess(5 minutes)
     .build[Game.ID, Division]()
 
-  def apply(game: Game, initialFen: Option[FEN]): Division =
-    apply(game.id, game.pgnMoves, game.variant, initialFen)
+  def apply(game: Game): Division =
+    apply(game.id, game.usis, game.variant, game.initialSfen)
 
-  def apply(id: Game.ID, pgnMoves: => PgnMoves, variant: Variant, initialFen: Option[FEN]) =
+  def apply(id: Game.ID, usis: => Usis, variant: Variant, initialSfen: Option[Sfen]) =
     if (!Variant.divisionSensibleVariants(variant)) Division.empty
     else
       cache.get(
         id,
         _ =>
           shogi.Replay
-            .boards(
-              moveStrs = pgnMoves,
-              initialFen = initialFen,
+            .situations(
+              usis = usis,
+              initialSfen = initialSfen,
               variant = variant
             )
             .toOption
+            .map(_.toList)
             .fold(Division.empty)(shogi.Divider.apply)
       )
 }

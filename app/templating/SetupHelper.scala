@@ -77,16 +77,21 @@ trait SetupHelper { self: I18nHelper =>
     }
   }
 
-  val corresDaysChoices: List[SelectChoice] =
-    ("1", "One day", none) :: List(2, 3, 5, 7, 10, 14).map { d =>
-      (d.toString, s"${d} days", none)
+  def translatedCorresDaysChoices(implicit lang: Lang) =
+    List(1, 2, 3, 5, 7, 10, 14) map { d =>
+      (d.toString, trans.nbDays.pluralSameTxt(d), none)
     }
+
+  def anonTranslatedTimeModeChoices(implicit lang: Lang) =
+    List(
+      (TimeMode.RealTime.id.toString, trans.realTime.txt(), none)
+    )
 
   def translatedTimeModeChoices(implicit lang: Lang) = {
     List(
       (TimeMode.RealTime.id.toString, trans.realTime.txt(), none),
       (TimeMode.Correspondence.id.toString, trans.correspondence.txt(), none)
-      //(TimeMode.Unlimited.id.toString, trans.unlimited.txt(), none)
+      // (TimeMode.Unlimited.id.toString, trans.unlimited.txt(), none)
     )
   }
 
@@ -104,16 +109,15 @@ trait SetupHelper { self: I18nHelper =>
       (Mode.Rated.id.toString, trans.rated.txt(), none)
     )
 
-  def translatedByoyomiChoices(implicit lang: Lang) =
+  def translatedBooleanFilterChoices(implicit lang: Lang) =
     List(
       (1, trans.yes.txt(), none),
       (0, trans.no.txt(), none)
     )
 
-  def translatedIncrementChoices(implicit lang: Lang) =
+  def translatedBooleanYesFilterChoice(implicit lang: Lang) =
     List(
-      (1, trans.yes.txt(), none),
-      (0, trans.no.txt(), none)
+      (1, trans.yes.txt(), none)
     )
 
   def translatedModeChoicesTournament(implicit lang: Lang) =
@@ -124,38 +128,41 @@ trait SetupHelper { self: I18nHelper =>
 
   private val encodeId = (v: Variant) => v.id.toString
 
-  private def variantTupleId = variantTuple(encodeId) _
+  private def variantTuple(encode: Variant => String)(variant: Variant)(implicit lang: Lang) =
+    (encode(variant), transKeyTxt(variant.key), transKeyTxt(s"${variant.key}Description").some)
 
-  private def variantTuple(encode: Variant => String)(variant: Variant) =
-    (encode(variant), variant.name, variant.title.some)
+  def standardChoice(implicit lang: Lang): SelectChoice =
+    standardChoice(encodeId)
+
+  def standardChoice(encode: Variant => String)(implicit lang: Lang): SelectChoice =
+    (encode(shogi.variant.Standard), trans.standard.txt(), trans.standardDescription.txt().some)
 
   def translatedVariantChoices(implicit lang: Lang): List[SelectChoice] =
-    translatedVariantChoices(encodeId)
+    standardChoice ::
+      List(
+        shogi.variant.Minishogi,
+        shogi.variant.Chushogi,
+        shogi.variant.Annanshogi,
+        shogi.variant.Kyotoshogi,
+        shogi.variant.Checkshogi
+      ).map(variantTuple(encodeId))
 
-  def translatedVariantChoices(encode: Variant => String)(implicit lang: Lang): List[SelectChoice] =
-    List(
-      (encode(shogi.variant.Standard), trans.standard.txt(), shogi.variant.Standard.title.some)
-    )
-
-  def translatedVariantChoicesWithVariants(implicit lang: Lang): List[SelectChoice] =
-    translatedVariantChoicesWithVariants(encodeId)
-
-  def translatedVariantChoicesWithVariants(
+  def translatedVariantChoices(
       encode: Variant => String
   )(implicit lang: Lang): List[SelectChoice] =
-    translatedVariantChoices(encode) ::: List( // todo variants
+    standardChoice(encode) :: List(
+      shogi.variant.Minishogi,
+      shogi.variant.Chushogi,
+      shogi.variant.Annanshogi,
+      shogi.variant.Kyotoshogi,
+      shogi.variant.Checkshogi
     ).map(variantTuple(encode))
 
-  def translatedVariantChoicesWithFen(implicit lang: Lang) =
-    translatedVariantChoices
-
-  def translatedAiVariantChoices(implicit lang: Lang) =
-    translatedVariantChoices :+
-      variantTupleId(shogi.variant.FromPosition)
-
-  def translatedVariantChoicesWithVariantsAndFen(implicit lang: Lang) =
-    translatedVariantChoicesWithVariants :+
-      variantTupleId(shogi.variant.FromPosition)
+  def translatedAiChoices(implicit lang: Lang) =
+    standardChoice :: List(
+      shogi.variant.Minishogi,
+      shogi.variant.Kyotoshogi
+    ).map(variantTuple(encodeId))
 
   def translatedSpeedChoices(implicit lang: Lang) =
     Speed.limited map { s =>
@@ -167,11 +174,11 @@ trait SetupHelper { self: I18nHelper =>
       )
     }
 
-  def translatedSideChoices(implicit lang: Lang) =
+  def translatedBoardLayoutChoices(implicit lang: Lang) =
     List(
-      ("sente", trans.black.txt(), none),
-      ("random", trans.randomColor.txt(), none),
-      ("gote", trans.white.txt(), none)
+      (Pref.BoardLayout.DEFAULT, trans.default.txt()),
+      (Pref.BoardLayout.COMPACT, trans.compact.txt()),
+      (Pref.BoardLayout.SMALL, trans.preferences.smallMoves.txt())
     )
 
   def translatedAnimationChoices(implicit lang: Lang) =
@@ -186,7 +193,8 @@ trait SetupHelper { self: I18nHelper =>
     List(
       (Pref.Coords.NONE, trans.no.txt()),
       (Pref.Coords.INSIDE, trans.insideTheBoard.txt()),
-      (Pref.Coords.OUTSIDE, trans.outsideTheBoard.txt())
+      (Pref.Coords.OUTSIDE, trans.outsideTheBoard.txt()),
+      (Pref.Coords.EDGE, trans.edgeOfTheBoard.txt())
     )
 
   def translatedMoveListWhilePlayingChoices(implicit lang: Lang) =
@@ -196,12 +204,12 @@ trait SetupHelper { self: I18nHelper =>
       (Pref.Replay.ALWAYS, trans.always.txt())
     )
 
-  def translatedPieceNotationChoices(implicit lang: Lang) =
+  def translatedColorNameChoices(implicit lang: Lang) =
     List(
-      (Pref.PieceNotation.WESTERN, "Western notation"),
-      (Pref.PieceNotation.WESTERN2, "Western2 notation"),
-      (Pref.PieceNotation.JAPANESE, "Japanese notation"),
-      (Pref.PieceNotation.KAWASAKI, "Kawasaki notation") // trans.preferences.pgnLetter.txt()
+      (Pref.ColorName.LANG, s"${trans.language.txt()} - (${trans.sente.txt()}/${trans.gote.txt()})"),
+      (Pref.ColorName.SENTEJP, "先手/後手"),
+      (Pref.ColorName.SENTE, "Sente/Gote"),
+      (Pref.ColorName.BLACK, s"${trans.black.txt()}/${trans.white.txt()}")
     )
 
   def translatedClockTenthsChoices(implicit lang: Lang) =
@@ -214,9 +222,9 @@ trait SetupHelper { self: I18nHelper =>
   def translatedClockCountdownChoices(implicit lang: Lang) =
     List(
       (Pref.ClockCountdown.NEVER, trans.never.txt()),
-      (Pref.ClockCountdown.THREE, trans.nbSeconds.txt("3")),
-      (Pref.ClockCountdown.FIVE, trans.nbSeconds.txt("5")),
-      (Pref.ClockCountdown.TEN, trans.nbSeconds.txt("10"))
+      (Pref.ClockCountdown.THREE, trans.nbSeconds.pluralSameTxt(3)),
+      (Pref.ClockCountdown.FIVE, trans.nbSeconds.pluralSameTxt(5)),
+      (Pref.ClockCountdown.TEN, trans.nbSeconds.pluralSameTxt(10))
     )
 
   def translatedMoveEventChoices(implicit lang: Lang) =
@@ -274,13 +282,6 @@ trait SetupHelper { self: I18nHelper =>
       (Pref.StudyInvite.NEVER, trans.never.txt()),
       (Pref.StudyInvite.FRIEND, trans.onlyFriends.txt()),
       (Pref.StudyInvite.ALWAYS, trans.always.txt())
-    )
-
-  def translatedInsightShareChoices(implicit lang: Lang) =
-    List(
-      (Pref.InsightShare.NOBODY, trans.withNobody.txt()),
-      (Pref.InsightShare.FRIENDS, trans.withFriends.txt()),
-      (Pref.InsightShare.EVERYBODY, trans.withEverybody.txt())
     )
 
   def translatedBoardResizeHandleChoices(implicit lang: Lang) =

@@ -1,41 +1,59 @@
-import changeColorHandle from 'common/coordsColor';
 import resizeHandle from 'common/resize';
-import { Config as CgConfig } from 'shogiground/config';
+import { Config as SgConfig } from 'shogiground/config';
+//mport { Role } from 'shogiops/types';
+//mport { parseSquareName } from 'shogiops/util';
+//mport { pieceCanPromote, pieceInDeadZone, promote } from 'shogiops/variant/util';
 import { PuzPrefs, UserDrop, UserMove } from '../interfaces';
 
-export function makeConfig(opts: CgConfig, pref: PuzPrefs, userMove: UserMove, userDrop: UserDrop, redraw: () => void): CgConfig {
+export function makeConfig(opts: SgConfig, pref: PuzPrefs, userMove: UserMove, userDrop: UserDrop): SgConfig {
   return {
-    fen: opts.fen,
+    sfen: opts.sfen,
+    activeColor: opts.activeColor,
     orientation: opts.orientation,
     turnColor: opts.turnColor,
-    check: opts.check,
-    lastMove: opts.lastMove,
-    coordinates: pref.coords !== 0,
-    addPieceZIndex: pref.is3d,
+    checks: opts.checks,
+    lastDests: opts.lastDests,
+    coordinates: { enabled: pref.coords !== 0 },
     movable: {
       free: false,
-      color: opts.movable!.color,
       dests: opts.movable!.dests,
       showDests: pref.destination,
     },
+    droppable: {
+      free: false,
+      dests: opts.droppable!.dests,
+      showDests: pref.destination && pref.dropDestination,
+    },
+    //promotion: {
+    //  promotesTo: (role: Role) => {
+    //    return promote('standard')(role);
+    //  },
+    //  movePromotionDialog: (orig: Key, dest: Key) => {
+    //    const piece = ctrl.shogiground.state.pieces.get(orig);
+    //    return (
+    //      !!piece &&
+    //      pieceCanPromote(ctrl.data.game.variant.key)(piece, parseSquareName(orig)!, parseSquareName(dest)!) &&
+    //      !pieceInDeadZone(ctrl.data.game.variant.key)(piece, parseSquareName(dest)!)
+    //    );
+    //  },
+    //  forceMovePromotion: (orig: Key, dest: Key) => {
+    //    const piece = ctrl.shogiground.state.pieces.get(orig);
+    //    return !!piece && pieceInDeadZone(ctrl.data.game.variant.key)(piece, parseSquareName(dest)!);
+    //  },
+    //},
     draggable: {
       enabled: pref.moveEvent > 0,
-      showGhost: pref.highlight,
+      showGhost: pref.highlightLastDests,
+      showTouchSquareOverlay: pref.squareOverlay,
     },
     selectable: {
       enabled: pref.moveEvent !== 1,
     },
     events: {
       move: userMove,
-      dropNewPiece: userDrop,
+      drop: userDrop,
       insert(elements) {
-        resizeHandle(elements, 1, 0, p => p == 0);
-        if (pref.coords == 1) changeColorHandle();
-      },
-      select: () => {
-        if (!opts.dropmode?.active) {
-          redraw();
-        }
+        if (elements) resizeHandle(elements, pref.resizeHandler, { visible: () => true });
       },
     },
     premovable: {
@@ -44,20 +62,15 @@ export function makeConfig(opts: CgConfig, pref: PuzPrefs, userMove: UserMove, u
     predroppable: {
       enabled: false,
     },
-    dropmode: {
-      dropDests: opts.dropmode!.dropDests,
-      showDropDests: pref.destination && pref.dropDestination,
-    },
     drawable: {
       enabled: true,
     },
     highlight: {
-      lastMove: pref.highlight,
-      check: pref.highlight,
+      lastDests: pref.highlightLastDests,
+      check: pref.highlightCheck,
     },
     animation: {
       enabled: false,
     },
-    disableContextMenu: true,
   };
 }

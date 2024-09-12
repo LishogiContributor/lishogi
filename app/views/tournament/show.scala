@@ -25,23 +25,23 @@ object show {
     views.html.base.layout(
       title = s"${tour.name()} #${tour.id}",
       moreJs = frag(
-        jsAt(s"compiled/lishogi.tournament${isProd ?? ".min"}.js"),
+        jsModule("tournament"),
         embedJsUnsafe(s"""lishogi=lishogi||{};lishogi.tournament=${safeJsonValue(
-          Json.obj(
-            "data"   -> data,
-            "i18n"   -> bits.jsI18n,
-            "userId" -> ctx.userId,
-            "chat" -> chatOption.map { c =>
-              chat.json(
-                c.chat,
-                name = trans.chatRoom.txt(),
-                timeout = c.timeout,
-                public = true,
-                resourceId = lila.chat.Chat.ResourceId(s"tournament/${c.chat.id}")
-              )
-            }
-          )
-        )}""")
+            Json.obj(
+              "data"   -> data,
+              "i18n"   -> bits.jsI18n(tour),
+              "userId" -> ctx.userId,
+              "chat" -> chatOption.map { c =>
+                chat.json(
+                  c.chat,
+                  name = trans.chatRoom.txt(),
+                  timeout = c.timeout,
+                  public = true,
+                  resourceId = lila.chat.Chat.ResourceId(s"tournament/${c.chat.id}")
+                )
+              }
+            )
+          )}""")
       ),
       moreCss = cssTag {
         if (tour.isTeamBattle) "tournament.show.team-battle"
@@ -50,21 +50,22 @@ object show {
       shogiground = false,
       openGraph = lila.app.ui
         .OpenGraph(
-          title = s"${tour.name()}: ${tour.variant.name} ${tour.clock.show} ${tour.mode.name} #${tour.id}",
+          title =
+            s"${tour.name()}: ${variantName(tour.variant)} ${tour.clock.show} ${modeName(tour.mode)} #${tour.id}",
           url = s"$netBaseUrl${routes.Tournament.show(tour.id).url}",
-          description =
-            s"${tour.nbPlayers} players compete in the ${showEnglishDate(tour.startsAt)} ${tour.name()}. " +
-              s"${tour.clock.show} ${tour.mode.name} games are played during ${tour.minutes} minutes. " +
-              tour.winnerId.fold("Winner is not yet decided.") { winnerId =>
-                s"${usernameOrId(winnerId)} takes the prize home!"
-              }
+          description = s"${showDate(tour.startsAt)} - ${tour.name()} - ${trans.nbPlayers
+              .pluralSameTxt(tour.nbPlayers)}, " +
+            s"${trans.duration.txt().toLowerCase}: ${tour.minutes}m. " +
+            tour.winnerId.fold(trans.winnerIsNotYetDecided.txt()) { winnerId =>
+              trans.xWon.txt(usernameOrId(winnerId))
+            } // Jun 19, 2023 - SuperBlitz Arena - 377 players, duration: 57m. Winner is not yet decided.
         )
         .some
     )(
       main(cls := s"tour${tour.schedule
-        .?? { sched =>
-          s" tour-sched tour-sched-${sched.freq.name} tour-speed-${sched.speed.name} tour-variant-${sched.variant.key} tour-id-${tour.id}"
-        }}")(
+          .?? { sched =>
+            s" tour-sched tour-sched-${sched.freq.name} tour-speed-${sched.speed.name} tour-variant-${sched.variant.key} tour-id-${tour.id}"
+          }}")(
         st.aside(cls := "tour__side")(
           tournament.side(tour, verdicts, streamers, shieldOwner, chatOption.isDefined)
         ),

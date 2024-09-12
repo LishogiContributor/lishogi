@@ -2,6 +2,7 @@ package controllers
 
 import ornicar.scalalib.Zero
 import play.api.data.Form
+import play.api.data.FormBinding
 import play.api.http._
 import play.api.i18n.Lang
 import play.api.libs.json.{ JsArray, JsObject, JsString, Json, Writes }
@@ -16,7 +17,7 @@ import lila.i18n.I18nLangPicker
 import lila.notify.Notification.Notifies
 import lila.oauth.{ OAuthScope, OAuthServer }
 import lila.security.{ FingerPrintedUser, Granter, Permission }
-import lila.user.{ UserContext, User => UserModel }
+import lila.user.{ User => UserModel, UserContext }
 
 abstract private[controllers] class LilaController(val env: Env)
     extends BaseController
@@ -36,11 +37,25 @@ abstract private[controllers] class LilaController(val env: Env)
     def flashSuccess: Result              = flashSuccess("")
     def flashFailure(msg: String): Result = result.flashing("failure" -> msg)
     def flashFailure: Result              = flashFailure("")
+    def enableSharedArrayBuffer(implicit req: RequestHeader): Result = result.withHeaders(
+      "Cross-Origin-Opener-Policy" -> "same-origin",
+      "Cross-Origin-Embedder-Policy" -> {
+        if (HTTPRequest.supportsCredentialless(req)) "credentialless"
+        else "require-corp"
+      }
+    )
+    def noCache = result.withHeaders(
+      CACHE_CONTROL -> "no-cache, no-store, must-revalidate",
+      EXPIRES       -> "0"
+    )
+
   }
 
   implicit protected def LilaFragToResult(frag: Frag): Result = Ok(frag)
 
   implicit protected def makeApiVersion(v: Int) = ApiVersion(v)
+
+  implicit protected lazy val formBinding: FormBinding = parse.formBinding(parse.DefaultMaxTextLength)
 
   protected val jsonOkBody   = Json.obj("ok" -> true)
   protected val jsonOkResult = Ok(jsonOkBody) as JSON
@@ -62,18 +77,6 @@ abstract private[controllers] class LilaController(val env: Env)
   implicit def ctxReq(implicit ctx: Context)          = ctx.req
   implicit def reqConfig(implicit req: RequestHeader) = ui.EmbedConfig(req)
   def reqLang(implicit req: RequestHeader)            = I18nLangPicker(req)
-
-  protected def EnableSharedArrayBuffer(res: Result): Result =
-    res.withHeaders(
-      "Cross-Origin-Opener-Policy"   -> "same-origin",
-      "Cross-Origin-Embedder-Policy" -> "require-corp"
-    )
-
-  protected def NoCache(res: Result): Result =
-    res.withHeaders(
-      CACHE_CONTROL -> "no-cache, no-store, must-revalidate",
-      EXPIRES       -> "0"
-    )
 
   protected def Open(f: Context => Fu[Result]): Action[Unit] =
     Open(parse.empty)(f)
@@ -420,12 +423,11 @@ abstract private[controllers] class LilaController(val env: Env)
       api = _ => notFoundJson("Resource not found")
     )
 
-  def notFoundJson(msg: String = "Not found"): Fu[Result] =
-    fuccess {
-      NotFound(jsonError(msg))
-    }
-
   def jsonError[A: Writes](err: A): JsObject = Json.obj("error" -> err)
+
+  def notFoundJsonSync(msg: String = "Not found"): Result = NotFound(jsonError(msg)) as JSON
+
+  def notFoundJson(msg: String = "Not found"): Fu[Result] = fuccess(notFoundJsonSync(msg))
 
   def notForBotAccounts =
     BadRequest(
@@ -450,7 +452,7 @@ abstract private[controllers] class LilaController(val env: Env)
   protected def authenticationFailed(implicit ctx: Context): Fu[Result] =
     negotiate(
       html = fuccess {
-        Redirect(routes.Auth.signup()) withCookies env.lilaCookie
+        Redirect(routes.Auth.signup) withCookies env.lilaCookie
           .session(env.security.api.AccessUri, ctx.req.uri)
       },
       api = _ =>
@@ -497,9 +499,10 @@ abstract private[controllers] class LilaController(val env: Env)
     }
 
   private def getAndSaveLang(req: RequestHeader, user: Option[UserModel]): Lang = {
-    val lang = I18nLangPicker(req, user.flatMap(_.lang))
-    user.filter(_.lang.fold(true)(_ != lang.code)) foreach { env.user.repo.setLang(_, lang) }
-    lang
+    val langToSave = I18nLangPicker(req, user.flatMap(_.lang))
+    user.filter(_.lang.fold(true)(_ != langToSave.code)) foreach { env.user.repo.setLang(_, langToSave) }
+    val queryLang = req.getQueryString("lang").flatMap(I18nLangPicker.byQuery)
+    queryLang.getOrElse(langToSave)
   }
 
   private def pageDataBuilder(ctx: UserContext, hasFingerPrint: Boolean): Fu[PageData] = {
@@ -521,7 +524,7 @@ abstract private[controllers] class LilaController(val env: Env)
         } map {
           case (
                 (pref, hasClas),
-                (teamNbRequests ~ nbChallenges ~ nbNotifications ~ inquiry)
+                (((teamNbRequests, nbChallenges), nbNotifications), inquiry)
               ) =>
             PageData(
               teamNbRequests,
@@ -547,7 +550,7 @@ abstract private[controllers] class LilaController(val env: Env)
   type RestoredUser = (Option[FingerPrintedUser], Option[UserModel])
   private def restoreUser(req: RequestHeader): Fu[RestoredUser] =
     env.security.api restoreUser req dmap {
-      case Some(d) if !env.isProdReally =>
+      case Some(d) if !env.isProd =>
         d.copy(user =
           d.user
             .addRole(lila.security.Permission.Beta.dbKey)
@@ -575,14 +578,14 @@ abstract private[controllers] class LilaController(val env: Env)
 
   protected def XhrOrRedirectHome(res: => Fu[Result])(implicit ctx: Context) =
     if (HTTPRequest isXhr ctx.req) res
-    else Redirect(routes.Lobby.home()).fuccess
+    else Redirect(routes.Lobby.home).fuccess
 
   protected def Reasonable(
       page: Int,
       max: Int = 40,
       errorPage: => Fu[Result] = BadRequest("resource too old").fuccess
   )(result: => Fu[Result]): Fu[Result] =
-    if (page < max) result else errorPage
+    if (page < max && page > 0) result else errorPage
 
   protected def NotForKids(f: => Fu[Result])(implicit ctx: Context) =
     if (ctx.kid) notFound else f
@@ -590,11 +593,7 @@ abstract private[controllers] class LilaController(val env: Env)
   protected def NotForBots(res: => Fu[Result])(implicit ctx: Context) =
     if (HTTPRequest isCrawler ctx.req) notFound else res
 
-  protected def OnlyHumans(result: => Fu[Result])(implicit ctx: lila.api.Context) =
-    if (HTTPRequest isCrawler ctx.req) fuccess(NotFound)
-    else result
-
-  protected def OnlyHumansAndFacebookOrTwitter(result: => Fu[Result])(implicit ctx: lila.api.Context) =
+  protected def OnlyHumansAndFacebookOrTwitter(result: => Fu[Result])(implicit ctx: Context) =
     if (HTTPRequest isFacebookOrTwitterBot ctx.req) result
     else if (HTTPRequest isCrawler ctx.req) fuccess(NotFound)
     else result
@@ -645,13 +644,13 @@ abstract private[controllers] class LilaController(val env: Env)
     fuccess(BadRequest(errorsAsJson(err)))
 
   protected def pageHit(req: RequestHeader): Unit =
-    if (HTTPRequest isHuman req) lila.mon.http.path(req.path).increment()
+    if (HTTPRequest isHuman req) lila.mon.http.path(req.path).increment().unit
 
-  protected def pageHit(implicit ctx: lila.api.Context): Unit = pageHit(ctx.req)
+  protected def pageHit(implicit ctx: Context): Unit = pageHit(ctx.req)
 
   protected val noProxyBufferHeader = "X-Accel-Buffering" -> "no"
   protected val noProxyBuffer       = (res: Result) => res.withHeaders(noProxyBufferHeader)
 
-  protected val pgnContentType    = "application/x-chess-pgn"
-  protected val ndJsonContentType = "application/x-ndjson"
+  protected val notationContentType = "text/plain" // I guess, there is nothing better for shogi
+  protected val ndJsonContentType   = "application/x-ndjson"
 }

@@ -11,7 +11,7 @@ import controllers.routes
 
 object side {
 
-  private val separator = " • "
+  private val separator = " - "
 
   def apply(
       tour: Tournament,
@@ -27,13 +27,8 @@ object side {
             p(
               tour.clock.show,
               separator,
-              if (tour.variant.exotic) {
-                views.html.game.bits.variantLink(
-                  tour.variant,
-                  tour.variant.name
-                )
-              } else tour.perfType.map(_.trans),
-              (!tour.position.initial) ?? s"$separator${trans.thematic.txt()}",
+              views.html.game.bits.variantLink(tour.variant, tour.perfType),
+              tour.position.isDefined ?? s"$separator${trans.thematic.txt()}",
               separator,
               tour.durationString
             ),
@@ -72,7 +67,7 @@ object side {
           )
         )(
           div(
-            (verdicts.list.size < 2) option p(trans.conditionOfEntry()),
+            (verdicts.list.sizeIs < 2) option p(trans.conditionOfEntry()),
             verdicts.list map { v =>
               p(
                 cls := List(
@@ -88,21 +83,25 @@ object side {
             }
           )
         ),
-        tour.noBerserk option div(cls := "text", dataIcon := "`")("No Berserk allowed"),
-        tour.noStreak option div(cls := "text", dataIcon := "Q")("No Arena streaks"),
+        tour.noBerserk option div(cls := "text", dataIcon := "`")(trans.arena.noBerserkAllowed()),
+        tour.noStreak option div(cls := "text", dataIcon := "Q")(trans.arena.noArenaStreaks()),
         !tour.isScheduled option frag(trans.by(userIdLink(tour.createdBy.some)), br),
-        (!tour.isStarted || (tour.isScheduled && !tour.position.initial)) option absClientDateTime(
+        (!tour.isStarted || (tour.isScheduled && tour.position.isDefined)) option absClientDateTime(
           tour.startsAt
         ),
-        !tour.position.initial option p(
-          a(target := "_blank", rel := "noopener", href := tour.position.url)(
-            strong(tour.position.eco),
-            " ",
-            tour.position.name
-          ),
-          separator,
-          a(href := routes.UserAnalysis.parseArg(tour.position.fen.replace(" ", "_")))(trans.analysis())
-        )
+        tour.startingPosition.map { pos =>
+          p(
+            frag(strong(pos.japanese), s" (${pos.english})"),
+            separator,
+            views.html.base.bits.sfenAnalysisLink(pos.sfen)
+          )
+        } orElse tour.position.map { sfen =>
+          p(
+            "Custom position",
+            separator,
+            views.html.base.bits.sfenAnalysisLink(sfen)
+          )
+        }
       ),
       streamers.nonEmpty option div(cls := "context-streamers")(
         streamers map views.html.streamer.bits.contextual

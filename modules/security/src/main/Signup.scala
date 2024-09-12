@@ -21,7 +21,6 @@ final class Signup(
     recaptcha: Recaptcha,
     authenticator: lila.user.Authenticator,
     userRepo: lila.user.UserRepo,
-    slack: lila.slack.SlackApi,
     netConfig: NetConfig
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
@@ -56,7 +55,9 @@ final class Signup(
     }
   }
 
-  def website(blind: Boolean)(implicit req: Request[_], lang: Lang): Fu[Signup.Result] =
+  def website(
+      blind: Boolean
+  )(implicit req: Request[_], lang: Lang, formBinding: FormBinding): Fu[Signup.Result] =
     forms.signup.website
       .bindFromRequest()
       .fold[Fu[Signup.Result]](
@@ -84,7 +85,7 @@ final class Signup(
                       mustConfirmEmail = mustConfirm.value
                     )
                     .orFail(s"No user could be created for ${data.username}")
-                    .addEffect { logSignup(req, _, email.acceptable, data.fingerPrint, none, mustConfirm) }
+                    .addEffect { logSignup(_, email.acceptable, data.fingerPrint, none, mustConfirm) }
                     .flatMap {
                       confirmOrAllSet(email, mustConfirm, data.fingerPrint, none)
                     }
@@ -112,7 +113,7 @@ final class Signup(
 
   def mobile(
       apiVersion: ApiVersion
-  )(implicit req: Request[_], lang: Lang): Fu[Signup.Result] =
+  )(implicit req: Request[_], lang: Lang, formBinding: FormBinding): Fu[Signup.Result] =
     forms.signup.mobile
       .bindFromRequest()
       .fold[Fu[Signup.Result]](
@@ -135,7 +136,7 @@ final class Signup(
                 mustConfirmEmail = mustConfirm.value
               )
               .orFail(s"No user could be created for ${data.username}")
-              .addEffect { logSignup(req, _, email.acceptable, none, apiVersion.some, mustConfirm) }
+              .addEffect { logSignup(_, email.acceptable, none, apiVersion.some, mustConfirm) }
               .flatMap {
                 confirmOrAllSet(email, mustConfirm, none, apiVersion.some)
               }
@@ -163,23 +164,17 @@ final class Signup(
     }(rateLimitDefault)
 
   private def logSignup(
-      req: RequestHeader,
       user: User,
       email: EmailAddress,
       fingerPrint: Option[FingerPrint],
       apiVersion: Option[ApiVersion],
       mustConfirm: MustConfirmEmail
-  ) = {
+  ) =
     authLog(
       user.username,
       email.value,
       s"fp: ${fingerPrint} mustConfirm: $mustConfirm fp: ${fingerPrint.??(_.value)} api: ${apiVersion.??(_.value)}"
     )
-    val ip = HTTPRequest lastRemoteAddress req
-    ipTrust.isSuspicious(ip) foreach { susp =>
-      slack.signup(user, email, ip, fingerPrint.flatMap(_.hash).map(_.value), apiVersion, susp)
-    }
-  }
 
   private def signupErrLog(err: Form[_]) =
     for {

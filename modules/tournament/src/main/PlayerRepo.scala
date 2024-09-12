@@ -1,5 +1,6 @@
 package lila.tournament
 
+import cats.implicits._
 import reactivemongo.akkastream.{ cursorProducer, AkkaStreamCursor }
 import reactivemongo.api._
 import reactivemongo.api.bson._
@@ -55,7 +56,7 @@ final class PlayerRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionContex
   ): Fu[List[TeamBattle.RankedTeam]] = {
     import TeamBattle.{ RankedTeam, TeamLeader }
     coll
-      .aggregateList(maxDocs = 10) { framework =>
+      .aggregateList(maxDocs = TeamBattle.maxTeams) { framework =>
         import framework._
         Match(selectTour(tourId)) -> List(
           Sort(Descending("m")),
@@ -67,6 +68,7 @@ final class PlayerRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionContex
               )
             )
           ),
+          Limit(TeamBattle.maxTeams),
           Project(
             $doc(
               "p" -> $doc(
@@ -87,17 +89,17 @@ final class PlayerRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionContex
                 magic <- p.int("m")
               } yield TeamLeader(id, magic)
             }
-          } yield RankedTeam(0, teamId, leaders)
-        }.sortBy(-_.magicScore).zipWithIndex map { case (rt, pos) =>
-          rt.copy(rank = pos + 1)
+          } yield new RankedTeam(0, teamId, leaders)
+        }.sorted.zipWithIndex map { case (rt, pos) =>
+          rt.updateRank(pos + 1)
         }
       } map { ranked =>
-      if (ranked.size == battle.teams.size) ranked
+      if (ranked.sizeIs == battle.teams.size) ranked
       else
         ranked ::: battle.teams
           .foldLeft(List.empty[RankedTeam]) {
             case (missing, team) if !ranked.exists(_.teamId == team) =>
-              RankedTeam(missing.headOption.fold(ranked.size)(_.rank) + 1, team, Nil) :: missing
+              new RankedTeam(missing.headOption.fold(ranked.size)(_.rank) + 1, team, Nil) :: missing
             case (acc, _) => acc
           }
           .reverse
@@ -121,7 +123,7 @@ final class PlayerRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionContex
                 Group(BSONNull)(
                   "nb"     -> SumAll,
                   "rating" -> AvgField("r"),
-                  "perf"   -> AvgField("e"),
+                  "perf"   -> Avg($doc("$cond" -> $arr("$e", "$e", "$r"))),
                   "score"  -> AvgField("s")
                 )
               ),
@@ -168,14 +170,12 @@ final class PlayerRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionContex
   def teamVs(tourId: Tournament.ID, game: lila.game.Game): Fu[Option[TeamBattle.TeamVs]] =
     game.twoUserIds ?? { case (s, g) =>
       teamsOfPlayers(tourId, List(s, g)).dmap(_.toMap) map { m =>
-        (m.get(s) |@| m.get(g)).tupled ?? { case (st, gt) =>
+        import cats.implicits._
+        (m.get(s), m.get(g)).mapN((_, _)) ?? { case (st, gt) =>
           TeamBattle.TeamVs(shogi.Color.Map(st, gt)).some
         }
       }
     }
-
-  def countActive(tourId: Tournament.ID): Fu[Int] =
-    coll.countSel(selectTour(tourId) ++ selectActive)
 
   def count(tourId: Tournament.ID): Fu[Int] = coll.countSel(selectTour(tourId))
 
@@ -222,7 +222,7 @@ final class PlayerRepo(coll: Coll)(implicit ec: scala.concurrent.ExecutionContex
       selectTour(tourId) ++ $doc("m" $gt 0)
     )
 
-  private[tournament] def nbActiveUserIds(tourId: Tournament.ID): Fu[Int] =
+  private[tournament] def nbActivePlayers(tourId: Tournament.ID): Fu[Int] =
     coll.countSel(selectTour(tourId) ++ selectActive)
 
   def winner(tourId: Tournament.ID): Fu[Option[Player]] =

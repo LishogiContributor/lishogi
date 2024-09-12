@@ -1,79 +1,59 @@
 package lila.pref
 
-sealed class Theme private[pref] (val name: String, val colors: Theme.HexColors) {
+sealed class Theme private[pref] (val key: String, val name: String, val file: Option[String]) {
 
-  override def toString = name
+  override def toString = key
 
-  def cssClass = name
-
-  def light = colors._1
-  def dark  = colors._2
+  def cssClass = key
 }
 
-sealed trait ThemeObject {
+object Theme {
 
-  val all: List[Theme]
+  val default = new Theme("wood", "Wood", "wood.png".some)
 
-  val default: Theme
-
-  lazy val allByName = all map { c =>
-    c.name -> c
-  } toMap
-
-  def apply(name: String) = allByName.getOrElse(name, default)
-
-  def contains(name: String) = allByName contains name
-}
-
-object Theme extends ThemeObject {
-
-  case class HexColor(value: String) extends AnyVal with StringValue
-  type HexColors = (HexColor, HexColor)
-
-  private[pref] val defaultHexColors = (HexColor("b0b0b0"), HexColor("909090"))
-
-  private val colors: Map[String, HexColors] = Map(
-    "blue"  -> (HexColor("dee3e6") -> HexColor("8ca2ad")),
-    "brown" -> (HexColor("f0d9b5") -> HexColor("b58863"))
+  val all = List(
+    new Theme("orange", "Orange", None),
+    new Theme("natural", "Natural", None),
+    default,
+    new Theme("wood1", "Wood alternative", "wood1.jpg".some),
+    new Theme("kaya1", "Kaya wood", "kaya1.jpg".some),
+    new Theme("kaya2", "Kaya wood 2", "kaya2.jpg".some),
+    new Theme("oak", "Oak", "oak.png".some),
+    new Theme("blue", "Blue", None),
+    new Theme("gray", "Gray", None),
+    new Theme("painting1", "Painting 1", "painting1.jpg".some),
+    new Theme("painting2", "Painting 2", "painting2.jpg".some),
+    new Theme("kinkaku", "Kinkaku-ji", "kinkaku.jpg".some),
+    new Theme("space", "Space", "space.png".some),
+    new Theme("doubutsu", "Doubutsu", "doubutsu.png".some),
+    new Theme("custom", "Custom", None)
   )
 
-  val all = List(
-    "solid-orange",
-    "solid-natural",
-    "wood1",
-    "kaya1",
-    "kaya2",
-    "kaya-light",
-    "oak",
-    "solid-brown1",
-    "solid-wood1",
-    "blue",
-    "dark-blue",
-    "gray",
-    "Painting1",
-    "Painting2",
-    "Kinkaku",
-    "space1",
-    "space2",
-    "whiteBoard",
-    "darkBoard",
-    "doubutsu",
-    "transparent",
-    "transparent-white"
-  ) map { name =>
-    new Theme(name, colors.getOrElse(name, defaultHexColors))
-  }
+  lazy val allByKey = all map { c =>
+    c.key -> c
+  } toMap
 
-  lazy val default = allByName get "wood1" err "Can't find default theme D:"
+  def apply(key: String) = allByKey.getOrElse(key, default)
+
+  def contains(key: String) = allByKey contains key
 }
 
-object Theme3d extends ThemeObject {
+case class CustomTheme(
+    boardColor: String,
+    boardImg: String,
+    gridColor: String,
+    gridWidth: Int,
+    handsColor: String,
+    handsImg: String
+)
 
-  val all = List(
-    "Woodi"
-  ) map { name =>
-    new Theme(name, Theme.defaultHexColors)
-  }
-
-  lazy val default = allByName get "Woodi" err "Can't find default theme D:"
+object CustomTheme {
+  val default = new CustomTheme(
+    boardColor = "initial", // uses css fallback
+    boardImg = "",
+    gridColor = "initial",
+    gridWidth = 1,
+    handsColor = "initial",
+    handsImg = ""
+  )
 }

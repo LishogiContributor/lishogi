@@ -1,32 +1,26 @@
 package lila.round
 
 import lila.game.{ Event, Game, Pov, Progress }
-import lila.pref.{ Pref, PrefApi }
-import lila.i18n.{ I18nKeys => trans, defaultLang }
+import lila.i18n.{ defaultLang, I18nKeys => trans }
 
-import shogi.Centis
 import lila.common.Bus
 
 final private[round] class Drawer(
     messenger: Messenger,
-    finisher: Finisher,
-    prefApi: PrefApi,
-    isBotSync: lila.common.LightUser.IsBotSync
+    finisher: Finisher
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
   implicit private val chatLang = defaultLang
 
   def yes(pov: Pov)(implicit proxy: GameProxy): Fu[Events] =
     pov match {
-      //case pov if pov.game.history.threefoldRepetition =>
-      //  finisher.other(pov.game, _.Draw, None)
       case pov if pov.opponent.isOfferingDraw =>
         finisher.other(pov.game, _.Draw, None, Some(trans.drawOfferAccepted.txt()))
       case Pov(g, color) if g playerCanOfferDraw color =>
         proxy.save {
-          messenger.system(g, color.fold(trans.blackOffersDraw, trans.whiteOffersDraw).txt())
+          messenger.system(g, trans.xOffersDraw.txt(color.toString).toLowerCase.capitalize)
           Progress(g) map { g =>
-            g.updatePlayer(color, _ offerDraw g.turns)
+            g.updatePlayer(color, _ offerDraw g.plies)
           }
         } >>- publishDrawOffer(pov) inject List(Event.DrawOffer(by = color.some))
       case _ => fuccess(List(Event.ReloadOwner))
@@ -43,7 +37,7 @@ final private[round] class Drawer(
         } inject List(Event.DrawOffer(by = none))
       case Pov(g, color) if pov.opponent.isOfferingDraw =>
         proxy.save {
-          messenger.system(g, color.fold(trans.blackDeclinesDraw, trans.whiteDeclinesDraw).txt())
+          messenger.system(g, trans.xDeclinesDraw.txt(color.toString).toLowerCase.capitalize)
           Progress(g) map { g =>
             g.updatePlayer(!color, _.removeDrawOffer)
           }
@@ -62,13 +56,16 @@ final private[round] class Drawer(
         lila.hub.actorApi.round.CorresDrawOfferEvent(pov.gameId),
         "offerEventCorres"
       )
-    if (lila.game.Game.isBoardCompatible(pov.game)) proxy.withPov(pov.color) { p =>
-      fuccess(
-        Bus.publish(
-          lila.game.actorApi.BoardDrawOffer(p),
-          s"boardDrawOffer:${pov.gameId}"
-        )
-      )
-    }
+    if (lila.game.Game.isBoardCompatible(pov.game))
+      proxy
+        .withPov(pov.color) { p =>
+          fuccess(
+            Bus.publish(
+              lila.game.actorApi.BoardDrawOffer(p),
+              s"boardDrawOffer:${pov.gameId}"
+            )
+          )
+        }
+        .unit
   }
 }

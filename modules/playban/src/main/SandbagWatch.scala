@@ -30,9 +30,8 @@ final private class SandbagWatch(
     }
 
   private def sendMessage(userId: User.ID): Funit =
-    userRepo byId userId map {
+    userRepo byId userId flatMap {
       _ ?? { u =>
-        lila.log("sandbag").info(s"https://lishogi.org/@/${u.username}")
         lila.common.Bus
           .publish(lila.hub.actorApi.mod.AutoWarning(u.id, MsgPreset.sandbagAuto.name), "autoWarning")
         messenger.postPreset(u, MsgPreset.sandbagAuto).void
@@ -56,7 +55,7 @@ final private class SandbagWatch(
     }
 
   private def isSandbag(game: Game): Boolean =
-    game.turns <= 6
+    game.plies <= game.variant.numberOfFiles * game.variant.numberOfRanks / 10
 }
 
 private object SandbagWatch {
@@ -75,7 +74,7 @@ private object SandbagWatch {
 
     def latestIsSandbag = outcomes.headOption.exists(Sandbag ==)
 
-    def immaculate = outcomes.size == maxOutcomes && outcomes.forall(Good ==)
+    def immaculate = outcomes.sizeIs == maxOutcomes && outcomes.forall(Good ==)
   }
 
   val newRecord = Record(Nil)

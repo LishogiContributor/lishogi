@@ -1,6 +1,7 @@
 package lila.round
 
-import shogi.format.Forsyth
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.Usi
 import shogi.variant.Variant
 import lila.socket.Step
 
@@ -12,32 +13,27 @@ object StepBuilder {
 
   def apply(
       id: String,
-      pgnMoves: Vector[String],
+      usis: Vector[Usi],
       variant: Variant,
-      initialFen: String
+      initialSfen: Option[Sfen]
   ): JsArray = {
-    shogi.Replay.gameMoveWhileValid(pgnMoves, initialFen, variant) match {
-      case (init, games, error) =>
-        error foreach logChessError(id)
+    shogi.Replay.gamesWhileValid(usis, initialSfen, variant) match {
+      case (games, error) =>
+        error foreach logShogiError(id)
+        val init = games.head
         JsArray {
           val initStep = Step(
-            ply = init.turns,
-            move = none,
-            fen = Forsyth >> init,
-            check = init.situation.check,
-            dests = None,
-            drops = None,
-            crazyData = init.situation.board.crazyData
+            ply = init.plies,
+            usi = none,
+            sfen = init.toSfen,
+            check = init.situation.check
           )
-          val moveSteps = games.map { case (g, m) =>
+          val moveSteps = games.tail.zip(usis).map { case (g, u) =>
             Step(
-              ply = g.turns,
-              move = Step.Move(m.uci, m.san).some,
-              fen = Forsyth >> g,
-              check = g.situation.check,
-              dests = None,
-              drops = None,
-              crazyData = g.situation.board.crazyData
+              ply = g.plies,
+              usi = u.some,
+              sfen = g.toSfen,
+              check = g.situation.check
             )
           }
           (initStep :: moveSteps).map(_.toJson)
@@ -45,7 +41,7 @@ object StepBuilder {
     }
   }
 
-  private val logChessError = (id: String) =>
+  private val logShogiError = (id: String) =>
     (err: String) => {
       val path = if (id == "synthetic") "analysis" else id
       logger.info(s"https://lishogi.org/$path ${err.linesIterator.toList.headOption | "?"}")

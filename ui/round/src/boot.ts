@@ -1,8 +1,8 @@
-import { RoundOpts, RoundData } from './interfaces';
-import { RoundApi, RoundMain } from './main';
 import { ChatCtrl } from 'chat';
 import { TourPlayer } from 'game';
-import { tourStandingCtrl, TourStandingCtrl } from './tourStanding';
+import { RoundData, RoundOpts } from './interfaces';
+import { RoundApi, RoundMain } from './main';
+import { TourStandingCtrl, tourStandingCtrl } from './tourStanding';
 
 export default function (opts: RoundOpts): void {
   const li = window.lishogi;
@@ -61,8 +61,9 @@ export default function (opts: RoundOpts): void {
     return;
   }
   opts.element = element;
+  opts.klasses = Array.from(element.classList);
   opts.socketSend = li.socket.send;
-  if (!data.tournament && !data.simul && !data.swiss)
+  if (!data.tournament && !data.simul)
     opts.onChange = (d: RoundData) => {
       if (chat) chat.preset.setGroup(getPresetGroup(d));
     };
@@ -73,7 +74,7 @@ export default function (opts: RoundOpts): void {
     if (data.tournament?.top) {
       chatOpts.plugin = tourStandingCtrl(data.tournament.top, data.tournament.team, opts.i18n.standing);
       chatOpts.alwaysEnabled = true;
-    } else if (!data.simul && !data.swiss) {
+    } else if (!data.simul) {
       chatOpts.preset = getPresetGroup(data);
       chatOpts.parseMoves = true;
     }
@@ -91,6 +92,8 @@ export default function (opts: RoundOpts): void {
       return true;
     });
   if (location.pathname.lastIndexOf('/round-next/', 0) === 0) history.replaceState(null, '', '/' + data.game.id);
+  if (location.pathname.length === 9 && data.player.id)
+    history.replaceState(null, '', '/' + data.game.id + data.player.id);
   $('#zentog').click(() => li.pubsub.emit('zen'));
   li.storage.make('reload-round-tabs').listen(li.reload);
 }

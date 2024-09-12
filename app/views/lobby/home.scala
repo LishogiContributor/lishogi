@@ -18,23 +18,23 @@ object home {
     views.html.base.layout(
       title = "",
       fullTitle = Some {
-        s"lishogi.${if (isProd && !isStage) "org" else "dev"} • ${trans.freeOnlineChess.txt()}"
+        s"lishogi.${if (isProd && !isStage) "org" else "dev"} - ${trans.freeOnlineShogi.txt()}"
       },
       moreJs = frag(
-        jsAt(s"compiled/lishogi.lobby${isProd ?? ".min"}.js", defer = true),
+        jsModule("lobby", defer = true),
         embedJsUnsafe(
           s"""lishogi=window.lishogi||{};customWS=true;lishogi_lobby=${safeJsonValue(
-            Json.obj(
-              "data" -> data,
-              "playban" -> playban.map { pb =>
-                Json.obj(
-                  "minutes"          -> pb.mins,
-                  "remainingSeconds" -> (pb.remainingSeconds + 3)
-                )
-              },
-              "i18n" -> i18nJsObject(i18nKeys)
-            )
-          )}"""
+              Json.obj(
+                "data" -> data,
+                "playban" -> playban.map { pb =>
+                  Json.obj(
+                    "minutes"          -> pb.mins,
+                    "remainingSeconds" -> (pb.remainingSeconds + 3)
+                  )
+                },
+                "i18n" -> i18nJsObject(i18nKeys)
+              )
+            )}"""
         )
       ),
       moreCss = cssTag("lobby"),
@@ -43,12 +43,14 @@ object home {
         .OpenGraph(
           image = staticUrl("logo/lishogi-tile-wide.png").some,
           twitterImage = staticUrl("logo/lishogi-tile.png").some,
-          title = "The best free, adless Shogi server",
+          title = trans.freeOnlineShogi.txt(),
           url = netBaseUrl,
           description = trans.siteDescription.txt()
         )
         .some,
-      deferJs = true
+      deferJs = true,
+      canonicalPath = lila.common.CanonicalPath("/").some,
+      withHrefLangs = lila.i18n.LangList.All.some
     ) {
       main(
         cls := List(
@@ -58,9 +60,9 @@ object home {
       )(
         div(cls := "lobby__table")(
           div(cls := "lobby__start")(
-            ctx.blind option h2("Play"),
+            ctx.blind option h2(trans.play()),
             a(
-              href := routes.Setup.hookForm(),
+              href := routes.Setup.hookForm,
               cls := List(
                 "button button-metal config_hook" -> true,
                 "disabled"                        -> (playban.isDefined || currentGame.isDefined || ctx.isBot)
@@ -76,7 +78,7 @@ object home {
               trans.playWithAFriend()
             ),
             a(
-              href := routes.Setup.aiForm(),
+              href := routes.Setup.aiForm,
               cls := List(
                 "button button-metal config_ai" -> true,
                 "disabled"                      -> currentGame.isDefined
@@ -86,11 +88,23 @@ object home {
           ),
           div(cls := "lobby__counters")(
             ctx.blind option h2("Counters"),
-            a(id := "nb_connected_players", href := ctx.noBlind.option(routes.User.list().toString))(
-              trans.nbPlayers(nbPlaceholder)
+            a(
+              id   := "nb_connected_players",
+              href := ctx.noBlind.option(routes.User.list.url)
+            )(
+              trans.nbPlayers.plural(
+                homepage.counters.members,
+                strong(dataCount := homepage.counters.members)(homepage.counters.members.localize)
+              )
             ),
-            a(id := "nb_games_in_play", href := ctx.noBlind.option(routes.Tv.games().toString))(
-              trans.nbGamesInPlay(nbPlaceholder)
+            a(
+              id   := "nb_games_in_play",
+              href := ctx.noBlind.option(langHref(routes.Tv.games))
+            )(
+              trans.nbGamesInPlay.plural(
+                homepage.counters.rounds,
+                strong(dataCount := homepage.counters.rounds)(homepage.counters.rounds.localize)
+              )
             )
           )
         ),
@@ -108,82 +122,68 @@ object home {
               " »"
             )
           ),
-          div(cls := "lobby__spotlights")(
-            events.map(bits.spotlight),
-            !ctx.isBot option frag(
-              lila.tournament.Spotlight.select(tours, ctx.me, 3 - events.size) map {
-                views.html.tournament.homepageSpotlight(_)
-              },
-              simuls.filter(isFeaturable) map views.html.simul.bits.homepageSpotlight
-            )
-          ),
-          if (ctx.isAuth)
-            div(cls := "timeline")(
-              ctx.blind option h2("Timeline"),
-              views.html.timeline entries userTimeline,
-              userTimeline.nonEmpty option a(cls := "more", href := routes.Timeline.home())(
-                trans.more(),
-                " »"
+          div(cls := "lobby__spotlights")(bits.spotlights(events, simuls, tours)),
+          (if (ctx.isAuth)
+             div(cls := "timeline")(
+               ctx.blind option h2("Timeline"),
+               views.html.timeline entries userTimeline,
+               userTimeline.nonEmpty option a(cls := "more", href := routes.Timeline.home)(
+                 trans.more(),
+                 " »"
+               )
+             )
+           else
+             div(cls := "about-side")(
+               ctx.blind option h2("About"),
+               trans.xIsAFreeYLibreOpenSourceShogiServer(
+                 "Lishogi",
+                 a(cls := "blue", href := routes.Plan.features)(trans.really.txt())
+               )
+             )),
+          div(cls := "lobby__support")(
+            a(href := langHref(routes.Plan.index))(
+              iconTag(patronIconChar),
+              span(cls := "lobby__support__text")(
+                if (ctx.me.exists(_.isPatron))
+                  frag(
+                    strong(trans.patron.lishogiPatron()),
+                    span(trans.patron.thankYou())
+                  )
+                else
+                  frag(
+                    strong(trans.patron.donate()),
+                    ctx.isAuth option span(trans.patron.becomePatron())
+                  )
               )
             )
-          else
-            div(cls := "about-side")(
-              ctx.blind option h2("About"),
-              trans.xIsAFreeYLibreOpenSourceChessServer(
-                "Lishogi",
-                a(cls := "blue", href := routes.Plan.features())(trans.really.txt())
-              ),
-              " ",
-              a(href := "/about")(trans.aboutX("Lishogi"), "...")
-            )
+          )
         ),
         featured map { g =>
-          div(cls := "lobby__tv")(
-            gameFen(Pov first g, tv = true),
-            views.html.game.bits.vstext(Pov first g)(ctx.some)
+          a(cls := "lobby__tv", href := routes.Tv.index)(
+            gameSfen(Pov first g, withLink = false, tv = true),
+            views.html.game.bits.vstext(Pov first g)
           )
         },
         puzzle map { p =>
           views.html.puzzle.embed.dailyLink(p)(ctx.lang)(cls := "lobby__puzzle")
         },
-        ctx.noBot option bits.underboards(tours, simuls, leaderboard, tournamentWinners),
-        ctx.noKid option div(cls := "lobby__forum lobby__box")(
-          a(cls := "lobby__box__top", href := routes.ForumCateg.index())(
-            h2(cls := "title text", dataIcon := "d")(trans.latestForumPosts()),
-            span(cls := "more")(trans.more(), " »")
-          ),
-          div(cls := "lobby__box__content")(
-            views.html.forum.post recent forumRecent
-          )
-        ),
+        bits.rankings(leaderboard, tournamentWinners),
+        bits.shogiDescription,
         bits.lastPosts(lastPost),
-        div(cls := "lobby__support")(
-          a(href := routes.Plan.index())( // patron
-            iconTag(patronIconChar),
-            span(cls := "lobby__support__text")(
-              strong(trans.patron.donate()),
-              span(trans.patron.becomePatron())
-            )
-          )
-          //a(href := "https://shop.spreadshirt.com/lishogi-org")(
-          //  iconTag(""),
-          //  span(cls := "lobby__support__text")(
-          //    strong("Swag Store"),
-          //    span(trans.playChessInStyle())
-          //  )
-          //)
-        ),
+        bits.tournaments(tours),
+        bits.studies(studies),
+        bits.forumRecent(forumRecent),
         div(cls := "lobby__about")(
           ctx.blind option h2("About"),
           a(href := "/about")(trans.aboutX("Lishogi")),
           a(href := "/faq")(trans.faq.faqAbbreviation()),
           a(href := "/contact")(trans.contact.contact()),
-          //a(href := "/mobile")(trans.mobileApp()),
-          ctx.noKid option a(href := routes.Page.resources())(trans.shogiResources()),
-          a(href := routes.Page.tos())(trans.termsOfService()),
-          a(href := routes.Page.privacy())(trans.privacy()),
-          a(href := routes.Page.source())(trans.sourceCode()),
-          a(href := routes.Page.ads())("Ads"),
+          // a(href := "/mobile")(trans.mobileApp()),
+          ctx.noKid option a(href := routes.Page.resources)(trans.shogiResources()),
+          a(href := routes.Page.tos)(trans.termsOfService()),
+          a(href := routes.Page.privacy)(trans.privacy()),
+          a(href := routes.Plan.index)(trans.patron.donate()),
+          a(href := routes.Page.source)(trans.sourceCode()),
           views.html.base.bits.connectLinks
         )
       )
@@ -191,6 +191,12 @@ object home {
   }
 
   private val i18nKeys = List(
+    trans.black,
+    trans.white,
+    trans.sente,
+    trans.gote,
+    trans.shitate,
+    trans.uwate,
     trans.realTime,
     trans.correspondence,
     trans.nbGamesInPlay,
@@ -201,6 +207,17 @@ object home {
     trans.casual,
     trans.rated,
     trans.variant,
+    trans.standard,
+    trans.minishogi,
+    trans.chushogi,
+    trans.annanshogi,
+    trans.kyotoshogi,
+    trans.checkshogi,
+    trans.ultrabullet,
+    trans.bullet,
+    trans.blitz,
+    trans.rapid,
+    trans.classical,
     trans.mode,
     trans.list,
     trans.graph,
@@ -208,15 +225,16 @@ object home {
     trans.youNeedAnAccountToDoThat,
     trans.oneDay,
     trans.nbDays,
-    trans.aiNameLevelAiLevel,
+    trans.levelX,
     trans.yourTurn,
     trans.rating,
     trans.createAGame,
-    trans.quickPairing,
+    trans.startPosition,
+    trans.presets,
     trans.lobby,
     trans.custom,
-    trans.anonymous
+    trans.anonymous,
+    trans.readyToPlay,
+    trans.xPlays
   ).map(_.key)
-
-  private val nbPlaceholder = strong("--,---")
 }

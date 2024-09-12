@@ -3,7 +3,6 @@ package views.html.lobby
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
-import lila.common.BlogLangs
 
 import controllers.routes
 
@@ -14,17 +13,30 @@ object bits {
     div(cls := "lobby__app__content")
   )
 
-  def underboards(
-      tours: List[lila.tournament.Tournament],
+  def spotlights(
+      events: List[lila.event.Event],
       simuls: List[lila.simul.Simul],
+      tours: List[lila.tournament.Tournament]
+  )(implicit ctx: Context) = {
+    val max            = 3 - events.size
+    val toursSelected  = lila.tournament.Spotlight.select(tours, ctx.me, max - events.size)
+    val simulsSelected = simuls.take((max - toursSelected.size) atLeast 1)
+    frag(
+      events.map(bits.eventSpotlight),
+      simulsSelected map views.html.simul.bits.homepageSpotlight,
+      toursSelected map views.html.tournament.homepageSpotlight.apply
+    )
+  }
+
+  def rankings(
       leaderboard: List[lila.user.User.LightPerf],
       tournamentWinners: List[lila.tournament.Winner]
   )(implicit ctx: Context) =
     frag(
       div(cls := "lobby__leaderboard lobby__box")(
-        div(cls := "lobby__box__top")(
-          h2(cls := "title text", dataIcon := "C")(trans.leaderboard()),
-          a(cls := "more", href := routes.User.list())(trans.more(), " »")
+        a(cls := "lobby__box__top", href := langHref(routes.User.list))(
+          h2(cls := "title text", dataIcon := "'")(trans.leaderboard()),
+          span(cls := "more")(trans.more(), " »")
         ),
         div(cls := "lobby__box__content")(
           table(
@@ -43,18 +55,18 @@ object bits {
         )
       ),
       div(cls := "lobby__winners lobby__box")(
-        div(cls := "lobby__box__top")(
+        a(cls := "lobby__box__top", href := langHref(routes.Tournament.leaderboard))(
           h2(cls := "title text", dataIcon := "g")(trans.tournamentWinners()),
-          a(cls := "more", href := routes.Tournament.leaderboard())(trans.more(), " »")
+          span(cls := "more")(trans.more(), " »")
         ),
         div(cls := "lobby__box__content")(
           table(
             tbody(
-              tournamentWinners take 10 map { w =>
+              tournamentWinners take 12 map { w =>
                 tr(
                   td(userIdLink(w.userId.some)),
                   td(
-                    a(title := w.tourName, href := routes.Tournament.show(w.tourId))(
+                    a(title := w.tourName, href := langHref(routes.Tournament.show(w.tourId)))(
                       scheduledTournamentNameShortHtml(w.tourName)
                     )
                   )
@@ -63,48 +75,82 @@ object bits {
             )
           )
         )
+      )
+    )
+
+  def tournaments(
+      tours: List[lila.tournament.Tournament]
+  )(implicit ctx: Context) =
+    div(cls := "lobby__tournaments lobby__box")(
+      a(cls := "lobby__box__top", href := langHref(routes.Tournament.home))(
+        h2(cls := "title text", dataIcon := "g")(trans.openTournaments()),
+        span(cls := "more")(trans.more(), " »")
       ),
-      div(cls := "lobby__tournaments lobby__box")(
-        a(cls := "lobby__box__top", href := routes.Tournament.home())(
-          h2(cls := "title text", dataIcon := "g")(trans.openTournaments()),
-          span(cls := "more")(trans.more(), " »")
-        ),
-        div(id := "enterable_tournaments", cls := "enterable_list lobby__box__content")(
-          views.html.tournament.bits.enterable(tours)
-        )
+      div(id := "enterable_tournaments", cls := "enterable_list lobby__box__content")(
+        views.html.tournament.bits.enterable(tours)
+      )
+    )
+
+  def studies(
+      studies: List[lila.study.Study.MiniStudy]
+  )(implicit ctx: Context) =
+    div(cls := "lobby__studies lobby__box")(
+      a(cls := "lobby__box__top", href := langHref(routes.Study.allDefault(1)))(
+        h2(cls := "title text", dataIcon := "4")(trans.studyMenu()),
+        span(cls := "more")(trans.more(), " »")
       ),
-      div(cls := "lobby__simuls lobby__box")(
-        a(cls := "lobby__box__top", href := routes.Simul.home())(
-          h2(cls := "title text", dataIcon := "f")(trans.simultaneousExhibitions()),
-          span(cls := "more")(trans.more(), " »")
-        ),
-        div(id := "enterable_simuls", cls := "enterable_list lobby__box__content")(
-          views.html.simul.bits.allCreated(simuls)
+      div(cls := "lobby__box__content")(
+        views.html.study.bits.home(studies)
+      )
+    )
+
+  def shogiDescription(implicit ctx: Context): Frag =
+    div(cls := "lobby__description lobby__box")(
+      a(cls := "lobby__box__top", href := langHref(routes.Learn.index))(
+        h2(cls := "title text", dataIcon := "C")(trans.shogi()),
+        span(cls := "more")(trans.more(), " »")
+      ),
+      div(cls := "lobby__box__content")(
+        p(
+          trans.siteDescription(),
+          br,
+          trans.shogiDescription(),
+          br,
+          trans.learnShogiHereX(strong(a(href := langHref(routes.Learn.index))(trans.shogiBasics())))
         )
       )
     )
 
-  def lastPosts(posts: List[lila.blog.MiniPost])(implicit ctx: Context): Option[Frag] = {
-    posts.nonEmpty option
-      div(cls := "lobby__blog lobby__box")(
-        a(cls := "lobby__box__top", href := routes.Blog.index())(
-          h2(cls := "title text", dataIcon := "6")(trans.latestUpdates()),
-          span(cls := "more")(trans.more(), " »")
-        ),
-        div(cls := "lobby__box__content")(
-          posts filter { post => post.langCode == BlogLangs.parse(ctx.lang.code) } map { post =>
-            a(cls := "post", href := routes.Blog.show(post.id, post.slug))(
-              img(src := post.image),
-              span(cls := "text")(
-                strong(post.title),
-                span(post.shortlede)
-              ),
-              semanticDate(post.date)
-            )
-          }
-        )
+  def forumRecent(posts: List[lila.forum.MiniForumPost])(implicit ctx: Context): Frag =
+    div(cls := "lobby__forum lobby__box")(
+      a(cls := "lobby__box__top", href := routes.ForumCateg.index)(
+        h2(cls := "title text", dataIcon := "d")(trans.latestForumPosts()),
+        span(cls := "more")(trans.more(), " »")
+      ),
+      ctx.noKid option div(cls := "lobby__box__content")(
+        views.html.forum.post recent posts
       )
-  }
+    )
+
+  def lastPosts(posts: List[lila.blog.MiniPost])(implicit ctx: Context): Frag =
+    div(cls := "lobby__blog lobby__box")(
+      a(cls := "lobby__box__top", href := langHrefJP(routes.Blog.index()))(
+        h2(cls := "title text", dataIcon := "6")(trans.latestUpdates()),
+        span(cls := "more")(trans.more(), " »")
+      ),
+      div(cls := "lobby__box__content")(
+        posts map { post =>
+          a(cls     := "post", href := routes.Blog.show(post.id))(
+            img(src := post.image),
+            span(cls := "text")(
+              strong(post.title),
+              span(post.shortlede)
+            ),
+            semanticDate(post.date)
+          )
+        }
+      )
+    )
 
   def playbanInfo(ban: lila.playban.TempBan)(implicit ctx: Context) =
     nopeInfo(
@@ -113,7 +159,7 @@ object bits {
       p(trans.timeoutExpires(strong(secondsFromNow(ban.remainingSeconds)))),
       h2(trans.why()),
       p(
-        trans.pleasantChessExperience(),
+        trans.pleasantShogiExperience(),
         br,
         trans.goodPractice(),
         br,
@@ -134,28 +180,27 @@ object bits {
       )
     )
 
-  def currentGameInfo(current: lila.app.mashup.Preload.CurrentGame) =
+  def currentGameInfo(current: lila.app.mashup.Preload.CurrentGame)(implicit ctx: Context) =
     nopeInfo(
-      h1("Hang on!"),
-      p("You have a game in progress with ", strong(current.opponent), "."),
+      h1(trans.hangOn()),
+      p(trans.gameInProgressWithX(strong(current.opponent)), "."),
       br,
       br,
       a(cls := "text button button-fat", dataIcon := "G", href := routes.Round.player(current.pov.fullId))(
-        "Join the game"
+        trans.joinTheGame()
       ),
       br,
       br,
-      "or",
+      trans.or(),
       br,
       br,
       postForm(action := routes.Round.resign(current.pov.fullId))(
         button(cls := "text button button-red", dataIcon := "L")(
-          if (current.pov.game.abortable) "Abort" else "Resign",
-          " the game"
+          if (current.pov.game.abortable) trans.abortGame() else trans.resign()
         )
       ),
       br,
-      p("You can't start a new game until this one is finished.")
+      p(trans.gameInProgressDescription())
     )
 
   def nopeInfo(content: Modifier*) =
@@ -166,7 +211,7 @@ object bits {
       )
     )
 
-  def spotlight(e: lila.event.Event)(implicit ctx: Context) =
+  private def eventSpotlight(e: lila.event.Event)(implicit ctx: Context) =
     a(
       href := (if (e.isNow) e.url else routes.Event.show(e.id).url),
       cls := List(

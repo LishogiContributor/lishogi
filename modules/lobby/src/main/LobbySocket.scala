@@ -1,5 +1,6 @@
 package lila.lobby
 
+import cats.implicits._
 import play.api.libs.json._
 import scala.concurrent.duration._
 import scala.concurrent.Promise
@@ -10,12 +11,11 @@ import lila.hub.actorApi.game.ChangeFeatured
 import lila.hub.actorApi.lobby._
 import lila.hub.actorApi.timeline._
 import lila.hub.Trouper
-import lila.pool.{ PoolApi, PoolConfig }
-import lila.rating.RatingRange
 import lila.socket.RemoteSocket.{ Protocol => P, _ }
 import lila.socket.Socket.{ makeMessage, Sri, Sris }
 import lila.user.User
-import lila.i18n.defaultLang
+
+case class LobbyCounters(members: Int, rounds: Int)
 
 final class LobbySocket(
     biter: Biter,
@@ -23,13 +23,15 @@ final class LobbySocket(
     remoteSocketApi: lila.socket.RemoteSocket,
     lobby: LobbyTrouper,
     relationApi: lila.relation.RelationApi,
-    poolApi: PoolApi,
     system: akka.actor.ActorSystem
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
   import LobbySocket._
   import Protocol._
   type SocketController = PartialFunction[(String, JsObject), Unit]
+
+  private var lastCounters = LobbyCounters(0, 0)
+  def counters             = lastCounters
 
   val trouper: Trouper = new Trouper {
 
@@ -45,7 +47,7 @@ final class LobbySocket(
       case GetSrisP(promise) =>
         promise success Sris(members.keySet.view.map(Sri.apply).toSet)
         lila.mon.lobby.socket.idle.update(idleSris.size)
-        lila.mon.lobby.socket.hookSubscribers.update(hookSubscriberSris.size)
+        lila.mon.lobby.socket.hookSubscribers.update(hookSubscriberSris.size).unit
 
       case Cleanup =>
         idleSris filterInPlace members.contains
@@ -61,8 +63,6 @@ final class LobbySocket(
 
       case ReloadTournaments(html) => tellActive(makeMessage("tournaments", html))
 
-      case ReloadSimuls(html) => tellActive(makeMessage("simuls", html))
-
       case ReloadTimelines(users) => send(Out.tellLobbyUsers(users, makeMessage("reload_timeline")))
 
       case AddHook(hook) =>
@@ -71,18 +71,18 @@ final class LobbySocket(
             hookSubscriberSris diff idleSris filter { sri =>
               members get sri exists { biter.showHookTo(hook, _) }
             } map Sri.apply,
-            makeMessage("had", hook.render(defaultLang))
+            makeMessage("had", hook.render)
           )
         )
 
-      case RemoveHook(hookId) => removedHookIds append hookId
+      case RemoveHook(hookId) => removedHookIds.append(hookId).unit
 
       case SendHookRemovals =>
         if (removedHookIds.nonEmpty) {
           tellActiveHookSubscribers(makeMessage("hrm", removedHookIds.toString))
           removedHookIds.clear()
         }
-        system.scheduler.scheduleOnce(1249 millis)(this ! SendHookRemovals)
+        system.scheduler.scheduleOnce(1249 millis)(this ! SendHookRemovals).unit
 
       case JoinHook(sri, hook, game, creatorColor) =>
         lila.mon.lobby.hook.join.increment()
@@ -93,8 +93,6 @@ final class LobbySocket(
         lila.mon.lobby.seek.join.increment()
         send(Out.tellLobbyUsers(List(seek.user.id), gameStartRedirect(game pov creatorColor)))
         send(Out.tellLobbyUsers(List(userId), gameStartRedirect(game pov !creatorColor)))
-
-      case PoolApi.Pairings(pairings) => send(Protocol.Out.pairings(pairings))
 
       case HookIds(ids) => tellActiveHookSubscribers(makeMessage("hli", ids mkString ""))
 
@@ -108,12 +106,12 @@ final class LobbySocket(
       case HookSub(member, false) => hookSubscriberSris -= member.sri.value
       case AllHooksFor(member, hooks) =>
         send(
-          P.Out.tellSri(member.sri, makeMessage("hooks", JsArray(hooks.map(_.render(defaultLang)))))
+          P.Out.tellSri(member.sri, makeMessage("hooks", hooks.map(_.render)))
         )
         hookSubscriberSris += member.sri.value
     }
 
-    lila.common.Bus.subscribe(this, "changeFeaturedGame", "streams", "poolPairings", "lobbySocket")
+    lila.common.Bus.subscribe(this, "changeFeaturedGame", "streams", "lobbySocket")
     system.scheduler.scheduleOnce(7 seconds)(this ! SendHookRemovals)
     system.scheduler.scheduleWithFixedDelay(1 minute, 1 minute)(() => this ! Cleanup)
 
@@ -144,76 +142,44 @@ final class LobbySocket(
   // solve circular reference
   lobby ! LobbyTrouper.SetSocket(trouper)
 
-  private val poolLimitPerSri = new lila.memo.RateLimit[SriStr](
+  private val hookLimitPerSri = new lila.memo.RateLimit[SriStr](
     credits = 25,
     duration = 1 minute,
-    key = "lobby.hook_pool.member"
+    key = "lobby.hook.member"
   )
 
-  private def HookPoolLimit(member: Member, cost: Int, msg: => String)(op: => Unit) =
-    poolLimitPerSri(k = member.sri.value, cost = cost, msg = msg)(op) {}
+  private def HookLimit(member: Member, cost: Int, msg: => String)(op: => Unit) =
+    hookLimitPerSri(k = member.sri.value, cost = cost, msg = msg)(op) {}
 
   def controller(member: Member): SocketController = {
     case ("join", o) if !member.bot =>
-      HookPoolLimit(member, cost = 5, msg = s"join $o") {
+      HookLimit(member, cost = 5, msg = s"join $o") {
         o str "d" foreach { id =>
           lobby ! BiteHook(id, member.sri, member.user)
         }
       }
     case ("cancel", _) =>
-      HookPoolLimit(member, cost = 1, msg = "cancel") {
+      HookLimit(member, cost = 1, msg = "cancel") {
         lobby ! CancelHook(member.sri)
       }
     case ("joinSeek", o) if !member.bot =>
-      HookPoolLimit(member, cost = 5, msg = s"joinSeek $o") {
+      HookLimit(member, cost = 5, msg = s"joinSeek $o") {
         for {
           id   <- o str "d"
           user <- member.user
         } lobby ! BiteSeek(id, user)
       }
     case ("cancelSeek", o) =>
-      HookPoolLimit(member, cost = 1, msg = s"cancelSeek $o") {
+      HookLimit(member, cost = 1, msg = s"cancelSeek $o") {
         for {
           id   <- o str "d"
           user <- member.user
         } lobby ! CancelSeek(id, user)
       }
     case ("idle", o) => trouper ! SetIdle(member.sri, ~(o boolean "d"))
-    // entering a pool
-    case ("poolIn", o) if !member.bot =>
-      HookPoolLimit(member, cost = 1, msg = s"poolIn $o") {
-        for {
-          user <- member.user
-          d    <- o obj "d"
-          id   <- d str "id"
-          ratingRange = d str "range" flatMap RatingRange.apply
-          blocking    = d str "blocking"
-        } {
-          lobby ! CancelHook(member.sri) // in case there's one...
-          poolApi.join(
-            PoolConfig.Id(id),
-            PoolApi.Joiner(
-              userId = user.id,
-              sri = member.sri,
-              ratingMap = user.perfMap.view.mapValues(_.rating).toMap,
-              ratingRange = ratingRange,
-              lame = user.lame,
-              blocking = user.blocking ++ blocking
-            )
-          )
-        }
-      }
-    // leaving a pool
-    case ("poolOut", o) =>
-      HookPoolLimit(member, cost = 1, msg = s"poolOut $o") {
-        for {
-          id   <- o str "d"
-          user <- member.user
-        } poolApi.leave(PoolConfig.Id(id), user.id)
-      }
     // entering the hooks view
     case ("hookIn", _) =>
-      HookPoolLimit(member, cost = 2, msg = "hookIn") {
+      HookLimit(member, cost = 2, msg = "hookIn") {
         lobby ! HookSub(member, true)
       }
     // leaving the hooks view
@@ -235,6 +201,9 @@ final class LobbySocket(
     }
 
   private val handler: Handler = {
+
+    case In.Counters(m, r) => lastCounters = LobbyCounters(m, r)
+
     case P.In.ConnectSris(cons) =>
       cons foreach { case (sri, userId) =>
         getOrConnect(sri, userId)
@@ -258,9 +227,9 @@ final class LobbySocket(
   }
 
   private val messagesHandled: Set[String] =
-    Set("join", "cancel", "joinSeek", "cancelSeek", "idle", "poolIn", "poolOut", "hookIn", "hookOut")
+    Set("join", "cancel", "joinSeek", "cancelSeek", "idle", "hookIn", "hookOut")
 
-  remoteSocketApi.subscribe("lobby-in", P.In.baseReader)(handler orElse remoteSocketApi.baseHandler)
+  remoteSocketApi.subscribe("lobby-in", In.reader)(handler orElse remoteSocketApi.baseHandler)
 
   private val send: String => Unit = remoteSocketApi.makeSender("lobby-out").apply _
 }
@@ -276,16 +245,19 @@ private object LobbySocket {
   }
 
   object Protocol {
+    object In {
+      case class Counters(members: Int, rounds: Int) extends P.In
+
+      val reader: P.In.Reader = raw =>
+        raw.path match {
+          case "counters" =>
+            raw.get(2) { case Array(m, r) =>
+              (m.toIntOption, r.toIntOption).mapN(Counters)
+            }
+          case _ => P.In.baseReader(raw)
+        }
+    }
     object Out {
-      def pairings(pairings: List[PoolApi.Pairing]) = {
-        val redirs = for {
-          pairing <- pairings
-          color   <- shogi.Color.all
-          sri    = pairing sri color
-          fullId = pairing.game fullIdOf color
-        } yield s"$sri:$fullId"
-        s"lobby/pairings ${P.Out.commas(redirs)}"
-      }
       def tellLobby(payload: JsObject)       = s"tell/lobby ${Json stringify payload}"
       def tellLobbyActive(payload: JsObject) = s"tell/lobby/active ${Json stringify payload}"
       def tellLobbyUsers(userIds: Iterable[User.ID], payload: JsObject) =

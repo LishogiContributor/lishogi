@@ -4,6 +4,7 @@ import play.api.libs.json._
 
 import lila.common.Json._
 import lila.user.User
+
 import org.joda.time.format.DateTimeFormat
 
 final class StormJson(sign: StormSign) {
@@ -19,13 +20,14 @@ final class StormJson(sign: StormSign) {
 
   def pref(p: lila.pref.Pref) =
     Json.obj(
-      "coords"          -> p.coords,
-      "destination"     -> p.destination,
-      "dropDestination" -> p.dropDestination,
-      "moveEvent"       -> p.moveEvent,
-      "highlight"       -> p.highlight,
-      "pieceNotation"   -> p.pieceNotation,
-      "is3d"            -> p.is3d
+      "coords"             -> p.coords,
+      "destination"        -> p.destination,
+      "dropDestination"    -> p.dropDestination,
+      "moveEvent"          -> p.moveEvent,
+      "highlightLastDests" -> p.highlightLastDests,
+      "highlightCheck"     -> p.highlightCheck,
+      "squareOverlay"      -> p.squareOverlay,
+      "resizeHandle"       -> p.resizeHandle
     )
 
   def newHigh(n: Option[StormHigh.NewHigh]) =
@@ -61,8 +63,8 @@ object StormJson {
   implicit val puzzleWrites: OWrites[StormPuzzle] = OWrites { p =>
     Json.obj(
       "id"     -> p.id,
-      "fen"    -> p.fen,
-      "line"   -> p.line.toList.map(_.uci).mkString(" "),
+      "sfen"   -> p.sfen,
+      "line"   -> p.line.toList.map(_.usi).mkString(" "),
       "rating" -> p.rating
     )
   }

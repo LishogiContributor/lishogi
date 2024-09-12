@@ -2,8 +2,6 @@ package lila.lobby
 
 import shogi.{ Clock, Mode, Speed }
 import org.joda.time.DateTime
-import ornicar.scalalib.Random
-import play.api.i18n.Lang
 import play.api.libs.json._
 
 import lila.game.PerfPicker
@@ -61,7 +59,7 @@ case class Hook(
   lazy val perf: Option[LobbyPerf] = for { u <- user; pt <- perfType } yield u perfAt pt
   def rating: Option[Int]          = perf.map(_.rating)
 
-  def render(implicit lang: Lang): JsObject =
+  def render: JsObject =
     Json
       .obj(
         "id"    -> id,
@@ -71,39 +69,16 @@ case class Hook(
         "s"     -> speed.id,
         "i"     -> (if (clock.incrementSeconds > 0) 1 else 0),
         "b"     -> (if (clock.byoyomiSeconds > 0) 1 else 0),
-        "p"     -> (if (clock.periods > 1) 1 else 0)
+        "p"     -> (if (clock.periodsTotal > 1) 1 else 0)
       )
       .add("prov" -> perf.map(_.provisional).filter(identity))
       .add("u" -> user.map(_.username))
       .add("rating" -> rating)
-      .add("variant" -> realVariant.exotic.option(realVariant.key))
+      .add("variant" -> (!realVariant.standard).option(realVariant.key))
       .add("ra" -> realMode.rated.option(1))
-      .add("c" -> shogi.Color(color).map(_.name))
-      .add("perf" -> perfType.map(_.trans))
-
-  def randomColor = color == "random"
-
-  lazy val compatibleWithPools =
-    realMode.rated && realVariant.standard && randomColor &&
-      lila.pool.PoolList.clockStringSet.contains(clock.show)
-
-  def compatibleWithPool(poolClock: shogi.Clock.Config) =
-    compatibleWithPools && clock == poolClock
-
-  def toPool =
-    lila.pool.HookThieve.PoolHook(
-      hookId = id,
-      member = lila.pool.PoolMember(
-        userId = user.??(_.id),
-        sri = sri,
-        rating = rating | lila.rating.Glicko.defaultIntRating,
-        ratingRange = realRatingRange,
-        lame = user.??(_.lame),
-        blocking = lila.pool.PoolMember.BlockedUsers(user.??(_.blocking)),
-        since = createdAt,
-        rageSitCounter = 0
-      )
-    )
+      .add("rr" -> (ratingRange != RatingRange.default).option(ratingRange))
+      .add("c" -> shogi.Color.fromName(color).map(_.name))
+      .add("perf" -> perfType.map(_.key))
 
   private lazy val speed = Speed(clock)
 }

@@ -45,7 +45,9 @@ $('#asset-version-message').text(lishogi.info.message);"""
         ),
         br,
         st.section(cls := "box")(
-          h1("lila version"),
+          div(cls := "box__top")(
+            h2("lila version")
+          ),
           table(cls := "slist slist-pad")(
             env.appVersionDate zip env.appVersionCommit zip env.appVersionMessage map {
               case ((date, commit), message) =>
@@ -75,11 +77,17 @@ $('#asset-version-message').text(lishogi.info.message);"""
   }
 
   def webmasters()(implicit ctx: Context) = {
-    val baseUrl = "https://lishogi.org"
     val parameters = frag(
       p("Parameters:"),
       ul(
-        li(strong("theme"), ": ", lila.pref.Theme.all.map(_.name).mkString(", ")),
+        li(strong("theme"), ": ", lila.pref.Theme.all.map(_.key).mkString(", ")),
+        li(
+          strong("pieceSet"),
+          ": ",
+          (lila.pref.PieceSet.all ::: lila.pref.ChuPieceSet.all ::: lila.pref.KyoPieceSet.all)
+            .map(_.key)
+            .mkString(", ")
+        ),
         li(strong("bg"), ": light, dark")
       )
     )
@@ -91,16 +99,17 @@ $('#asset-version-message').text(lishogi.info.message);"""
     )(
       frag(
         div(cls := "box box-pad developers body") {
-          val args = """style="width: 400px; height: 444px;" allowtransparency="true" frameborder="0""""
+          val args =
+            """style="width: 400px; height: calc(400px / 9 * 11 / 11 * 12 + 2vmin);" allowtransparency="true" frameborder="0""""
           frag(
             h1(id := "embed-tv")("Embed Lishogi TV in your site"),
             div(cls := "center")(raw(s"""<iframe src="/tv/frame?theme=wood" $args></iframe>""")),
             p("Add the following HTML to your site:"),
             p(cls := "copy-zone")(
               input(
-                id := "tv-embed-src",
+                id  := "tv-embed-src",
                 cls := "copyable autoselect",
-                value := s"""<iframe src="$baseUrl/tv/frame?theme=wood&bg=light" $args></iframe>"""
+                value := s"""<iframe src="$netBaseUrl/tv/frame?theme=wood&bg=light&pieceSet=Ryoko_1Kanji" $args></iframe>"""
               ),
               button(title := "Copy code", cls := "copy button", dataRel := "tv-embed-src", dataIcon := "\"")
             ),
@@ -109,21 +118,22 @@ $('#asset-version-message').text(lishogi.info.message);"""
         },
         br,
         div(cls := "box box-pad developers body") {
-          val args = """style="width: 400px; height: 444px;" allowtransparency="true" frameborder="0""""
+          val args =
+            """style="width: 400px; height: calc(400px / 9 * 11 / 11 * 12 + 2vmin);" allowtransparency="true" frameborder="0""""
           frag(
             h1(id := "embed-puzzle")("Embed the daily puzzle in your site"),
             div(cls := "center")(raw(s"""<iframe src="/training/frame?theme=wood" $args></iframe>""")),
             p("Add the following HTML to your site:"),
             p(cls := "copy-zone")(
               input(
-                id := "puzzle-embed-src",
+                id  := "puzzle-embed-src",
                 cls := "copyable autoselect",
-                value := s"""<iframe src="$baseUrl/training/frame?theme=wood&bg=light" $args></iframe>"""
+                value := s"""<iframe src="$netBaseUrl/training/frame?theme=wood&bg=light&pieceSet=Ryoko_1Kanji" $args></iframe>"""
               ),
               button(
-                title := "Copy code",
-                cls := "copy button",
-                dataRel := "puzzle-embed-src",
+                title    := "Copy code",
+                cls      := "copy button",
+                dataRel  := "puzzle-embed-src",
                 dataIcon := "\""
               )
             ),
@@ -154,7 +164,7 @@ $('#asset-version-message').text(lishogi.info.message);"""
             raw(s"""<iframe src="/embed/sFbJtorq?bg=auto&theme=auto" $args></iframe>"""),
             p(
               raw(
-                """On a game analysis page, click the <em>"SFEN &amp; PGN"</em> tab at the bottom, then """
+                """On a game analysis page, click the <em>"Export"</em> tab at the bottom, then """
               ),
               "\"",
               em(trans.embedInYourWebsite(), "\".")
@@ -168,7 +178,7 @@ $('#asset-version-message').text(lishogi.info.message);"""
           h1("HTTP API"),
           p(
             raw(
-              """WIP - Lishogi exposes a RESTish HTTP/JSON API that you are welcome to use. Read <a href="https://lichess.org/api" class="blue">Lichess' HTTP API documentation</a> to get an idea on how Lishogi's API looks."""
+              """WIP - Lishogi exposes a RESTish HTTP/JSON API that you are welcome to use. Read the <a href="/api" class="blue">HTTP API documentation (WIP)</a>."""
             )
           )
         )
@@ -193,24 +203,23 @@ $('#asset-version-message').text(lishogi.info.message);"""
       def activeCls(c: String) = cls := active.activeO(c)
       main(cls := "page-menu")(
         st.nav(cls := "page-menu__menu subnav")(
-          a(activeCls("about"), href := routes.Page.about())(trans.aboutX("lishogi.org")),
-          //a(activeCls("faq"), href := routes.Main.faq())(trans.faq.faqAbbreviation()),
-          a(activeCls("contact"), href := routes.Main.contact())(trans.contact.contact()),
-          a(activeCls("resources"), href := routes.Page.resources())(trans.shogiResources()),
-          a(activeCls("tos"), href := routes.Page.tos())(trans.termsOfService()),
-          a(activeCls("privacy"), href := routes.Page.privacy())(trans.privacy()),
-          //a(activeCls("master"), href := routes.Page.master())("Title verification"),
+          a(activeCls("about"), href := routes.Page.about)(trans.aboutX("lishogi.org")),
+          a(activeCls("faq"), href := routes.Main.faq)(trans.faq.faqAbbreviation()),
+          a(activeCls("contact"), href := routes.Main.contact)(trans.contact.contact()),
+          a(activeCls("resources"), href := routes.Page.resources)(trans.shogiResources()),
+          a(activeCls("tos"), href := routes.Page.tos)(trans.termsOfService()),
+          a(activeCls("privacy"), href := routes.Page.privacy)(trans.privacy()),
+          // a(activeCls("master"), href := routes.Page.master)("Title verification"),
           sep,
-          a(activeCls("source"), href := routes.Page.source())(trans.sourceCode()),
-          a(activeCls("help"), href := routes.Page.help())(trans.contribute()),
-          a(activeCls("thanks"), href := routes.Page.thanks())(trans.thankYou()),
+          a(activeCls("source"), href := routes.Page.source)(trans.sourceCode()),
+          a(activeCls("help"), href := routes.Page.help)(trans.contribute()),
+          a(activeCls("thanks"), href := routes.Page.thanks)(trans.thankYou()),
           sep,
-          a(activeCls("webmasters"), href := routes.Main.webmasters())(trans.webmasters()),
-          //a(activeCls("database"), href := "https://database.lishogi.org")(trans.database(), external),
-          //a(activeCls("api"), href := routes.Api.index())("API", external),
+          a(activeCls("webmasters"), href := routes.Main.webmasters)(trans.webmasters()),
+          // a(activeCls("database"), href := "https://database.lishogi.org")(trans.database(), external),
+          a(activeCls("api"), href := routes.Api.index)("API", external),
           sep,
-          a(activeCls("lag"), href := routes.Main.lag())(trans.lag.isLishogiLagging())
-          //a(activeCls("ads"), href := routes.Page.ads())("Block ads")
+          a(activeCls("lag"), href := routes.Main.lag)(trans.lag.isLishogiLagging())
         ),
         div(cls := s"page-menu__content $contentCls")(body)
       )

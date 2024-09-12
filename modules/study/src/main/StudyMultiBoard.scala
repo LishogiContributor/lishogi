@@ -2,20 +2,20 @@ package lila.study
 
 import BSONHandlers._
 import shogi.Color
-import shogi.format.pgn.Tags
-import shogi.format.{ FEN, Uci }
+import shogi.format.Tags
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.Usi
+import shogi.variant.{ Standard, Variant }
 import com.github.blemale.scaffeine.AsyncLoadingCache
 import JsonView._
 import play.api.libs.json._
 import reactivemongo.api.bson._
-import reactivemongo.api.ReadPreference
 import scala.concurrent.duration._
 
 import lila.common.config.MaxPerPage
 import lila.common.paginator.AdapterLike
 import lila.common.paginator.{ Paginator, PaginatorJson }
 import lila.db.dsl._
-import lila.game.BSONHandlers.FENBSONHandler
 
 final class StudyMultiBoard(
     chapterRepo: ChapterRepo,
@@ -54,6 +54,7 @@ final class StudyMultiBoard(
 
     def nbResults: Fu[Int] = chapterRepo.coll(_.countSel(selector))
 
+    // If broadcasts are ever implemented, this needs some changes
     def slice(offset: Int, length: Int): Fu[Seq[ChapterPreview]] =
       chapterRepo
         .coll {
@@ -68,14 +69,14 @@ final class StudyMultiBoard(
                   "comp" -> $doc(
                     "$function" -> $doc(
                       "lang" -> "js",
-                      "args" -> $arr("$root", "$tags"),
-                      "body" -> """function(root, tags) {
-                    |tags = tags.filter(t => t.startsWith('Sente') || t.startsWith('Gote') || t.startsWith('Result'));
-                    |const node = tags.length ? Object.keys(root).reduce((acc, i) => (root[i].p > acc.p) ? root[i] : acc, root['ÿ']) : root['ÿ'];
-                    |return {node:{fen:node.f,uci:node.u},tags} }""".stripMargin
+                      "args" -> $arr("$root"),
+                      "body" -> """function(root) {
+                    |return root['ÿ'] !== undefined ? {sfen:root['ÿ'].f} : {sfen:root['þ'].is}; }""".stripMargin
                     )
                   ),
+                  "tags"        -> "$tags",
                   "orientation" -> "$setup.orientation",
+                  "variant"     -> "$setup.variant",
                   "name"        -> true
                 )
               )
@@ -87,19 +88,20 @@ final class StudyMultiBoard(
             doc  <- r
             id   <- doc.getAsOpt[Chapter.Id]("_id")
             name <- doc.getAsOpt[Chapter.Name]("name")
+            tags    = doc.getAsOpt[Tags]("tags")
+            variant = doc.getAsOpt[Int]("variant").flatMap(v => Variant(v)) | Standard
             comp <- doc.getAsOpt[Bdoc]("comp")
-            node <- comp.getAsOpt[Bdoc]("node")
-            fen  <- node.getAsOpt[FEN]("fen")
-            lastMove = node.getAsOpt[Uci]("uci")
-            tags     = comp.getAsOpt[Tags]("tags")
+            lastUsi = comp.getAsOpt[Usi]("usi")
+            sfen    = comp.getAsOpt[Sfen]("sfen").getOrElse(variant.initialSfen)
           } yield ChapterPreview(
             id = id,
             name = name,
             players = tags flatMap ChapterPreview.players,
+            variant = variant,
             orientation = doc.getAsOpt[Color]("orientation") | Color.Sente,
-            fen = fen,
-            lastMove = lastMove,
-            playing = lastMove.isDefined && tags.flatMap(_(_.Result)).has("*")
+            sfen = sfen,
+            lastUsi = lastUsi,
+            playing = lastUsi.isDefined && tags.flatMap(_(_.Result)).has("*")
           )
         }
   }
@@ -128,9 +130,10 @@ object StudyMultiBoard {
       id: Chapter.Id,
       name: Chapter.Name,
       players: Option[ChapterPreview.Players],
+      variant: Variant,
       orientation: Color,
-      fen: FEN,
-      lastMove: Option[Uci],
+      sfen: Sfen,
+      lastUsi: Option[Usi],
       playing: Boolean
   )
 

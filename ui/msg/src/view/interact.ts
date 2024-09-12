@@ -1,17 +1,15 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { User } from '../interfaces';
-import MsgCtrl from '../ctrl';
-import { bind } from './util';
+import { bindSubmit } from 'common/snabbdom';
 import throttle from 'common/throttle';
+import { VNode, h } from 'snabbdom';
+import MsgCtrl from '../ctrl';
+import { User } from '../interfaces';
 
 export default function renderInteract(ctrl: MsgCtrl, user: User): VNode {
   const connected = ctrl.connected();
   return h(
     'form.msg-app__convo__post',
     {
-      hook: bind('submit', e => {
-        e.preventDefault();
+      hook: bindSubmit(e => {
         const area = (e.target as HTMLElement).querySelector('textarea');
         if (area) {
           area.dispatchEvent(new Event('send'));

@@ -11,7 +11,6 @@ case class Client(
     _id: Client.Key,                   // API key used to authenticate and assign move or analysis
     userId: Client.UserId,             // lishogi user ID
     skill: Client.Skill,               // what can this client do
-    evaluation: Client.Evaluation,     // what eval function/engine client uses determines what variants he can play
     instance: Option[Client.Instance], // last seen instance
     enabled: Boolean,
     createdAt: DateTime
@@ -32,12 +31,6 @@ case class Client(
 
   def disabled = !enabled
 
-  def getVariants =
-    evaluation match {
-      case Client.Evaluation.NNUE  => List(shogi.variant.Standard)
-      case Client.Evaluation.FAIRY => List(shogi.variant.FromPosition)
-    }
-
   override def toString = s"$key by $userId"
 }
 
@@ -47,7 +40,6 @@ object Client {
     _id = Key("offline"),
     userId = UserId("offline"),
     skill = Skill.All,
-    evaluation = Evaluation.NNUE,
     instance = None,
     enabled = true,
     createdAt = DateTime.now
@@ -58,7 +50,7 @@ object Client {
   case class Python(value: String)  extends AnyVal with StringValue
   case class UserId(value: String)  extends AnyVal with StringValue
   case class Engine(name: String)
-  case class Engines(stockfish: Engine)
+  case class Engines(yaneuraou: Engine, fairy: Engine)
 
   case class Instance(
       version: Version,
@@ -88,20 +80,13 @@ object Client {
     def key = toString.toLowerCase
   }
   object Skill {
-    case object Move     extends Skill
-    case object Analysis extends Skill
-    case object All      extends Skill
-    val all                = List(Move, Analysis, All)
-    def byKey(key: String) = all.find(_.key == key)
-  }
-
-  sealed trait Evaluation {
-    def key = toString.toLowerCase
-  }
-  object Evaluation {
-    case object NNUE  extends Evaluation;
-    case object FAIRY extends Evaluation;
-    val all                = List(NNUE, FAIRY)
+    case object Move         extends Skill
+    case object MoveStd      extends Skill // Most requests, option to have dedicated client
+    case object Analysis     extends Skill
+    case object Puzzle       extends Skill
+    case object VerifyPuzzle extends Skill // Only dedicated trusted clients
+    case object All          extends Skill
+    val all                = List(Move, MoveStd, Analysis, Puzzle, VerifyPuzzle, All)
     def byKey(key: String) = all.find(_.key == key)
   }
 

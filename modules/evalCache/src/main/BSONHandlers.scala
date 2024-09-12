@@ -2,9 +2,9 @@ package lila.evalCache
 
 import reactivemongo.api.bson._
 import scala.util.{ Success, Try }
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
-import shogi.format.Uci
+import shogi.format.usi.Usi
 import lila.db.dsl._
 import lila.tree.Eval._
 
@@ -25,11 +25,11 @@ private object BSONHandlers {
         str.toIntOption map { c =>
           Score cp Cp(c)
         }
-    private def movesWrite(moves: Moves): String = Uci writeListPiotr moves.value.toList
+    private def movesWrite(moves: Moves): String = moves.value.toList.map(_.usi) mkString " "
     private def movesRead(str: String): Option[Moves] =
-      Uci readListPiotr str flatMap (_.toNel) map Moves.apply
-    private val scoreSeparator = '@'
-    private val pvSeparator    = '?'
+      Usi readList str flatMap (_.toNel) map Moves.apply
+    private val scoreSeparator = ':'
+    private val pvSeparator    = '/'
     private val pvSeparatorStr = pvSeparator.toString
     def readTry(bs: BSONValue) =
       bs match {
@@ -60,13 +60,13 @@ private object BSONHandlers {
 
   implicit val EntryIdHandler = tryHandler[Id](
     { case BSONString(value) =>
-      value split '@' match {
-        case Array(fen) => Success(Id(shogi.variant.Standard, SmallFen raw fen))
-        case Array(variantId, fen) =>
+      value split ':' match {
+        case Array(sfen) => Success(Id(shogi.variant.Standard, SmallSfen raw sfen))
+        case Array(variantId, sfen) =>
           Success(
             Id(
-              variantId.toIntOption flatMap shogi.variant.Variant.apply err s"Invalid evalcache variant $variantId",
-              SmallFen raw fen
+              shogi.variant.Variant.orDefault(~variantId.toIntOption),
+              SmallSfen raw sfen
             )
           )
         case _ => lila.db.BSON.handlerBadValue(s"Invalid evalcache id ${value}")
@@ -74,8 +74,8 @@ private object BSONHandlers {
     },
     x =>
       BSONString {
-        if (x.variant.standard || x.variant == shogi.variant.FromPosition) x.smallFen.value
-        else s"${x.variant.id}:${x.smallFen.value}"
+        if (x.variant.standard) x.smallSfen.value
+        else s"${x.variant.id}:${x.smallSfen.value}"
       }
   )
 

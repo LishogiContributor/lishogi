@@ -1,9 +1,9 @@
 package lila.round
 
 import shogi.Centis
-import shogi.format.pgn.Glyphs
-import shogi.format.{ FEN, Forsyth, Uci, UciCharPair }
-import shogi.opening._
+import shogi.format.Glyphs
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.{ UciToUsi, Usi, UsiCharPair }
 import shogi.variant.Variant
 import JsonView.WithFlags
 import lila.analyse.{ Advice, Analysis, Info }
@@ -11,8 +11,7 @@ import lila.tree._
 
 object TreeBuilder {
 
-  private type Ply       = Int
-  private type OpeningOf = FEN => Option[FullOpening]
+  private type Ply = Int
 
   private def makeEval(info: Info) =
     Eval(
@@ -24,62 +23,43 @@ object TreeBuilder {
   def apply(
       game: lila.game.Game,
       analysis: Option[Analysis],
-      initialFen: FEN,
       withFlags: WithFlags
-  ): Root =
-    apply(
-      id = game.id,
-      pgnMoves = game.pgnMoves,
-      variant = game.variant,
-      analysis = analysis,
-      initialFen = initialFen,
-      withFlags = withFlags,
-      clocks = withFlags.clocks ?? game.bothClockStates
-    )
-
-  def apply(
-      id: String,
-      pgnMoves: Vector[String],
-      variant: Variant,
-      analysis: Option[Analysis],
-      initialFen: FEN,
-      withFlags: WithFlags,
-      clocks: Option[Vector[Centis]]
   ): Root = {
-    val withClocks: Option[Vector[Centis]] = withFlags.clocks ?? clocks
-    shogi.Replay.gameMoveWhileValid(pgnMoves, initialFen.value, variant) match {
-      case (init, games, error) =>
-        error foreach logChessError(id)
-        val openingOf: OpeningOf =
-          if (withFlags.opening && Variant.openingSensibleVariants(variant)) FullOpeningDB.findByFen
-          else _ => None
-        val fen                 = Forsyth >> init
+    val withClocks: Option[Vector[Centis]] = withFlags.clocks ?? game.bothClockStates
+    shogi.Replay.gamesWhileValid(game.usis, game.initialSfen, game.variant) match {
+      case (gamesWithInit, error) =>
+        error foreach logShogiError(game.id)
+        val init                = gamesWithInit.head
+        val games               = gamesWithInit.tail
+        val sfen                = init.toSfen
         val infos: Vector[Info] = analysis.??(_.infos.toVector)
-        val advices: Map[Ply, Advice] = analysis.??(_.advices.view.map { a =>
-          a.ply -> a
-        }.toMap)
+        val advices: Map[Ply, Advice] = analysis.??(
+          _.advices.view
+            .map { a =>
+              a.ply -> a
+            }
+            .toMap
+        )
         val root = Root(
-          ply = init.turns,
-          fen = fen,
+          ply = init.plies,
+          sfen = sfen,
           check = init.situation.check,
-          opening = openingOf(FEN(fen)),
-          clock = withClocks.flatMap(_.headOption),
-          crazyData = init.situation.board.crazyData,
+          clock = withFlags.clocks ?? game.clock.map { c =>
+            Centis.ofSeconds(c.limitSeconds)
+          },
           eval = infos lift 0 map makeEval
         )
-        def makeBranch(index: Int, g: shogi.Game, m: Uci.WithSan) = {
-          val fen    = Forsyth >> g
+        def makeBranch(index: Int, g: shogi.Game, usi: Usi) = {
+          val sfen   = g.toSfen
           val info   = infos lift (index - 1)
-          val advice = advices get g.turns
+          val advice = advices get g.plies
           val branch = Branch(
-            id = UciCharPair(m.uci),
-            ply = g.turns,
-            move = m,
-            fen = fen,
+            id = UsiCharPair(usi, g.variant),
+            ply = g.plies,
+            usi = usi,
+            sfen = sfen,
             check = g.situation.check,
-            opening = openingOf(FEN(fen)),
-            clock = withClocks flatMap (_ lift (g.turns - init.turns - 1)),
-            crazyData = g.situation.board.crazyData,
+            clock = withClocks flatMap (_ lift (g.plies - init.plies - 1)),
             eval = info map makeEval,
             glyphs = Glyphs.fromList(advice.map(_.judgment.glyph).toList),
             comments = Node.Comments {
@@ -92,14 +72,13 @@ object TreeBuilder {
               }
             }
           )
-          advices.get(g.turns + 1).flatMap { adv =>
-            games.lift(index - 1).map { case (fromGame, _) =>
-              val fromFen = FEN(Forsyth >> fromGame)
-              withAnalysisChild(id, branch, variant, fromFen, openingOf)(adv.info)
+          advices.get(g.plies + 1).flatMap { adv =>
+            games.lift(index - 1).map { fromGame =>
+              withAnalysisChild(game.id, branch, game.variant, fromGame.toSfen)(adv.info)
             }
           } getOrElse branch
         }
-        games.zipWithIndex.reverse match {
+        games.zip(game.usis).zipWithIndex.reverse match {
           case Nil => root
           case ((g, m), i) :: rest =>
             root prependChild rest.foldLeft(makeBranch(i + 1, g, m)) { case (node, ((g, m), i)) =>
@@ -113,26 +92,25 @@ object TreeBuilder {
       id: String,
       root: Branch,
       variant: Variant,
-      fromFen: FEN,
-      openingOf: OpeningOf
+      fromSfen: Sfen
   )(info: Info): Branch = {
-    def makeBranch(g: shogi.Game, m: Uci.WithSan) = {
-      val fen = Forsyth >> g
+    def makeBranch(g: shogi.Game, usi: Usi) = {
+      val sfen = g.toSfen
       Branch(
-        id = UciCharPair(m.uci),
-        ply = g.turns,
-        move = m,
-        fen = fen,
+        id = UsiCharPair(usi, g.variant),
+        ply = g.plies,
+        usi = usi,
+        sfen = sfen,
         check = g.situation.check,
-        opening = openingOf(FEN(fen)),
-        crazyData = g.situation.board.crazyData,
         eval = none
       )
     }
-    shogi.Replay.gameMoveWhileValid(info.variation take 20, fromFen.value, variant) match {
-      case (_, games, error) =>
-        error foreach logChessError(id)
-        games.reverse match {
+    val variation = info.variation take 20
+    val usis      = ~(Usi.readList(variation).orElse(UciToUsi.readList(variation)))
+    shogi.Replay.gamesWhileValid(usis, fromSfen.some, variant) match {
+      case (games, error) =>
+        error foreach logShogiError(id)
+        games.tail.zip(usis).reverse match {
           case Nil => root
           case (g, m) :: rest =>
             root addChild rest
@@ -144,7 +122,7 @@ object TreeBuilder {
     }
   }
 
-  private val logChessError = (id: String) =>
+  private val logShogiError = (id: String) =>
     (err: String) =>
       logger.warn(s"round.TreeBuilder https://lishogi.org/$id ${err.linesIterator.toList.headOption}")
 }

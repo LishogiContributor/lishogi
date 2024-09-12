@@ -19,7 +19,11 @@ final class BoostingApi(
 
   private val variants = Set[variant.Variant](
     variant.Standard,
-    //variant.MiniShogi,
+    variant.Minishogi,
+    variant.Chushogi,
+    variant.Annanshogi,
+    variant.Kyotoshogi,
+    variant.Checkshogi
   )
 
   def getBoostingRecord(id: String): Fu[Option[BoostingRecord]] =
@@ -43,7 +47,7 @@ final class BoostingApi(
     if (
       game.rated
       && game.accountable
-      && game.playedTurns <= 10
+      && game.playedPlies <= game.variant.numberOfRanks
       && !game.isTournament
       && game.winnerColor.isDefined
       && variants.contains(game.variant)

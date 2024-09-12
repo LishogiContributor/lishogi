@@ -10,7 +10,7 @@ import controllers.routes
 object importGame {
 
   private def analyseHelp(implicit ctx: Context) =
-    ctx.isAnon option a(cls := "blue", href := routes.Auth.signup())(trans.youNeedAnAccountToDoThat())
+    ctx.isAnon option a(cls := "blue", href := routes.Auth.signup)(trans.youNeedAnAccountToDoThat())
 
   def apply(form: play.api.data.Form[_])(implicit ctx: Context) =
     views.html.base.layout(
@@ -19,41 +19,48 @@ object importGame {
       moreJs = jsTag("importer.js"),
       openGraph = lila.app.ui
         .OpenGraph(
-          title = "Paste PGN chess game",
-          url = s"$netBaseUrl${routes.Importer.importGame().url}",
-          description = trans.importGameKifuExplanation.txt()
+          title = trans.importGame.txt(),
+          url = s"$netBaseUrl${routes.Importer.importGame.url}",
+          description = trans.importGameKifCsaExplanation.txt()
         )
-        .some
+        .some,
+      withHrefLangs = lila.i18n.LangList.All.some
     ) {
       main(cls := "importer page-small box box-pad")(
         h1(trans.importGame()),
-        p(cls := "explanation")(trans.importGameKifuExplanation()),
-        postForm(cls := "form3 import", action := routes.Importer.sendGame())(
-          form3.group(form("pgn"), trans.pasteThePgnStringHere())(form3.textarea(_)()),
-          form("pgn").value flatMap { pgn =>
+        p(cls := "explanation")(trans.importGameKifCsaExplanation()),
+        postForm(cls := "form3 import", action := routes.Importer.sendGame)(
+          div(cls := "import-top")(
+            div(cls := "left")(
+              form3.group(form("notation"), trans.pasteTheKifCsaStringHere())(form3.textarea(_)())
+            ),
+            div(cls := "right")(
+              form3.group(form("notationFile"), raw("Or upload a KIF/CSA file"), klass = "upload") { f =>
+                form3.file.notation(f)
+              },
+              form3.checkbox(
+                form("analyse"),
+                trans.requestAComputerAnalysis(),
+                help = Some(analyseHelp),
+                disabled = ctx.isAnon
+              ),
+              form3.action(form3.submit(trans.importGame(), "/".some))
+            )
+          ),
+          form("notation").value.filterNot(_.isEmpty) flatMap { notation =>
             lila.importer
-              .ImportData(pgn, none)
+              .ImportData(notation, none)
               .preprocess(none)
               .fold(
                 err =>
                   frag(
-                    pre(cls := "error")(err.toList mkString "\n"),
+                    pre(cls := "error")(err),
                     br,
                     br
                   ).some,
                 _ => none
               )
-          },
-          form3.group(form("pgnFile"), raw("Or upload a PGN file"), klass = "upload") { f =>
-            form3.file.pgn(f.name)
-          },
-          form3.checkbox(
-            form("analyse"),
-            trans.requestAComputerAnalysis(),
-            help = Some(analyseHelp),
-            disabled = ctx.isAnon
-          ),
-          form3.action(form3.submit(trans.importGame(), "/".some))
+          }
         )
       )
     }

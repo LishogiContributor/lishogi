@@ -1,12 +1,13 @@
 package lila.tournament
 
+import shogi.format.forsyth.Sfen
 import org.joda.time.{ DateTime, Duration, Interval }
 import lila.common.ThreadLocalRandom
 import play.api.i18n.Lang
 import scala.util.chaining._
 
 import shogi.Clock.{ Config => ClockConfig }
-import shogi.{ Mode, Speed, StartingPosition }
+import shogi.{ Mode, Speed }
 import lila.common.Animal
 import lila.game.PerfPicker
 import lila.i18n.defaultLang
@@ -20,7 +21,7 @@ case class Tournament(
     clock: ClockConfig,
     minutes: Int,
     variant: shogi.variant.Variant,
-    position: StartingPosition,
+    position: Option[Sfen],
     mode: Mode,
     password: Option[String] = None,
     conditions: Condition.All,
@@ -105,6 +106,8 @@ case class Tournament(
       case _                                       => false
     }
 
+  def popular = nbPlayers > 3
+
   def speed = Speed(clock)
 
   def perfType: Option[PerfType] = PerfPicker.perfType(speed, variant, none)
@@ -136,7 +139,7 @@ case class Tournament(
 
   def nonLishogiCreatedBy = (createdBy != User.lishogiId) option createdBy
 
-  def ratingVariant = if (variant.fromPosition) shogi.variant.Standard else variant
+  def startingPosition = position.flatMap(sfen => Thematic.bySfen(sfen, variant))
 
   lazy val looksLikePrize = !isScheduled && lila.common.String.looksLikePrize(s"$name $description")
 
@@ -157,7 +160,7 @@ object Tournament {
       clock: ClockConfig,
       minutes: Int,
       variant: shogi.variant.Variant,
-      position: StartingPosition,
+      position: Option[Sfen],
       mode: Mode,
       password: Option[String],
       waitMinutes: Int,
@@ -170,10 +173,10 @@ object Tournament {
   ) =
     Tournament(
       id = makeId,
-      name = name | {
-        if (position.initial) Animal.randomName
-        else position.shortName
-      },
+      name = name | (position match {
+        case Some(pos) => Thematic.bySfen(pos, variant).fold("Custom position")(_.fullName)
+        case None      => Animal.randomName
+      }),
       status = Status.Created,
       clock = clock,
       minutes = minutes,

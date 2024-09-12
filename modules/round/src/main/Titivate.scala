@@ -9,6 +9,7 @@ import scala.concurrent.duration._
 import lila.common.LilaStream
 import lila.db.dsl._
 import lila.game.{ Game, GameRepo, Query }
+import lila.notify.{ Notification, NotifyApi, PausedGame }
 import lila.round.actorApi.round.{ Abandon, QuietFlag }
 
 /*
@@ -19,7 +20,8 @@ final private[round] class Titivate(
     tellRound: TellRound,
     gameRepo: GameRepo,
     bookmark: lila.hub.actors.Bookmark,
-    chatApi: lila.chat.ChatApi
+    chatApi: lila.chat.ChatApi,
+    notifyApi: NotifyApi
 )(implicit mat: akka.stream.Materializer)
     extends Actor {
 
@@ -28,14 +30,14 @@ final private[round] class Titivate(
   object Run
 
   override def preStart(): Unit = {
-    scheduleNext
+    scheduleNext()
     context setReceiveTimeout 30.seconds
   }
 
   implicit def ec = context.system.dispatcher
   def scheduler   = context.system.scheduler
 
-  def scheduleNext = scheduler.scheduleOnce(5 seconds, self, Run)
+  def scheduleNext(): Unit = scheduler.scheduleOnce(10 seconds, self, Run).unit
 
   def receive = {
     case ReceiveTimeout =>
@@ -44,7 +46,7 @@ final private[round] class Titivate(
       throw new RuntimeException(msg)
 
     case Run =>
-      gameRepo.count(_.checkable).flatMap { total =>
+      gameRepo.count(_.checkable) foreach { total =>
         lila.mon.round.titivate.total.record(total)
         gameRepo
           .docCursor(Query.checkable)
@@ -53,7 +55,7 @@ final private[round] class Titivate(
           .via(gameFlow)
           .toMat(LilaStream.sinkCount)(Keep.right)
           .run()
-          .addEffect(lila.mon.round.titivate.game.record(_))
+          .addEffect(lila.mon.round.titivate.game.record(_).unit)
           .>> {
             gameRepo
               .count(_.checkableOld)
@@ -61,7 +63,7 @@ final private[round] class Titivate(
           }
           .monSuccess(_.round.titivate.time)
           .logFailure(logBranch)
-          .addEffectAnyway(scheduleNext)
+          .addEffectAnyway(scheduleNext().unit)
       }
   }
 
@@ -86,7 +88,20 @@ final private[round] class Titivate(
     case Right(game) =>
       game match {
 
-        case game if game.finished || game.isPgnImport || game.playedThenAborted =>
+        case game if game.paused =>
+          gameRepo.unsetCheckAt(game.id) >> notifyApi.addNotifications(
+            game.userIds map { userId =>
+              Notification.make(
+                Notification.Notifies(userId),
+                PausedGame(
+                  PausedGame.GameId(game.id),
+                  game.userIds.find(_ != userId).map(PausedGame.OpponentId)
+                )
+              )
+            }
+          )
+
+        case game if game.finished || game.isNotationImport || game.playedThenAborted =>
           gameRepo unsetCheckAt game.id
 
         case game if game.outoftime(withGrace = true) =>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="textualRepresentation">Textual representation</string>
+  <string name="gameInfo">Game info</string>
+  <string name="pieces">駒</string>
+  <string name="board">将棋盤</string>
+  <string name="hands">駒台</string>
+  <string name="none" comment="No pieces in hand">ない</string>
+  <string name="moves" comment="Followed by list of moves">総手数</string>
+  <string name="currentPosition">現在の局面</string>
+  <string name="moveForm">手のフォーム</string>
+  <string name="commandInput">指令入力</string>
+  <string name="commands">Commands</string>
+  <string name="useArrowKeys">Use arrow keys to navigate in the game</string>
+</resources>

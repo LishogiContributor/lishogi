@@ -12,53 +12,73 @@ private object bits {
 
   val prefix = "sf_"
 
-  def fenInput(form: Form[_], strict: Boolean, validFen: Option[lila.setup.ValidFen])(implicit
+  def sfenInput(form: Form[_], strict: Boolean, validSfen: Option[lila.setup.ValidSfen])(implicit
       ctx: Context
   ) = {
-    val handicapChoices: List[SelectChoice] =
+    val positionChoices: List[SelectChoice] =
       List(
-        ("", trans.selectHandicap.txt(), None),
-        (shogi.StartingPosition.initial.fen, "平手 - Even", Some("default"))
-      ) ++
-        shogi.StartingPosition.categories(0).positions.map { v =>
-          (v.fen, v.fullName, None)
-        }
-    val url = form("fen").value.fold(routes.Editor.index())(routes.Editor.load).url
-    div(cls := "fen_position optional_config")(
-      frag(
-        div(cls := "handicap label_select")(
-          renderLabel(form("handicap"), trans.handicap.txt()),
-          renderSelect(form("handicap"), handicapChoices, (a, b) => a == "default"),
-          a(
-            cls := "button button-empty",
-            dataIcon := "",
-            title := trans.handicap.txt(),
-            target := "_blank",
-            href := "https://en.wikipedia.org/wiki/Handicap_(shogi)"
-          )
-        ),
-        div(
-          cls := "fen_form",
-          dataValidateUrl := s"""${routes.Setup.validateFen()}${strict.??("?strict=1")}"""
-        )(
-          form3.input(form("fen"))(st.placeholder := trans.pasteTheFenStringHere.txt()),
-          a(cls := "button button-empty", dataIcon := "m", title := trans.boardEditor.txt(), href := url)
-        ),
-        a(cls := "board_editor", href := url)(
-          span(cls := "preview")(
-            validFen.map { vf =>
-              div(
-                cls := "mini-board cg-wrap parse-fen is2d",
-                dataColor := vf.color.name,
-                dataFen := vf.fen.value,
-                dataResizable := "1"
-              )(cgWrapContent)
-            }
+        ("default", trans.default.txt(), None),
+        ("fromPosition", trans.fromPosition.txt(), None)
+      )
+    val variant = form("variant").value.flatMap(shogi.variant.Variant(_)) | shogi.variant.Standard
+    val url = form("sfen").value
+      .fold(routes.Editor.index)(sfen => routes.Editor.parseArg(s"${variant.key}/$sfen"))
+      .url
+    if (ctx.blind)
+      div(
+        cls             := "sfen_form",
+        dataValidateUrl := s"""${routes.Setup.validateSfen}${strict.??("?strict=1")}"""
+      )(
+        renderLabel(form("sfen"), "SFEN"),
+        renderSfenInput(form("sfen"))(st.placeholder := trans.default.txt())
+      )
+    else
+      div(cls := "sfen_position optional_config")(
+        renderRadios(form("position"), positionChoices),
+        div(cls := "sfen_position_wrap")(
+          div(cls := "handicap label_select")(
+            renderLabel(form("handicap"), trans.handicap.txt()),
+            renderSelect(form("handicap"), Nil),
+            a(
+              cls      := "button button-empty",
+              dataIcon := "",
+              title    := trans.handicap.txt(),
+              target   := "_blank",
+              href     := "https://en.wikipedia.org/wiki/Handicap_(shogi)"
+            )
+          ),
+          div(
+            cls             := "sfen_form",
+            dataValidateUrl := s"""${routes.Setup.validateSfen}${strict.??("?strict=1")}"""
+          )(
+            renderLabel(form("sfen"), "SFEN"),
+            renderSfenInput(form("sfen"))(st.placeholder := trans.pasteTheSfenStringHere.txt()),
+            a(cls := "button button-empty", dataIcon := "m", title := trans.boardEditor.txt(), href := url)
+          ),
+          a(cls := "board_editor", href := url)(
+            span(cls := "preview")(
+              validSfen.map { vf =>
+                div(
+                  cls           := s"mini-board parse-sfen ${variantClass(vf.situation.variant)}",
+                  dataColor     := vf.color.name,
+                  dataSfen      := vf.sfen.value,
+                  dataVariant   := vf.situation.variant.key,
+                  dataResizable := "1"
+                )(div(cls       := "sg-wrap"))
+              }
+            )
           )
         )
       )
-    )
   }
+
+  def renderSfenInput(field: Field) =
+    input(
+      `type`  := "text",
+      cls     := "form-control",
+      id      := s"$prefix${field.id}",
+      st.name := field.name
+    )
 
   def renderVariant(form: Form[_], variants: List[SelectChoice])(implicit ctx: Context) =
     div(cls := "variant label_select")(
@@ -91,14 +111,14 @@ private object bits {
       options.map { case (key, name, hint) =>
         div(
           input(
-            `type` := "radio",
-            id := s"$prefix${field.id}_${key}",
+            `type`  := "radio",
+            id      := s"$prefix${field.id}_${key}",
             st.name := field.name,
-            value := key,
+            value   := key,
             field.value.has(key) option checked
           ),
           label(
-            cls := "required",
+            cls   := "required",
             title := hint,
             `for` := s"$prefix${field.id}_$key"
           )(name)
@@ -116,7 +136,10 @@ private object bits {
     div(cls := "time_mode_config optional_config")(
       div(cls := "label_select")(
         renderLabel(form("timeMode"), trans.timeControl()),
-        renderSelect(form("timeMode"), translatedTimeModeChoices)
+        renderSelect(
+          form("timeMode"),
+          if (ctx.isAuth) translatedTimeModeChoices else anonTranslatedTimeModeChoices
+        )
       ),
       if (ctx.blind)
         frag(
@@ -128,7 +151,10 @@ private object bits {
             renderLabel(form("byoyomi"), trans.byoyomiInSeconds()),
             renderSelect(form("byoyomi"), clockByoyomiChoices)
           ),
-          renderRadios(form("periods"), periodsChoices),
+          div(cls := "periods")(
+            renderLabel(form("periods"), trans.periods()),
+            renderSelect(form("periods"), periodsChoices)
+          ),
           div(cls := "increment_choice")(
             renderLabel(form("increment"), trans.incrementInSeconds()),
             renderSelect(form("increment"), clockIncrementChoices)
@@ -150,14 +176,12 @@ private object bits {
             span(form("byoyomi").value),
             renderInput(form("byoyomi"))
           ),
-          raw("""<a class="advanced_toggle"></a>"""),
-          div(cls := "advanced_setup hidden")(
-            frag(
-              div(cls := "periods buttons")(
-                trans.periods(),
-                div(id := "config_periods")(
-                  renderRadios(form("periods"), periodsChoices)
-                )
+          div(cls := "advanced_toggle"),
+          div(cls := "advanced_setup")(
+            div(cls := "periods buttons")(
+              trans.periods(),
+              div(id := "config_periods")(
+                renderRadios(form("periods"), periodsChoices)
               )
             ),
             div(cls := "increment_choice slider")(
@@ -172,7 +196,7 @@ private object bits {
         if (ctx.blind)
           div(cls := "days_choice")(
             renderLabel(form("days"), trans.daysPerTurn()),
-            renderSelect(form("days"), corresDaysChoices)
+            renderSelect(form("days"), translatedCorresDaysChoices)
           )
         else
           div(cls := "days_choice slider")(
@@ -183,9 +207,6 @@ private object bits {
           )
       )
     )
-
-  val dataRandomColorVariants =
-    attr("data-random-color-variants") := lila.game.Game.variantsWhereSenteIsBetter.map(_.id).mkString(",")
 
   val dataAnon        = attr("data-anon")
   val dataMin         = attr("data-min")

@@ -4,27 +4,23 @@ import play.api.i18n.Lang
 import play.api.libs.json._
 
 import lila.common.Json.jodaWrites
+import lila.game.FairyConversion.Kyoto
 import lila.game.JsonView._
-import lila.game.{ Game, GameRepo, Pov }
+import lila.game.{ Game, Pov }
 
 final class BotJsonView(
     lightUserApi: lila.user.LightUserApi,
-    gameRepo: GameRepo,
     rematches: lila.game.Rematches
-)(implicit ec: scala.concurrent.ExecutionContext) {
+) {
 
-  def gameFull(game: Game)(implicit lang: Lang): Fu[JsObject] = gameRepo.withInitialFen(game) flatMap gameFull
+  def gameFull(game: Game)(implicit lang: Lang): JsObject =
+    gameImmutable(game) ++ Json.obj(
+      "type"  -> "gameFull",
+      "state" -> gameState(game)
+    )
 
-  def gameFull(wf: Game.WithInitialFen)(implicit lang: Lang): Fu[JsObject] =
-    gameState(wf) map { state =>
-      gameImmutable(wf) ++ Json.obj(
-        "type"  -> "gameFull",
-        "state" -> state
-      )
-    }
-
-  def gameImmutable(wf: Game.WithInitialFen)(implicit lang: Lang): JsObject = {
-    import wf._
+  // Everything marked backwards will be removed soon
+  def gameImmutable(game: Game)(implicit lang: Lang): JsObject = {
     Json
       .obj(
         "id"      -> game.id,
@@ -34,36 +30,44 @@ final class BotJsonView(
         "perf" -> game.perfType.map { p =>
           Json.obj("name" -> p.trans)
         },
-        "rated"      -> game.rated,
-        "createdAt"  -> game.createdAt,
-        "sente"      -> playerJson(game.sentePov),
-        "white"      -> playerJson(game.sentePov), // backwards support
-        "gote"       -> playerJson(game.gotePov),
-        "black"      -> playerJson(game.gotePov), // backwards support
-        "initialFen" -> fen.fold("startpos")(_.value)
+        "rated"       -> game.rated,
+        "createdAt"   -> game.createdAt,
+        "sente"       -> playerJson(game.sentePov),
+        "white"       -> playerJson(game.sentePov),                 // backwards support
+        "gote"        -> playerJson(game.gotePov),
+        "black"       -> playerJson(game.gotePov),                  // backwards support
+        "initialSfen" -> game.initialSfen.fold("startpos")(_.value),
+        "initialFen"  -> game.initialSfen.fold("startpos")(_.value) // backwards support
+      )
+      .add(
+        "fairyInitialSfen" -> (game.variant.kyotoshogi option game.initialSfen.fold("startpos")(sfen =>
+          Kyoto.makeFairySfen(sfen).value
+        ))
       )
       .add("tournamentId" -> game.tournamentId)
   }
 
-  def gameState(wf: Game.WithInitialFen): Fu[JsObject] = {
-    import wf._
-    shogi.format.UciDump(game.pgnMoves, fen.map(_.value), game.variant).future map { uciMoves =>
-      Json
-        .obj(
-          "type"   -> "gameState",
-          "moves"  -> uciMoves.mkString(" "),
-          "btime"  -> millisOf(game.sentePov),
-          "wtime"  -> millisOf(game.gotePov),
-          "binc"   -> game.clock.??(_.config.increment.millis),
-          "winc"   -> game.clock.??(_.config.increment.millis),
-          "byo"    -> game.clock.??(_.config.byoyomi.millis),
-          "sdraw"  -> game.sentePlayer.isOfferingDraw,
-          "gdraw"  -> game.gotePlayer.isOfferingDraw,
-          "status" -> game.status.name
-        )
-        .add("winner" -> game.winnerColor)
-        .add("rematch" -> rematches.of(game.id))
-    }
+  def gameState(game: Game): JsObject = {
+    Json
+      .obj(
+        "type"   -> "gameState",
+        "moves"  -> game.usis.map(_.usi).mkString(" "),
+        "btime"  -> millisOf(game.sentePov),
+        "wtime"  -> millisOf(game.gotePov),
+        "binc"   -> game.clock.??(_.config.increment.millis),
+        "winc"   -> game.clock.??(_.config.increment.millis),
+        "byo"    -> game.clock.??(_.config.byoyomi.millis),
+        "sdraw"  -> game.sentePlayer.isOfferingDraw,
+        "gdraw"  -> game.gotePlayer.isOfferingDraw,
+        "status" -> game.status.name
+      )
+      .add(
+        "fairyMoves" -> (game.variant.kyotoshogi option Kyoto
+          .makeFairyUsiList(game.usis, game.initialSfen)
+          .mkString(" "))
+      )
+      .add("winner" -> game.winnerColor)
+      .add("rematch" -> rematches.of(game.id))
   }
 
   def chatLine(username: String, text: String, player: Boolean) =
@@ -88,7 +92,7 @@ final class BotJsonView(
 
   private def millisOf(pov: Pov): Int =
     pov.game.clock
-      .map(_.remainingTime(pov.color).millis.toInt)
+      .map(_.currentClockFor(pov.color).time.millis.toInt)
       .orElse(pov.game.correspondenceClock.map(_.remainingTime(pov.color).toInt * 1000))
       .getOrElse(Int.MaxValue)
 
@@ -97,7 +101,7 @@ final class BotJsonView(
       "initial"   -> c.limit.millis,
       "increment" -> c.increment.millis,
       "byoyomi"   -> c.byoyomi.millis,
-      "periods"   -> c.periods
+      "periods"   -> c.periodsTotal
     )
   }
 }

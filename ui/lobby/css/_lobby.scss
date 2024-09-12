@@ -32,9 +32,21 @@ body {
   }
 }
 
+.lobby__tv,
+.lobby__puzzle {
+  @extend %box-neat;
+  background: $c-bg-box;
+}
+
 .lobby__side {
   @extend %flex-column;
   overflow: hidden;
+  @include breakpoint($mq-col2) {
+    overflow: visible;
+  }
+  @include breakpoint($mq-col3) {
+    overflow: hidden;
+  }
 }
 
 .lobby__nope {
@@ -57,11 +69,38 @@ body {
   }
 }
 
+.lobby__studies .studies {
+  td.text {
+    text-align: right;
+    padding-right: 2rem;
+    opacity: 0.8;
+  }
+}
+
+.lobby__tournaments .tournaments {
+  td.text {
+    opacity: 0.8;
+  }
+}
+
+.lobby__description {
+  .lobby__box__content {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    p {
+      line-height: 1.5;
+      margin: 0.5rem 0.75rem;
+    }
+  }
+}
+
 .game-setup {
   display: none;
 }
 .about-side {
   margin-top: $block-gap;
+  margin-bottom: $block-gap;
 }
 @include breakpoint($mq-not-col3) {
   .about-side,

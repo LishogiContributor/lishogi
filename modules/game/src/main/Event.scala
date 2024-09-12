@@ -2,20 +2,12 @@ package lila.game
 
 import play.api.libs.json._
 
-import shogi.{
-  Centis,
-  Pos,
-  Color,
-  Situation,
-  Data,
-  Move => ShogiMove,
-  Drop => ShogiDrop,
-  Clock => ShogiClock,
-  Status
-}
+import shogi.{ Centis, Clock => ShogiClock, Color, Situation, Status }
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.Usi
 import JsonView._
 import lila.chat.{ PlayerLine, UserLine }
-import lila.common.ApiVersion
+import lila.common.Json._
 
 sealed trait Event {
   def typ: String
@@ -37,163 +29,42 @@ object Event {
     def typ = "start"
   }
 
-  object MoveOrDrop {
-
-    def data(
-        fen: String,
-        check: Boolean,
-        threefold: Boolean,
-        state: State,
-        clock: Option[ClockEvent],
-        possibleMoves: Map[Pos, List[Pos]],
-        possibleDrops: Option[List[Pos]],
-        crazyData: Option[Data]
-    )(extra: JsObject) = {
-      extra ++ Json
-        .obj(
-          "fen"   -> fen,
-          "ply"   -> state.turns,
-          "dests" -> PossibleMoves.oldJson(possibleMoves)
-        )
-        .add("clock" -> clock.map(_.data))
-        .add("status" -> state.status)
-        .add("winner" -> state.winner)
-        .add("check" -> check)
-        .add("threefold" -> threefold)
-        .add("sDraw" -> state.senteOffersDraw)
-        .add("gDraw" -> state.goteOffersDraw)
-        .add("crazyhouse" -> crazyData)
-        .add("drops" -> possibleDrops.map { squares =>
-          JsString(squares.map(_.key).mkString)
-        })
-    }
-  }
-
-  case class Move(
-      orig: Pos,
-      dest: Pos,
-      san: String,
-      fen: String,
+  case class UsiEvent(
+      usi: Usi,
+      sfen: Sfen,
       check: Boolean,
-      threefold: Boolean,
-      promotion: Boolean,
       state: State,
-      clock: Option[ClockEvent],
-      possibleMoves: Map[Pos, List[Pos]],
-      possibleDrops: Option[List[Pos]],
-      crazyData: Option[Data]
+      clock: Option[ClockEvent]
   ) extends Event {
-    val promS = { if (promotion) "+" else "" }
-    def typ = "move"
-    def data = {
-      MoveOrDrop.data(fen, check, threefold, state, clock, possibleMoves, possibleDrops, crazyData) {
-        Json
-          .obj(
-            "uci" -> s"${orig.key}${dest.key}$promS",
-            "san" -> san
-          )
-          .add("promotion" -> promotion)
-      }
-    }
+    def typ = "usi"
+    def data = Json
+      .obj(
+        "usi"  -> usi.usi,
+        "sfen" -> sfen,
+        "ply"  -> state.plies
+      )
+      .add("clock" -> clock.map(_.data))
+      .add("status" -> state.status)
+      .add("winner" -> state.winner)
+      .add("check" -> check)
+
     override def moveBy = Some(!state.color)
   }
-  object Move {
+
+  object UsiEvent {
     def apply(
-        move: ShogiMove,
+        usi: Usi,
         situation: Situation,
         state: State,
-        clock: Option[ClockEvent],
-        crazyData: Option[Data]
-    ): Move =
-      Move(
-        orig = move.orig,
-        dest = move.dest,
-        san = shogi.format.pgn.Dumper(move),
-        fen = shogi.format.Forsyth.exportSituation(situation),
+        clock: Option[ClockEvent]
+    ): UsiEvent =
+      UsiEvent(
+        usi = usi,
+        sfen = situation.toSfen,
         check = situation.check,
-        threefold = situation.fourfoldRepetition,
-        promotion = move.promotion,
         state = state,
-        clock = clock,
-        possibleMoves = situation.destinations,
-        possibleDrops = situation.drops,
-        crazyData = crazyData
+        clock = clock
       )
-  }
-
-  case class Drop(
-      role: shogi.Role,
-      pos: Pos,
-      san: String,
-      fen: String,
-      check: Boolean,
-      threefold: Boolean,
-      state: State,
-      clock: Option[ClockEvent],
-      possibleMoves: Map[Pos, List[Pos]],
-      crazyData: Option[Data],
-      possibleDrops: Option[List[Pos]]
-  ) extends Event {
-    def typ = "drop"
-    def data =
-      MoveOrDrop.data(fen, check, threefold, state, clock, possibleMoves, possibleDrops, crazyData) {
-        Json.obj(
-          "role" -> role.name,
-          "uci"  -> s"${role.pgn}*${pos.key}",
-          "san"  -> san
-        )
-      }
-    override def moveBy = Some(!state.color)
-  }
-  object Drop {
-    def apply(
-        drop: ShogiDrop,
-        situation: Situation,
-        state: State,
-        clock: Option[ClockEvent],
-        crazyData: Option[Data]
-    ): Drop =
-      Drop(
-        role = drop.piece.role,
-        pos = drop.pos,
-        san = shogi.format.pgn.Dumper(drop),
-        fen = shogi.format.Forsyth.exportSituation(situation),
-        check = situation.check,
-        threefold = situation.fourfoldRepetition,
-        state = state,
-        clock = clock,
-        possibleMoves = situation.destinations,
-        possibleDrops = situation.drops,
-        crazyData = crazyData
-      )
-  }
-
-  object PossibleMoves {
-
-    def json(moves: Map[Pos, List[Pos]], apiVersion: ApiVersion) =
-      if (apiVersion gte 4) newJson(moves)
-      else oldJson(moves)
-
-    def newJson(moves: Map[Pos, List[Pos]]) =
-      if (moves.isEmpty) JsNull
-      else {
-        val sb    = new java.lang.StringBuilder(128)
-        var first = true
-        moves foreach { case (orig, dests) =>
-          if (first) first = false
-          else sb append " "
-          sb append orig.key
-          dests foreach { sb append _.key }
-        }
-        JsString(sb.toString)
-      }
-
-    def oldJson(moves: Map[Pos, List[Pos]]) =
-      if (moves.isEmpty) JsNull
-      else
-        moves.foldLeft(JsObject(Nil)) { case (res, (o, d)) =>
-          res + (o.key -> JsString(d map (_.key) mkString))
-        }
   }
 
   case class RedirectOwner(
@@ -227,12 +98,6 @@ object Event {
     override def owner   = !w
   }
 
-  // for mobile app BC only
-  case class End(winner: Option[Color]) extends Event {
-    def typ  = "end"
-    def data = Json.toJson(winner)
-  }
-
   case class EndData(game: Game, ratingDiff: Option[RatingDiffs]) extends Event {
     def typ = "endData"
     def data =
@@ -242,11 +107,13 @@ object Event {
           "status" -> game.status
         )
         .add("clock" -> game.clock.map { c =>
+          val senteClock = c currentClockFor Color.Sente
+          val goteClock  = c currentClockFor Color.Gote
           Json.obj(
-            "sc" -> c.remainingTime(Color.Sente).centis,
-            "gc" -> c.remainingTime(Color.Gote).centis,
-            "sp" -> c.curPeriod(Color.Sente),
-            "gp" -> c.curPeriod(Color.Gote)
+            "sc" -> senteClock.time.centis,
+            "gc" -> goteClock.time.centis,
+            "sp" -> senteClock.periods,
+            "gp" -> goteClock.periods
           )
         })
         .add("ratingDiff" -> ratingDiff.map { rds =>
@@ -317,14 +184,17 @@ object Event {
         .add("lag" -> nextLagComp.collect { case Centis(c) if c > 1 => c })
   }
   object Clock {
-    def apply(clock: ShogiClock): Clock =
+    def apply(clock: ShogiClock): Clock = {
+      val senteClock = clock currentClockFor Color.Sente
+      val goteClock  = clock currentClockFor Color.Gote
       Clock(
-        sente = clock remainingTime Color.Sente,
-        gote = clock remainingTime Color.Gote,
-        sPer = clock curPeriod Color.Sente,
-        gPer = clock curPeriod Color.Gote,
+        sente = senteClock.time,
+        gote = goteClock.time,
+        sPer = senteClock.periods,
+        gPer = goteClock.periods,
         nextLagComp = clock lagCompEstimate clock.color
       )
+    }
   }
 
   case class Berserk(color: Color) extends Event {
@@ -341,34 +211,21 @@ object Event {
       CorrespondenceClock(clock.senteTime, clock.goteTime)
   }
 
-  case class CheckCount(sente: Int, gote: Int) extends Event {
-    def typ = "checkCount"
-    def data =
-      Json.obj(
-        "sente" -> sente,
-        "gote"  -> gote
-      )
-  }
-
   case class State(
       color: Color,
-      turns: Int,
+      plies: Int,
       status: Option[Status],
-      winner: Option[Color],
-      senteOffersDraw: Boolean,
-      goteOffersDraw: Boolean
+      winner: Option[Color]
   ) extends Event {
     def typ = "state"
     def data =
       Json
         .obj(
           "color" -> color,
-          "turns" -> turns
+          "plies" -> plies
         )
         .add("status" -> status)
         .add("winner" -> winner)
-        .add("sDraw" -> senteOffersDraw)
-        .add("gDraw" -> goteOffersDraw)
   }
 
   case class TakebackOffers(
@@ -381,6 +238,18 @@ object Event {
         .obj()
         .add("sente" -> sente)
         .add("gote" -> gote)
+    override def owner = true
+  }
+
+  case class PauseOffer(by: Option[Color]) extends Event {
+    def typ            = "reload"
+    def data           = reloadOr("pauseOffer", by)
+    override def owner = true
+  }
+
+  case class ResumeOffer(by: Option[Color]) extends Event {
+    def typ            = "reload"
+    def data           = reloadOr("resumeOffer", by)
     override def owner = true
   }
 

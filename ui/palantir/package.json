@@ -3,10 +3,8 @@
   "version": "2.0.0",
   "private": true,
   "description": "lishogi.org webrtc media calls",
-  "main": "dist/main.js",
-  "types": "dist/main",
   "keywords": [
-    "chess",
+    "shogi",
     "lishogi",
     "webrtc"
   ],
@@ -14,10 +12,10 @@
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
     "@build/rollupProject": "2.0.0",
-    "@types/lishogi": "2.0.0"
-  },
-  "dependencies": {
-    "@types/webrtc": "^0.0.26"
+    "@types/lishogi": "2.0.0",
+    "@types/webrtc": "^0.0.32",
+    "rollup": "^2",
+    "typescript": "^5"
   },
   "scripts": {
     "dev": "rollup --config",

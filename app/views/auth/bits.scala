@@ -47,7 +47,7 @@ object bits {
           },
           trans.passwordReset()
         ),
-        postForm(cls := "form3", action := routes.Auth.passwordResetApply())(
+        postForm(cls := "form3", action := routes.Auth.passwordResetApply)(
           form3.group(form("email"), trans.email())(form3.input(_, typ = "email")(autofocus)),
           views.html.base.captcha(form, captcha),
           form3.action(form3.submit(trans.emailMeALink()))
@@ -102,7 +102,7 @@ object bits {
       ctx: Context
   ) =
     views.html.base.layout(
-      title = "Log in by email",
+      title = trans.loginByEmail.txt(),
       moreCss = cssTag("auth"),
       moreJs = captchaTag
     ) {
@@ -111,10 +111,10 @@ object bits {
           ok.map { r =>
             span(cls := (if (r) "is-green" else "is-red"), dataIcon := (if (r) "E" else "L"))
           },
-          "Log in by email"
+          trans.loginByEmail()
         ),
         p("We will send you an email containing a link to log you in."),
-        postForm(cls := "form3", action := routes.Auth.magicLinkApply())(
+        postForm(cls := "form3", action := routes.Auth.magicLinkApply)(
           form3.group(form("email"), trans.email())(
             form3.input(_, typ = "email")(autofocus, autocomplete := "email")
           ),
@@ -126,7 +126,7 @@ object bits {
 
   def magicLinkSent(implicit ctx: Context) =
     views.html.base.layout(
-      title = "Log in by email"
+      title = trans.loginByEmail.txt()
     ) {
       main(cls := "page-small box box-pad")(
         h1(cls := "is-green text", dataIcon := "E")(trans.checkYourEmail()),
@@ -164,7 +164,7 @@ body { margin-top: 45px; }
 """),
       div(id := "email-confirm")(
         s"Almost there, ${userEmail.username}! Now check your email (${userEmail.email.conceal}) for signup confirmation.",
-        a(href := routes.Auth.checkYourEmail())("Click here for help")
+        a(href := routes.Auth.checkYourEmail)("Click here for help")
       )
     )
 

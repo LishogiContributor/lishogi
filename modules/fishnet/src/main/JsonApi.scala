@@ -3,10 +3,13 @@ package lila.fishnet
 import org.joda.time.DateTime
 import play.api.libs.json._
 
-import shogi.format.{ FEN, Uci }
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.{ UciToUsi, Usi }
 import shogi.variant.Variant
 
 import lila.common.{ IpAddress, Maths }
+import lila.common.Json._
+import lila.game.FairyConversion.Kyoto
 import lila.fishnet.{ Work => W }
 import lila.tree.Eval.JsonHandlers._
 import lila.tree.Eval.{ Cp, Mate }
@@ -14,15 +17,17 @@ import lila.tree.Eval.{ Cp, Mate }
 object JsonApi {
 
   sealed trait Request {
-    val fishnet: Request.Fishnet
-    val stockfish: Request.Engine
+    val shoginet: Request.Fishnet
+    val yaneuraou: Request.Engine
+    val fairy: Request.Engine
 
     def instance(ip: IpAddress) =
       Client.Instance(
-        fishnet.version,
-        fishnet.python | Client.Python(""),
+        shoginet.version,
+        shoginet.python | Client.Python(""),
         Client.Engines(
-          stockfish = Client.Engine(stockfish.name)
+          yaneuraou = Client.Engine(yaneuraou.name),
+          fairy = Client.Engine(fairy.name)
         ),
         ip,
         DateTime.now
@@ -59,36 +64,44 @@ object JsonApi {
     }
 
     case class Acquire(
-        fishnet: Fishnet,
-        stockfish: BaseEngine
+        shoginet: Fishnet,
+        yaneuraou: BaseEngine,
+        fairy: BaseEngine
     ) extends Request
 
     case class PostMove(
-        fishnet: Fishnet,
-        stockfish: FullEngine,
+        shoginet: Fishnet,
+        yaneuraou: FullEngine,
+        fairy: FullEngine,
         move: MoveResult
     ) extends Request
         with Result {}
 
     case class MoveResult(bestmove: String) {
-      def uci: Option[Uci] = Uci(bestmove)
+      def usi(variant: Variant): Option[Usi] = {
+        if (variant.kyotoshogi) Kyoto.readFairyUsi(bestmove)
+        else Usi(bestmove).orElse(UciToUsi(bestmove))
+      }
     }
 
     case class PostAnalysis(
-        fishnet: Fishnet,
-        stockfish: FullEngine,
+        shoginet: Fishnet,
+        yaneuraou: FullEngine,
+        fairy: FullEngine,
         analysis: List[Option[Evaluation.OrSkipped]]
     ) extends Request
         with Result {
 
       def completeOrPartial =
-        if (analysis.headOption.??(_.isDefined)) CompleteAnalysis(fishnet, stockfish, analysis.flatten)
-        else PartialAnalysis(fishnet, stockfish, analysis)
+        if (analysis.headOption.??(_.isDefined))
+          CompleteAnalysis(shoginet, yaneuraou, fairy, analysis.flatten)
+        else PartialAnalysis(shoginet, yaneuraou, fairy, analysis)
     }
 
     case class CompleteAnalysis(
-        fishnet: Fishnet,
-        stockfish: FullEngine,
+        shoginet: Fishnet,
+        yaneuraou: FullEngine,
+        fairy: FullEngine,
         analysis: List[Evaluation.OrSkipped]
     ) {
 
@@ -102,18 +115,17 @@ object JsonApi {
             .flatMap(_.nodes)
         }
 
-      def strong = medianNodes.fold(true)(_ > Evaluation.acceptableNodes)
-      def weak   = !strong
     }
 
     case class PartialAnalysis(
-        fishnet: Fishnet,
-        stockfish: FullEngine,
+        shoginet: Fishnet,
+        yaneuraou: FullEngine,
+        fairy: FullEngine,
         analysis: List[Option[Evaluation.OrSkipped]]
     )
 
     case class Evaluation(
-        pv: List[Uci],
+        pv: List[Usi],
         score: Evaluation.Score,
         time: Option[Int],
         nodes: Option[Int],
@@ -142,54 +154,108 @@ object JsonApi {
 
       val npsCeil = 10 * 1000 * 1000
 
-      val desiredNodes    = 3 * 1000 * 1000
-      val acceptableNodes = desiredNodes * 0.8
     }
+
+    case class PostPuzzle(
+        shoginet: Fishnet,
+        yaneuraou: FullEngine,
+        fairy: FullEngine,
+        result: Boolean
+    ) extends Request
+        with Result {}
+
+    case class PostPuzzleVerified(
+        shoginet: Fishnet,
+        yaneuraou: FullEngine,
+        fairy: FullEngine,
+        result: Option[CompletedPuzzle]
+    ) extends Request
+        with Result {}
+
+    case class CompletedPuzzle(
+        sfen: Sfen,
+        line: List[Usi],
+        ambiguousPromotions: List[Int],
+        themes: List[String]
+    )
   }
 
   case class Game(
       game_id: String,
-      position: FEN,
+      position: Sfen,
       variant: Variant,
       moves: String
   )
 
   def fromGame(g: W.Game) =
+    if (g.variant.kyotoshogi) kyotoFromGame(g)
+    else
+      Game(
+        game_id = if (g.studyId.isDefined) "" else g.id,
+        position = g.initialSfen | g.variant.initialSfen,
+        variant = g.variant,
+        moves = g.moves
+      )
+
+  private def kyotoFromGame(g: W.Game) =
     Game(
       game_id = if (g.studyId.isDefined) "" else g.id,
-      position = g.initialFen | FEN(g.variant.initialFen),
+      position = Kyoto.makeFairySfen(g.initialSfen | g.variant.initialSfen),
       variant = g.variant,
-      moves = g.moves
+      moves = Kyoto.makeFairyUsiList(g.usiList, g.initialSfen).mkString(" ")
     )
 
   sealed trait Work {
     val id: String
     val game: Game
+    val engine: String
   }
 
   case class Move(
       id: String,
       level: Int,
       game: Game,
+      engine: String,
       clock: Option[Work.Clock]
   ) extends Work
 
   def moveFromWork(m: Work.Move) =
-    Move(m.id.value, m.level, fromGame(m.game), m.clock)
+    Move(
+      id = m.id.value,
+      level = m.level,
+      game = fromGame(m.game),
+      engine = m.engine,
+      clock = m.clock
+    )
 
   case class Analysis(
       id: String,
       game: Game,
+      engine: String,
       nodes: Int,
       skipPositions: List[Int]
   ) extends Work
 
-  def analysisFromWork(nodes: Int)(m: Work.Analysis) =
+  def analysisFromWork(nodes: Int)(a: Work.Analysis) =
     Analysis(
-      id = m.id.value,
-      game = fromGame(m.game),
+      id = a.id.value,
+      game = fromGame(a.game),
+      engine = a.engine,
       nodes = nodes,
-      skipPositions = m.skipPositions
+      skipPositions = a.skipPositions
+    )
+
+  case class Puzzle(
+      id: String,
+      game: Game,
+      engine: String
+  ) extends Work
+
+  def puzzleFromWork(p: Work.Puzzle) =
+    Puzzle(
+      id = p.id.value,
+      game = fromGame(p.game),
+      engine = p.engine
     )
 
   object readers {
@@ -205,12 +271,12 @@ object JsonApi {
     implicit val MoveResultReads    = Json.reads[Request.MoveResult]
     implicit val PostMoveReads      = Json.reads[Request.PostMove]
     implicit val ScoreReads         = Json.reads[Request.Evaluation.Score]
-    implicit val uciListReads = Reads.of[String] map { str =>
-      ~Uci.readList(str)
+    implicit val usiListReads = Reads.of[String] map { str =>
+      ~(Usi.readList(str).orElse(UciToUsi.readList(str)).orElse(Kyoto.readFairyUsiList(str)))
     }
 
     implicit val EvaluationReads: Reads[Request.Evaluation] = (
-      (__ \ "pv").readNullable[List[Uci]].map(~_) and
+      (__ \ "pv").readNullable[List[Usi]].map(~_) and
         (__ \ "score").read[Request.Evaluation.Score] and
         (__ \ "time").readNullable[Int] and
         (__ \ "nodes").readNullable[Long].map(_.map(_.toSaturatedInt)) and
@@ -224,27 +290,31 @@ object JsonApi {
         else EvaluationReads reads obj map Right.apply map some
     }
     implicit val PostAnalysisReads: Reads[Request.PostAnalysis] = Json.reads[Request.PostAnalysis]
+    implicit val PostPuzzleReads: Reads[Request.PostPuzzle]     = Json.reads[Request.PostPuzzle]
+
+    implicit val CompletedPuzzleReads: Reads[Request.CompletedPuzzle] = Json.reads[Request.CompletedPuzzle]
+    implicit val PostPuzzleVerified: Reads[Request.PostPuzzleVerified] =
+      Json.reads[Request.PostPuzzleVerified]
   }
 
   object writers {
     implicit val VariantWrites = Writes[Variant] { v =>
       JsString(v.key)
     }
-    implicit val FENWrites = Writes[FEN] { fen =>
-      JsString(fen.value)
-    }
     implicit val ClockWrites: Writes[Work.Clock] = Json.writes[Work.Clock]
     implicit val GameWrites: Writes[Game]        = Json.writes[Game]
     implicit val WorkIdWrites = Writes[Work.Id] { id =>
       JsString(id.value)
     }
+
     implicit val WorkWrites = OWrites[Work] { work =>
       (work match {
         case a: Analysis =>
           Json.obj(
             "work" -> Json.obj(
-              "type" -> "analysis",
-              "id"   -> a.id
+              "type"   -> "analysis",
+              "id"     -> a.id,
+              "flavor" -> a.engine
             ),
             "nodes"         -> a.nodes,
             "skipPositions" -> a.skipPositions
@@ -252,10 +322,19 @@ object JsonApi {
         case m: Move =>
           Json.obj(
             "work" -> Json.obj(
-              "type"  -> "move",
-              "id"    -> m.id,
-              "level" -> m.level,
-              "clock" -> m.clock
+              "type"   -> "move",
+              "id"     -> m.id,
+              "level"  -> m.level,
+              "clock"  -> m.clock,
+              "flavor" -> m.engine
+            )
+          )
+        case p: Puzzle =>
+          Json.obj(
+            "work" -> Json.obj(
+              "type"   -> "puzzle",
+              "id"     -> p.id,
+              "flavor" -> p.engine
             )
           )
       }) ++ Json.toJson(work.game).as[JsObject]

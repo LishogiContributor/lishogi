@@ -28,9 +28,11 @@ object index {
         stream.isDefined option span(cls := "ribbon")(span(trans.streamer.live())),
         bits.pic(s.streamer, s.user),
         div(cls := "overview")(
-          h1(dataIcon := "")(titleTag(s.user.title), stringValueFrag(s.streamer.name)),
+          h2(dataIcon := "")(titleTag(s.user.title), stringValueFrag(s.streamer.name)),
           s.streamer.headline.map(_.value).map { d =>
-            p(cls := s"headline ${if (d.size < 60) "small" else if (d.size < 120) "medium" else "large"}")(d)
+            p(
+              cls := s"headline ${if (d.sizeIs < 60) "small" else if (d.sizeIs < 120) "medium" else "large"}"
+            )(d)
           },
           div(cls := "services")(
             s.streamer.twitch.map { twitch =>
@@ -60,7 +62,7 @@ object index {
       moreCss = cssTag("streamer.list"),
       moreJs = infiniteScrollTag
     ) {
-      main(cls := "page-menu")(
+      main(cls                                                          := "page-menu")(
         bits.menu(if (requests) "requests" else "index", none)(ctx)(cls := " page-menu__menu"),
         div(cls := "page-menu__content box streamer-list")(
           h1(dataIcon := "", cls := "text")(title),

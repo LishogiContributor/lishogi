@@ -2,12 +2,19 @@
   display: flex;
   justify-content: center;
   margin-top: 10px;
+  padding-bottom: 1rem;
   .fbt {
     font-size: 1.4em;
     padding: 0.1em 1em;
+    border-radius: 3px;
+    &.pause-yes {
+      font-size: 1.2em;
+    }
   }
   &.confirm > button {
     visibility: hidden;
+    pointer-events: none;
+    transition: unset;
   }
   .act-confirm {
     visibility: visible;

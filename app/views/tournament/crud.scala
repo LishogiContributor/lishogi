@@ -39,7 +39,7 @@ object crud {
     ) {
       div(cls := "crud page-menu__content box box-pad")(
         h1("New tournament"),
-        postForm(cls := "form3", action := routes.TournamentCrud.create())(inForm(form, none))
+        postForm(cls := "form3", action := routes.TournamentCrud.create)(inForm(form, none))
       )
     }
 
@@ -56,7 +56,7 @@ object crud {
             span("Created by ", usernameOrId(tour.createdBy), " on ", showDate(tour.createdAt))
           ),
           st.form(
-            cls := "box__top__actions",
+            cls    := "box__top__actions",
             action := routes.TournamentCrud.cloneT(tour.id),
             method := "get"
           )(
@@ -98,7 +98,7 @@ object crud {
       ),
       form3.split(
         form3.group(form("variant"), raw("Variant"), half = true) { f =>
-          form3.select(f, translatedVariantChoicesWithVariants.map(x => x._1 -> x._2))
+          form3.select(f, translatedVariantChoices.map(x => x._1 -> x._2))
         },
         form3.group(form("minutes"), raw("Duration in minutes"), half = true)(form3.input(_, typ = "number"))
       ),
@@ -142,7 +142,7 @@ object crud {
         div(cls := "box__top")(
           h1("Tournament manager"),
           div(cls := "box__top__actions")(
-            a(cls := "button button-green", href := routes.TournamentCrud.form(), dataIcon := "O")
+            a(cls := "button button-green", href := routes.TournamentCrud.form, dataIcon := "O")
           )
         ),
         table(cls := "slist slist-pad")(

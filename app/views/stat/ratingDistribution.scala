@@ -21,12 +21,12 @@ object ratingDistribution {
       moreJs = frag(
         jsTag("chart/ratingDistribution.js"),
         embedJsUnsafe(s"""lishogi.ratingDistributionChart(${safeJsonValue(
-          Json.obj(
-            "freq"     -> data,
-            "myRating" -> ctx.me.map(_.perfs(perfType).intRating),
-            "i18n"     -> i18nJsObject(i18nKeys)
-          )
-        )})""")
+            Json.obj(
+              "freq"     -> data,
+              "myRating" -> ctx.me.map(_.perfs(perfType).intRating),
+              "i18n"     -> i18nJsObject(i18nKeys)
+            )
+          )})""")
       )
     ) {
       main(cls := "page-menu")(
@@ -40,8 +40,8 @@ object ratingDistribution {
                 PerfType.leaderboardable map { pt =>
                   a(
                     dataIcon := pt.iconChar,
-                    cls := (perfType == pt).option("current"),
-                    href := routes.Stat.ratingDistribution(pt.key)
+                    cls      := (perfType == pt).option("current"),
+                    href     := routes.Stat.ratingDistribution(pt.key)
                   )(pt.trans)
                 }
               )
@@ -53,7 +53,7 @@ object ratingDistribution {
                 case (under, sum) =>
                   div(
                     trans
-                      .nbPerfTypePlayersThisWeek(strong(sum.localize), perfType.trans),
+                      .nbPerfTypePlayersThisMonth(strong(sum.localize), perfType.trans),
                     br,
                     trans.yourPerfTypeRatingIsRating(perfType.trans, strong(rating)),
                     br,
@@ -64,7 +64,7 @@ object ratingDistribution {
                   )
               }
             } getOrElse div(
-              trans.nbPerfTypePlayersThisWeek
+              trans.nbPerfTypePlayersThisMonth
                 .plural(data.sum, strong(data.sum.localize), perfType.trans),
               br,
               trans.youDoNotHaveAnEstablishedPerfTypeRating(perfType.trans)

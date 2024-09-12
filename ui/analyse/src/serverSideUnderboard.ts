@@ -1,8 +1,8 @@
+import { defined } from 'common/common';
+import { engineName } from 'common/engineName';
 import AnalyseCtrl from './ctrl';
-import { defined } from 'common';
-import { baseUrl } from './util';
 import { AnalyseData } from './interfaces';
-import { notationStyle } from 'common/notation';
+import { baseUrl } from './util';
 
 export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
   const li = window.lishogi;
@@ -15,13 +15,14 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
     $panels = $('.analyse__underboard__panels > div'),
     $menu = $('.analyse__underboard__menu'),
     $timeChart = $('#movetimes-chart'),
-    inputFen = document.querySelector('.analyse__underboard__fen') as HTMLInputElement,
+    inputSfen = document.querySelector('.analyse__underboard__sfen') as HTMLInputElement,
     unselect = chart => {
       chart.getSelectedPoints().forEach(function (point) {
         point.select(false);
       });
     };
-  let lastFen: string;
+  let lastSfen = ctrl.node.sfen;
+  inputSfen.value = lastSfen;
 
   if (!li.AnalyseNVUI) {
     li.pubsub.on('analysis.comp.toggle', (v: boolean) => {
@@ -29,13 +30,13 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
         (v ? $menu.find('[data-panel="computer-analysis"]') : $menu.find('span:eq(1)')).trigger('mousedown');
       }, 50);
     });
-    li.pubsub.on('analysis.change', (fen: Fen, _, mainlinePly: Ply | false) => {
+    li.pubsub.on('analysis.change', (sfen: Sfen, _, mainlinePly: Ply | false) => {
       let chart,
         point,
         $chart = $('#acpl-chart');
-      if (fen && fen !== lastFen) {
-        inputFen.value = fen;
-        lastFen = fen;
+      if (sfen && sfen !== lastSfen) {
+        inputSfen.value = sfen;
+        lastSfen = sfen;
       }
       if ($chart.length) {
         chart = window.Highcharts && $chart.highcharts();
@@ -43,7 +44,7 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
           if (mainlinePly != chart.lastPly) {
             if (mainlinePly === false) unselect(chart);
             else {
-              point = chart.series[0].data[mainlinePly - 1 - data.game.startedAtTurn];
+              point = chart.series[0].data[mainlinePly - 1 - data.game.startedAtPly];
               if (defined(point)) point.select();
               else unselect(chart);
             }
@@ -59,7 +60,7 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
             else {
               const sente = mainlinePly % 2 !== 0;
               const serie = sente ? 0 : 1;
-              const turn = Math.floor((mainlinePly - 1 - data.game.startedAtTurn) / 2);
+              const turn = Math.floor((mainlinePly - 1 - data.game.startedAtPly) / 2);
               point = chart.series[serie].data[turn];
               if (defined(point)) point.select();
               else unselect(chart);
@@ -77,7 +78,8 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
   }
 
   function chartLoader() {
-    return `<div id="acpl-chart-loader"><span>YaneuraOu V6<br>server analysis</span>${li.spinnerHtml}</div>`;
+    const name = engineName(ctrl.data.game.variant.key, ctrl.data.game.initialSfen);
+    return `<div id="acpl-chart-loader"><span>${name}<br>${ctrl.trans.noarg('serverAnalysis')}</span>${li.spinnerHtml}</div>`;
   }
   function startAdvantageChart() {
     if (li.advantageChart || li.AnalyseNVUI) return;
@@ -86,12 +88,7 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
     if (!$('#acpl-chart').length) $panel.html('<div id="acpl-chart"></div>' + (loading ? chartLoader() : ''));
     else if (loading && !$('#acpl-chart-loader').length) $panel.append(chartLoader());
     li.loadScript('javascripts/chart/acpl.js').then(function () {
-      li.advantageChart!(
-        data,
-        ctrl.trans,
-        $('#acpl-chart')[0] as HTMLElement,
-        notationStyle(ctrl.data.pref.pieceNotation ?? 0)
-      );
+      li.advantageChart!(data, ctrl.trans, $('#acpl-chart')[0] as HTMLElement);
     });
   }
 
@@ -102,14 +99,13 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
       .removeClass('active')
       .filter('.' + panel)
       .addClass('active');
-    if ((panel == 'move-times' || ctrl.opts.hunter) && !li.movetimeChart)
+    if (panel == 'move-times' && !li.movetimeChart)
       try {
         li.loadScript('javascripts/chart/movetime.js').then(function () {
-          li.movetimeChart(data, ctrl.trans, notationStyle(data.pref.pieceNotation ?? 0));
+          li.movetimeChart(data, ctrl.trans);
         });
       } catch (e) {}
-    if ((panel == 'computer-analysis' || ctrl.opts.hunter) && $('#acpl-chart').length)
-      setTimeout(startAdvantageChart, 200);
+    if (panel == 'computer-analysis' && $('#acpl-chart').length) setTimeout(startAdvantageChart, 200);
   };
   $menu.on('mousedown', 'span', function (this: HTMLElement) {
     const panel = $(this).data('panel');
@@ -119,7 +115,7 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
   const stored = storage.get();
   if (stored && $menu.children(`[data-panel="${stored}"]:visible`).length) setPanel(stored);
   else {
-    const $menuCt = $menu.children('[data-panel="ctable"]');
+    const $menuCt = $menu.children('[data-panel="sfen-notation"]');
     ($menuCt.length ? $menuCt : $menu.children(':first-child')).trigger('mousedown');
   }
   if (!data.analysis) {
@@ -137,7 +133,7 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
     });
   }
 
-  $panels.on('click', '.pgn', function (this: HTMLElement) {
+  $panels.on('click', '.kif', function (this: HTMLElement) {
     const selection = window.getSelection(),
       range = document.createRange();
     range.selectNodeContents(this);
@@ -146,7 +142,7 @@ export default function (element: HTMLElement, ctrl: AnalyseCtrl) {
   });
   $panels.on('click', '.embed-howto', function (this: HTMLElement) {
     const url = `${baseUrl()}/embed/${data.game.id}${location.hash}`;
-    const iframe = '<iframe src="' + url + '?theme=auto&bg=auto"\nwidth=600 height=397 frameborder=0></iframe>';
+    const iframe = '<iframe src="' + url + '?theme=auto&bg=auto"\nwidth=600 height=400 frameborder=0></iframe>';
     $.modal(
       $(
         '<strong style="font-size:1.5em">' +

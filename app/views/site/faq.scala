@@ -10,12 +10,10 @@ object faq {
 
   import trans.faq._
 
-  private val fideHandbook = "http://www.shogi.net/fesa/pdf/FESA%20rules.pdf"
-
   private def question(id: String, title: String, answer: Frag*) =
     div(
       st.id := id,
-      cls := "question"
+      cls   := "question"
     )(
       h3(a(href := s"#$id")(title)),
       div(cls := "answer")(answer)
@@ -23,7 +21,7 @@ object faq {
 
   def apply()(implicit ctx: Context) =
     help.layout(
-      title = "Frequently Asked Questions",
+      title = trans.faq.frequentlyAskedQuestions.txt(),
       active = "faq",
       moreCss = cssTag("faq")
     ) {
@@ -35,28 +33,12 @@ object faq {
           howCanIContributeToLishogi.txt(),
           p(lishogiPoweredByDonationsAndVolunteers()),
           p(
-            a(href := routes.Page.patron())(beingAPatron()) // patron
+            a(href := routes.Plan.index)(beingAPatron())
           ),
           p(
-            a(href := routes.Page.help())(otherWaysToContribute()) // other ways to contribute
+            a(href := routes.Page.help)(otherWaysToContribute())
           )
         ),
-        // question(
-        //   "sites_based_on_Lichess",
-        //   areThereWebsitesBasedOnLishogi.txt(),
-        //   p(
-        //     yesLishogiInspiredOtherOpenSourceWebsites(
-        //       a(href := "/source")(trans.sourceCode()),
-        //       a(href := "/api")("API"),
-        //       a(href := "https://database.lishogi.org")(trans.database())
-        //     )
-        //   ),
-        //   ul(
-        //     li(a(href := "https://blitztactics.com/about")("Blitz Tactics")),
-        //     li(a(href := "https://tailuge.github.io/chess-o-tron/html/blunder-bomb.html")("Blunder Bomb")),
-        //     li(a(href := "https://lidraughts.org")("lidraughts.org"))
-        //   )
-        // ),
         h2(fairPlay()),
         question(
           "marks",
@@ -98,32 +80,16 @@ object faq {
           "time-controls",
           howBulletBlitzEtcDecided.txt(),
           p(
-            basedOnGameDuration(strong(durationFormula()))
+            basedOnGameDuration(strong(formulaOfDuration()))
           ),
           ul(
-            li(inferiorThanXsEqualYtimeControl(60, "UltraBullet")),
-            li(inferiorThanXsEqualYtimeControl(300, "Bullet")),
-            li(inferiorThanXsEqualYtimeControl(600, "Blitz")),
+            li(inferiorThanXsEqualYtimeControl(60, trans.ultrabullet())),
+            li(inferiorThanXsEqualYtimeControl(300, trans.bullet())),
+            li(inferiorThanXsEqualYtimeControl(600, trans.blitz())),
             li(inferiorThanXsEqualYtimeControl(1500, trans.rapid())),
             li(superiorThanXsEqualYtimeControl(1500, trans.classical()))
           )
         ),
-        //question( // todo variant
-        //  "variants",
-        //  whatVariantsCanIplay.txt(),
-        //  p(
-        //    lishogiSupportChessAnd(
-        //      a(href := routes.Page.variantHome())(eightVariants())
-        //    )
-        //  )
-        //),
-        // question(
-        //   "timeout",
-        //   insufficientMaterial.txt(),
-        //   p(
-        //     lishogiFollowFIDErules(a(href := fideHandbook)(linkToFIDErules()))
-        //   )
-        // ),
         h2(accounts()),
         question(
           "lm",
@@ -136,7 +102,7 @@ object faq {
           whatUsernameCanIchoose.txt(),
           p(
             usernamesNotOffensive(
-              a(href := "https://github.com/ornicar/lila/wiki/Username-policy")(guidelines())
+              a(href := "https://github.com/lichess-org/lila/wiki/Username-policy")(guidelines())
             )
           )
         ),
@@ -171,14 +137,14 @@ object faq {
           howDoLeaderoardsWork.txt(),
           p(
             inOrderToAppearsYouMust(
-              a(href := routes.User.list())(ratingLeaderboards())
+              a(href := routes.User.list)(ratingLeaderboards())
             )
           ),
           ol(
             li(havePlayedMoreThanThirtyGamesInThatRating()),
             li(havePlayedARatedGameAtLeastOneWeekAgo()),
             li(
-              ratingDeviationLowerThanXinChessYinVariants(
+              ratingDeviationLowerThanXinShogiYinVariants(
                 lila.rating.Glicko.standardRankableDeviation,
                 lila.rating.Glicko.variantRankableDeviation
               )

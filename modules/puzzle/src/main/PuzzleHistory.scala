@@ -1,18 +1,13 @@
 package lila.puzzle
 
-import scalaz.NonEmptyList
-import org.joda.time.DateTime
-import reactivemongo.api.bson.BSONNull
+import cats.data.NonEmptyList
 import reactivemongo.api.ReadPreference
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
-import scala.util.chaining._
 
 import lila.common.config.MaxPerPage
 import lila.common.paginator.AdapterLike
 import lila.common.paginator.Paginator
 import lila.db.dsl._
-import lila.memo.CacheApi
 import lila.user.User
 
 object PuzzleHistory {
@@ -67,21 +62,20 @@ object PuzzleHistory {
   private def groupBySessions(rounds: List[SessionRound]): List[PuzzleSession] =
     rounds
       .foldLeft(List.empty[PuzzleSession]) {
-        case (Nil, round) => List(PuzzleSession(round.theme, NonEmptyList(round)))
+        case (Nil, round) => List(PuzzleSession(round.theme, NonEmptyList(round, Nil)))
         case (last :: sessions, r) =>
           if (
             last.puzzles.head.theme == r.theme &&
             r.round.date.isAfter(last.puzzles.head.round.date minusHours 1)
           )
-            last.copy(puzzles = r <:: last.puzzles) :: sessions
-          else PuzzleSession(r.theme, NonEmptyList(r)) :: last :: sessions
+            last.copy(puzzles = r :: last.puzzles) :: sessions
+          else PuzzleSession(r.theme, NonEmptyList(r, Nil)) :: last :: sessions
       }
       .reverse
 }
 
 final class PuzzleHistoryApi(
-    colls: PuzzleColls,
-    cacheApi: CacheApi
+    colls: PuzzleColls
 )(implicit ec: ExecutionContext) {
 
   import PuzzleHistory._

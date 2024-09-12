@@ -23,7 +23,7 @@ object profile {
       div(cls := "account box box-pad")(
         h1(trans.editProfile()),
         standardFlash(),
-        postForm(cls := "form3", action := routes.Account.profileApply())(
+        postForm(cls := "form3", action := routes.Account.profileApply)(
           div(cls := "form-group")(trans.allInformationIsPublicAndOptional()),
           form3.split(
             form3.group(form("country"), trans.country(), half = true) { f =>
@@ -39,16 +39,6 @@ object profile {
             form3.group(form("firstName"), trans.firstName(), half = true)(form3.input(_)),
             form3.group(form("lastName"), trans.lastName(), half = true)(form3.input(_))
           ),
-          //form3.split(
-          //  List("fide", "uscf", "ecf").map { rn =>
-          //    form3.group(
-          //      form(s"${rn}Rating"),
-          //      trans.xRating(rn.toUpperCase),
-          //      help = trans.ifNoneLeaveEmpty().some,
-          //      klass = "form-third"
-          //    )(form3.input(_, typ = "number"))
-          //  }
-          //),
           form3.group(form("links"), trans.socialMediaLinks(), help = Some(linksHelp)) { f =>
             form3.textarea(f)(rows := 5)
           },

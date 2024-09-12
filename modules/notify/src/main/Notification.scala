@@ -105,11 +105,19 @@ object GameEnd {
   case class Win(value: Boolean)       extends AnyVal
 }
 
+case class PausedGame(
+    gameId: PausedGame.GameId,
+    opponentId: Option[PausedGame.OpponentId]
+) extends NotificationContent("pausedGame")
+
+object PausedGame {
+  case class GameId(value: String)     extends AnyVal
+  case class OpponentId(value: String) extends AnyVal
+}
+
 case object ReportedBanned extends NotificationContent("reportedBanned")
 
 case class RatingRefund(perf: String, points: Int) extends NotificationContent("ratingRefund")
-
-case object CoachReview extends NotificationContent("coachReview")
 
 case class PlanStart(userId: String)  extends NotificationContent("planStart")
 case class PlanExpire(userId: String) extends NotificationContent("planExpire")
@@ -118,10 +126,6 @@ case class CorresAlarm(
     gameId: lila.game.Game.ID,
     opponent: String
 ) extends NotificationContent("corresAlarm")
-
-case class IrwinDone(
-    userId: lila.user.User.ID
-) extends NotificationContent("irwinDone")
 
 case class GenericLink(
     url: String,

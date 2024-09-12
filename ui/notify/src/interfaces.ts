@@ -1,4 +1,4 @@
-import { VNode } from 'snabbdom/vnode';
+import { VNode } from 'snabbdom';
 
 export interface NotifyOpts {
   data?: NotifyData;
@@ -32,6 +32,7 @@ export interface Ctrl {
   loadPage(page: number): void;
   setVisible(): void;
   setMsgRead(user: string): void;
+  clear(): void;
 }
 
 export type Redraw = () => void;

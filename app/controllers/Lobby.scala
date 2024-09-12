@@ -12,8 +12,7 @@ final class Lobby(
 
   private lazy val lobbyJson = Json.obj(
     "lobby" -> Json.obj(
-      "version" -> 0,
-      "pools"   -> lila.pool.PoolList.json
+      "version" -> 0
     ),
     "assets" -> Json.obj(
       "domain" -> env.net.assetDomain.value
@@ -26,14 +25,10 @@ final class Lobby(
       negotiate(
         html = env.pageCache { () =>
           keyPages.homeHtml.dmap { html =>
-            NoCache(Ok(html))
+            Ok(html).noCache
           }
         } dmap env.lilaCookie.ensure(ctx.req),
-        api = _ =>
-          fuccess {
-            val expiration = 60 * 60 * 24 * 7 // set to one hour, one week before changing the pool config
-            Ok(lobbyJson).withHeaders(CACHE_CONTROL -> s"max-age=$expiration")
-          }
+        api = _ => fuccess(Ok(lobbyJson))
       )
     }
 
@@ -55,7 +50,7 @@ final class Lobby(
 
   def timeline =
     Auth { implicit ctx => me =>
-      env.timeline.entryApi.userEntries(me.id, ctx.lang.code) map { entries =>
+      env.timeline.entryApi.userEntries(me.id) map { entries =>
         Ok(html.timeline.entries(entries)).withHeaders(CACHE_CONTROL -> s"max-age=20")
       }
     }

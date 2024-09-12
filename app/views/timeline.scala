@@ -53,7 +53,7 @@ object timeline {
           trans.xPostedInForumY(
             userIdLink(userId.some, withOnline = false),
             a(
-              href := routes.ForumPost.redirect(postId),
+              href  := routes.ForumPost.redirect(postId),
               title := topicName
             )(shorten(topicName, 30))
           )
@@ -80,9 +80,9 @@ object timeline {
               case None        => trans.drawVsYInZ
             })(
               a(
-                href := routes.Round.player(playerId),
+                href     := routes.Round.player(playerId),
                 dataIcon := perf.iconChar,
-                cls := "text glpt"
+                cls      := "text glpt"
               )(win match {
                 case Some(true)  => trans.victory()
                 case Some(false) => trans.defeat()
@@ -103,14 +103,16 @@ object timeline {
             a(href := routes.Study.show(studyId))(studyName)
           )
         case PlanStart(userId) =>
-          a(href := routes.Plan.index())(
+          a(href := routes.Plan.index)(
             trans.patron.xBecamePatron(userIdLink(userId.some, withOnline = true))
           )
-        case BlogPost(id, slug, title, _) =>
-          a(cls := "text", dataIcon := "6", href := routes.Blog.show(id, slug))(title)
+        case BlogPost(_) =>
+          a(cls := "text", dataIcon := "6", href := routes.Blog.latest())(trans.officialBlog())
         case StreamStart(id, name) =>
           views.html.streamer.bits
             .redirectLink(id)(cls := "text", dataIcon := "")(trans.xStartedStreaming(name))
+        case SystemNotification(text) =>
+          div(cls := "text system-notification", dataIcon := "n")(text)
       },
       " ",
       momentFromNow(e.date)

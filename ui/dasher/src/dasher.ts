@@ -1,31 +1,41 @@
-import { PingCtrl, ctrl as pingCtrl } from './ping';
-import { LangsCtrl, LangsData, ctrl as langsCtrl } from './langs';
-import { SoundCtrl, ctrl as soundCtrl } from './sound';
+import { Prop, prop } from 'common/common';
 import { BackgroundCtrl, BackgroundData, ctrl as backgroundCtrl } from './background';
-import { BoardCtrl, BoardData, ctrl as boardCtrl } from './board';
+import { CustomThemeCtrl, CustomThemeData, ctrl as customThemeCtrl } from './customTheme';
+import { LangsCtrl, LangsData, ctrl as langsCtrl } from './langs';
+import { NotationCtrl, NotationData, ctrl as notationCtrl } from './notation';
+import { PieceCtrl, PieceSetData, ctrl as pieceCtrl } from './piece';
+import { PingCtrl, ctrl as pingCtrl } from './ping';
+import { SoundCtrl, SoundData, ctrl as soundCtrl } from './sound';
 import { ThemeCtrl, ThemeData, ctrl as themeCtrl } from './theme';
-import { PieceCtrl, PieceData, ctrl as pieceCtrl } from './piece';
-import { Redraw, Prop, prop } from './util';
-import { NotationCtrl, ctrl as notationCtrl, NotationData } from './notation';
+import { Redraw } from './util';
 
 export interface DasherData {
   user?: LightUser;
   lang: LangsData;
-  pieceNotation: NotationData;
-  sound: {
-    list: string[];
-  };
+  notation: NotationData;
+  sound: SoundData;
   background: BackgroundData;
-  board: BoardData;
   theme: ThemeData;
-  piece: PieceData;
+  customTheme: CustomThemeData;
+  piece: PieceSetData;
+  chuPiece: PieceSetData;
+  kyoPiece: PieceSetData;
   inbox: boolean;
   coach: boolean;
   streamer: boolean;
   i18n: any;
 }
 
-export type Mode = 'links' | 'langs' | 'sound' | 'background' | 'board' | 'notation' | 'theme' | 'piece';
+export type Mode =
+  | 'links'
+  | 'langs'
+  | 'sound'
+  | 'background'
+  | 'board'
+  | 'notation'
+  | 'theme'
+  | 'customTheme'
+  | 'piece';
 
 const defaultMode = 'links';
 
@@ -39,9 +49,9 @@ export interface DasherCtrl {
     langs: LangsCtrl;
     sound: SoundCtrl;
     background: BackgroundCtrl;
-    board: BoardCtrl;
     notation: NotationCtrl;
     theme: ThemeCtrl;
+    customTheme: CustomThemeCtrl;
     piece: PieceCtrl;
   };
   opts: DasherOpts;
@@ -68,12 +78,12 @@ export function makeCtrl(opts: DasherOpts, data: DasherData, redraw: Redraw): Da
 
   const subs = {
     langs: langsCtrl(data.lang, trans, close),
-    sound: soundCtrl(data.sound.list, trans, redraw, close),
+    sound: soundCtrl(data.sound, trans, redraw, close),
     background: backgroundCtrl(data.background, trans, redraw, close),
-    board: boardCtrl(data.board, trans, redraw, close),
-    theme: themeCtrl(data.theme, trans, () => (data.board.is3d ? 'd3' : 'd2'), redraw, setMode),
-    notation: notationCtrl(data.pieceNotation, trans, redraw, close),
-    piece: pieceCtrl(data.piece, trans, () => (data.board.is3d ? 'd3' : 'd2'), redraw, setMode),
+    theme: themeCtrl(data.theme, trans, redraw, setMode),
+    customTheme: customThemeCtrl(data.customTheme, trans, redraw, setMode),
+    notation: notationCtrl(data.notation, trans, redraw, close),
+    piece: pieceCtrl(data.piece, data.chuPiece, data.kyoPiece, trans, redraw, close),
   };
 
   window.lishogi.pubsub.on('top.toggle.user_tag', () => setMode(defaultMode));

@@ -1,17 +1,16 @@
 package controllers
 
-import play.api.data.Form
 import play.api.libs.json.Json
 import play.api.mvc.Results
 import scala.concurrent.duration._
 
-import shogi.format.FEN
-import lila.api.{ BodyContext, Context }
+import shogi.format.forsyth.Sfen
+import lila.api.Context
 import lila.app._
 import lila.common.{ HTTPRequest, IpAddress }
 import lila.game.{ AnonCookie, Pov }
 import lila.setup.Processor.HookResult
-import lila.setup.ValidFen
+import lila.setup.ValidSfen
 import lila.socket.Socket.Sri
 import views._
 
@@ -32,41 +31,85 @@ final class Setup(
     enforce = env.net.rateLimit.value
   )
 
+  private[controllers] val BotAiRateLimit = new lila.memo.RateLimit[lila.user.User.ID](
+    50,
+    1.day,
+    key = "setup.post.bot.ai"
+  )
+
   def aiForm =
     Open { implicit ctx =>
       if (HTTPRequest isXhr ctx.req) {
-        fuccess(forms aiFilled get("fen").map(FEN)) map { form =>
+        fuccess(
+          forms.aiFilled(get("sfen").map(Sfen.clean), get("variant").flatMap(shogi.variant.Variant.apply))
+        ) map { form =>
+          val variant = form("variant").value.flatMap(shogi.variant.Variant.apply) | shogi.variant.Standard
           html.setup.forms.ai(
             form,
-            env.fishnet.aiPerfApi.intRatings,
-            form("fen").value flatMap ValidFen(getBool("strict"))
+            form("sfen").value map Sfen.clean flatMap ValidSfen(getBool("strict"), variant)
           )
         }
-      } else Redirect(s"${routes.Lobby.home()}#ai").fuccess
+      } else Redirect(s"${routes.Lobby.home}#ai").fuccess
     }
 
-  def ai =
-    process(_ => forms.ai) { config => implicit ctx =>
-      processor ai config
-    }
+  def ai = OpenBody { implicit ctx =>
+    BotAiRateLimit(~ctx.userId, cost = ctx.me.exists(_.isBot) ?? 1) {
+      PostRateLimit(HTTPRequest lastRemoteAddress ctx.req) {
+        implicit val req = ctx.body
+        forms.ai
+          .bindFromRequest()
+          .fold(
+            err =>
+              negotiate(
+                html = keyPages.home(Results.BadRequest),
+                api = _ => jsonFormError(err)
+              ),
+            config =>
+              processor.ai(config)(ctx) flatMap { pov =>
+                negotiate(
+                  html = fuccess(redirectPov(pov)),
+                  api = apiVersion =>
+                    if (getBool("redirect"))
+                      fuccess(Ok(redirectPovJson(pov)))
+                    else
+                      env.api.roundApi.player(pov, none, apiVersion) map { data =>
+                        Created(data) as JSON
+                      }
+                )
+              }
+          )
+      }(rateLimitedFu)
+    }(rateLimitedFu)
+  }
+
+  private def redirectPovJson(pov: Pov) =
+    Json
+      .obj(
+        "id"  -> pov.fullId,
+        "url" -> s"/${pov.fullId}"
+      )
+      .add("cookie" -> lila.game.AnonCookie.json(pov))
 
   def friendForm(userId: Option[String]) =
     Open { implicit ctx =>
       if (HTTPRequest isXhr ctx.req)
-        fuccess(forms friendFilled get("fen").map(FEN)) flatMap { form =>
-          val validFen = form("fen").value flatMap ValidFen(false)
+        fuccess(
+          forms.friendFilled(get("sfen").map(Sfen.clean), get("variant").flatMap(shogi.variant.Variant.apply))
+        ) flatMap { form =>
+          val variant   = form("variant").value.flatMap(shogi.variant.Variant.apply) | shogi.variant.Standard
+          val validSfen = form("sfen").value map Sfen.clean flatMap ValidSfen(false, variant)
           userId ?? env.user.repo.named flatMap {
-            case None => Ok(html.setup.forms.friend(form, none, none, validFen)).fuccess
+            case None => Ok(html.setup.forms.friend(form, none, none, validSfen)).fuccess
             case Some(user) =>
               env.challenge.granter(ctx.me, user, none) map {
                 case Some(denied) => BadRequest(lila.challenge.ChallengeDenied.translated(denied))
-                case None         => Ok(html.setup.forms.friend(form, user.some, none, validFen))
+                case None         => Ok(html.setup.forms.friend(form, user.some, none, validSfen))
               }
           }
         }
       else
         fuccess {
-          Redirect(s"${routes.Lobby.home()}#friend")
+          Redirect(s"${routes.Lobby.home}#friend")
         }
     }
 
@@ -101,7 +144,7 @@ final class Setup(
                     } getOrElse TimeControl.Unlimited
                     val challenge = lila.challenge.Challenge.make(
                       variant = config.variant,
-                      initialFen = config.fen,
+                      initialSfen = config.sfen,
                       timeControl = timeControl,
                       mode = config.mode,
                       color = config.color.name,
@@ -121,7 +164,7 @@ final class Setup(
                         )
                       case false =>
                         negotiate(
-                          html = fuccess(Redirect(routes.Lobby.home())),
+                          html = fuccess(Redirect(routes.Lobby.home)),
                           api = _ => fuccess(BadRequest(jsonError("Challenge not created")))
                         )
                     }
@@ -139,7 +182,7 @@ final class Setup(
         }
         else
           fuccess {
-            Redirect(s"${routes.Lobby.home()}#hook")
+            Redirect(s"${routes.Lobby.home}#hook")
           }
       }
     }
@@ -195,7 +238,12 @@ final class Setup(
                   sameOpponents = game.userIds
                   hookResult <-
                     processor
-                      .hook(hookConfig, Sri(sri), HTTPRequest sid ctx.req, blocking ++ sameOpponents)
+                      .hook(
+                        hookConfig,
+                        Sri(sri),
+                        HTTPRequest sid ctx.req,
+                        blocking ++ sameOpponents
+                      )
                 } yield hookResponse(hookResult)
               }
             }
@@ -222,7 +270,7 @@ final class Setup(
             config =>
               env.relation.api.fetchBlocking(me.id) flatMap { blocking =>
                 val uniqId = s"sri:${me.id}"
-                config.fixColor.hook(Sri(uniqId), me.some, sid = uniqId.some, blocking) match {
+                config.hook(Sri(uniqId), me.some, sid = uniqId.some, blocking) match {
                   case Left(hook) =>
                     PostRateLimit(HTTPRequest lastRemoteAddress req) {
                       BoardApiHookConcurrencyLimitPerUser(me.id)(
@@ -240,53 +288,33 @@ final class Setup(
       fuccess(html.setup.filter(forms.filter))
     }
 
-  def validateFen =
+  def validateSfen =
     Open { implicit ctx =>
-      get("fen") flatMap ValidFen(getBool("strict")) match {
+      (for {
+        variant <- get("variant").flatMap(_.toIntOption) flatMap shogi.variant.Variant.apply
+        sfen    <- get("sfen") map Sfen.clean orElse variant.initialSfen.some
+        valid   <- ValidSfen.apply(getBool("strict"), variant)(sfen)
+      } yield valid) match {
         case None    => BadRequest.fuccess
-        case Some(v) => Ok(html.game.bits.miniBoard(v.fen)).fuccess
+        case Some(v) => Ok(html.game.bits.miniBoard(v.sfen, v.situation.color, v.situation.variant)).fuccess
       }
     }
 
   def apiAi =
     ScopedBody(_.Challenge.Write, _.Bot.Play, _.Board.Play) { implicit req => me =>
       implicit val lang = reqLang
-      PostRateLimit(HTTPRequest lastRemoteAddress req) {
-        forms.api.ai
-          .bindFromRequest()
-          .fold(
-            jsonFormError,
-            config =>
-              processor.apiAi(config, me) map { pov =>
-                Created(env.game.jsonView(pov.game, config.fen)) as JSON
-              }
-          )
-      }(rateLimitedFu)
-    }
-
-  private def process[A](form: Context => Form[A])(op: A => BodyContext[_] => Fu[Pov]) =
-    OpenBody { implicit ctx =>
-      PostRateLimit(HTTPRequest lastRemoteAddress ctx.req) {
-        implicit val req = ctx.body
-        form(ctx)
-          .bindFromRequest()
-          .fold(
-            err =>
-              negotiate(
-                html = keyPages.home(Results.BadRequest),
-                api = _ => jsonFormError(err)
-              ),
-            config =>
-              op(config)(ctx) flatMap { pov =>
-                negotiate(
-                  html = fuccess(redirectPov(pov)),
-                  api = apiVersion =>
-                    env.api.roundApi.player(pov, none, apiVersion) map { data =>
-                      Created(data) as JSON
-                    }
-                )
-              }
-          )
+      BotAiRateLimit(me.id, cost = me.isBot ?? 1) {
+        PostRateLimit(HTTPRequest lastRemoteAddress req) {
+          forms.api.ai
+            .bindFromRequest()
+            .fold(
+              jsonFormError,
+              config =>
+                processor.apiAi(config, me) map { pov =>
+                  Created(env.game.jsonView(pov.game)) as JSON
+                }
+            )
+        }(rateLimitedFu)
       }(rateLimitedFu)
     }
 

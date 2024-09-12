@@ -5,7 +5,12 @@ import scala.util.Success
 import lila.rating.PerfType
 
 case class History(
-    standard: RatingsMap, //todo variant
+    standard: RatingsMap,
+    minishogi: RatingsMap,
+    chushogi: RatingsMap,
+    annanshogi: RatingsMap,
+    kyotoshogi: RatingsMap,
+    checkshogi: RatingsMap,
     ultraBullet: RatingsMap,
     bullet: RatingsMap,
     blitz: RatingsMap,
@@ -25,6 +30,11 @@ case class History(
       case PerfType.Correspondence => correspondence
       case PerfType.Puzzle         => puzzle
       case PerfType.UltraBullet    => ultraBullet
+      case PerfType.Minishogi      => minishogi
+      case PerfType.Chushogi       => chushogi
+      case PerfType.Annanshogi     => annanshogi
+      case PerfType.Kyotoshogi     => kyotoshogi
+      case PerfType.Checkshogi     => checkshogi
       case x                       => sys error s"No history for perf $x"
     }
 }
@@ -52,6 +62,11 @@ object History {
         def ratingsMap(key: String): RatingsMap = ~doc.getAsOpt[RatingsMap](key)
         History(
           standard = ratingsMap("standard"),
+          minishogi = ratingsMap("minishogi"),
+          chushogi = ratingsMap("chushogi"),
+          annanshogi = ratingsMap("annanshogi"),
+          kyotoshogi = ratingsMap("kyotoshogi"),
+          checkshogi = ratingsMap("checkshogi"),
           ultraBullet = ratingsMap("ultraBullet"),
           bullet = ratingsMap("bullet"),
           blitz = ratingsMap("blitz"),

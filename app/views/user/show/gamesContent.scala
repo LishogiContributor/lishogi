@@ -22,7 +22,7 @@ object gamesContent {
       div(cls := "number-menu number-menu--tabs menu-box-pop", id := "games")(
         filters.list.map { f =>
           a(
-            cls := s"nm-item to-${f.name}${(filters.current == f) ?? " active"}",
+            cls  := s"nm-item to-${f.name}${(filters.current == f) ?? " active"}",
             href := routes.User.games(u.username, f.name)
           )(userGameFilterTitle(u, nbs, f))
         }
@@ -37,7 +37,7 @@ object gamesContent {
             frag(
               div(cls := "search__status")(
                 strong(pager.nbResults.localize, " games found"),
-                " • ",
+                " - ",
                 permalink
               ),
               div(cls := "search__rows")(
@@ -50,7 +50,7 @@ object gamesContent {
           else
             div(cls := "search__status")(
               strong("No game found"),
-              " • ",
+              " - ",
               permalink
             )
         } else
@@ -64,8 +64,8 @@ object gamesContent {
             if (filterName == "playing" && pager.nbResults > 2)
               pager.currentPageResults.flatMap { Pov(_, u) }.map { p =>
                 a(href := gameLink(p), cls := "paginated")(
-                  gameFen(p, withLink = false),
-                  views.html.game.bits.vstext(p)(ctx.some)
+                  gameSfen(p, withLink = false),
+                  views.html.game.bits.vstext(p)
                 )
               }
             else views.html.game.widgets(pager.currentPageResults, user = u.some, ownerLink = ctx is u)

@@ -3,6 +3,7 @@ package views.html.learn
 import play.api.libs.json.Json
 
 import lila.api.Context
+import play.api.libs.json._
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
 import lila.common.String.html.safeJsonValue
@@ -13,34 +14,50 @@ object index {
 
   import trans.learn.{ play => _, _ }
 
-  def apply(data: Option[play.api.libs.json.JsValue])(implicit ctx: Context) =
+  def apply(data: Option[JsValue], pref: lila.pref.Pref)(implicit ctx: Context) =
     views.html.base.layout(
       title = s"${learnShogi.txt()} - ${byPlaying.txt()}",
       moreJs = frag(
-        jsAt(s"compiled/lishogi.learn${isProd ?? ".min"}.js"),
+        jsModule("learn"),
         embedJsUnsafe(s"""$$(function() {
 LishogiLearn(document.getElementById('learn-app'), ${safeJsonValue(
-          Json.obj(
-            "data" -> data,
-            "i18n" -> i18nJsObject(i18nKeys)
-          )
-        )})})""")
+            Json.obj(
+              "data" -> data,
+              "pref" -> Json.obj(
+                "coords"             -> pref.coords,
+                "moveEvent"          -> pref.moveEvent,
+                "highlightLastDests" -> pref.highlightLastDests,
+                "highlightCheck"     -> pref.highlightCheck,
+                "squareOverlay"      -> pref.squareOverlay,
+                "resizeHandle"       -> pref.resizeHandle
+              ),
+              "i18n" -> i18nJsObject(i18nKeys)
+            )
+          )})})""")
       ),
       moreCss = cssTag("learn"),
       openGraph = lila.app.ui
         .OpenGraph(
-          title = "Learn shogi by playing",
-          description = "You don't know much about shogi? Excellent! Let's have fun and learn to play shogi!",
-          url = s"$netBaseUrl${routes.Learn.index()}"
+          title = s"${learnShogi.txt()} - ${byPlaying.txt()}",
+          description = s"${trans.learn.introBasics.txt()} ${trans.learn.introIntro.txt()}",
+          url = s"$netBaseUrl${routes.Learn.index.url}"
         )
         .some,
-      zoomable = true
+      zoomable = true,
+      canonicalPath = lila.common.CanonicalPath(routes.Learn.index).some,
+      withHrefLangs = lila.i18n.LangList.All.some
     ) {
       main(id := "learn-app")
     }
 
   private val i18nKeys: List[lila.i18n.MessageKey] =
     List(
+      trans.black,
+      trans.white,
+      trans.sente,
+      trans.gote,
+      trans.shitate,
+      trans.uwate,
       learnShogi,
       byPlaying,
       menu,
@@ -52,23 +69,26 @@ LishogiLearn(document.getElementById('learn-app'), ${safeJsonValue(
       theIntroduction,
       introIntro,
       introBasics,
+      clickHereAfterYouveChosen,
       choosePieceDesign,
       senteGoesFirst,
       promotionZone,
-      introComplete,
+      introCompleteTwo,
       theRook,
       itMovesInStraightLines,
       rookIntro,
       rookGoal,
+      grabAllTheStarsRemember,
       rookPromotion,
       rookSummary,
-      dragonSummary,
+      dragonSummaryTwo,
       grabAllTheStars,
       theFewerMoves,
       rookComplete,
       theBishop,
       itMovesDiagonally,
       bishopIntro,
+      ehThereIsNoPiece,
       bishopPromotion,
       bishopSummary,
       horseSummary,
@@ -102,7 +122,7 @@ LishogiLearn(document.getElementById('learn-app'), ${safeJsonValue(
       lancesAreStraighforward,
       lancePromotion,
       lanceSummary,
-      planceSummary,
+      planceSummaryTwo,
       lanceComplete,
       theGold,
       itMovesInAnyDirectionExceptDiagonallyBack,
@@ -123,15 +143,22 @@ LishogiLearn(document.getElementById('learn-app'), ${safeJsonValue(
       capture,
       takeTheEnemyPieces,
       captureIntro,
-      takeTheBlackPieces,
-      takeTheBlackPiecesAndDontLoseYours,
+      takeTheEnemyPiecesAndDontLoseYours,
       captureComplete,
+      pieceDrops,
+      reuseCapturedPieces,
+      dropIntro,
+      capturedPiecesCanBeDropped,
+      dropLimitations,
+      youCannotHaveTwoUnpromotedPawns,
       protection,
       keepYourPiecesSafe,
       protectionIntro,
       protectionComplete,
       escape,
       noEscape,
+      makeSureAllSafe,
+      dontForgetYouCanDropToDefend,
       dontLetThemTakeAnyUndefendedPiece,
       combat,
       captureAndDefendPieces,
@@ -145,58 +172,77 @@ LishogiLearn(document.getElementById('learn-app'), ${safeJsonValue(
       outOfCheck,
       defendYourKing,
       outOfCheckIntro,
+      ifYourKingIsAttacked,
       escapeWithTheKing,
       theKingCannotEscapeButBlock,
       youCanGetOutOfCheckByTaking,
       thisKnightIsCheckingThroughYourDefenses,
+      getOutOfCheck,
+      watchOutForYourOpponentsReply,
       escapeOrBlock,
       outOfCheckComplete,
       mateInOne,
       defeatTheOpponentsKing,
       mateInOneIntro,
+      toWinInShogi,
+      dropsCommonDeliverMate,
       attackYourOpponentsKing,
+      chooseYourPieceCarefully,
+      mateWithADroppedPawnIs,
+      mateWithAPushedPawnIs,
       mateInOneComplete,
       intermediate,
       boardSetup,
       howTheGameStarts,
       boardSetupIntro,
       thisIsTheInitialPosition,
-      firstPlaceTheRooks,
-      thenPlaceTheKnights,
-      placeTheBishops,
-      placeTheQueen,
-      placeTheKing,
-      pawnsFormTheFrontLine,
+      firstPlaceTheKing,
+      dropAGold,
+      thenPlaceASilver,
+      dropTheKnights,
+      dropTheLances,
+      placeTheBishopThenRook,
+      placeThePawns,
+      pushingThe3rdPawn,
       boardSetupComplete,
-      stalemate,
-      theGameIsADraw,
-      stalemateIntro,
-      stalemateGoal,
-      stalemateComplete,
+      repetition,
+      fourfoldRepetitionIsADrawExcept,
+      repetitionIntro,
+      ifTheSamePositionOccurs,
+      perpetualCheckIsALoss,
+      boardFlippedFindBestMove,
+      repetitionComplete,
       advanced,
       pieceValue,
       evaluatePieceStrength,
-      pieceValueIntro,
+      pieceValueIntroNew,
       queenOverBishop,
-      takeThePieceWithTheHighestValue,
-      pieceValueComplete,
+      pawnsAreTheLeastValuable,
+      knightSilverGold,
+      goldBishopRook,
+      takeAllThePiecesStartingFromTheMost,
+      anExchangeIs,
+      theOpponentJustGaveAway,
+      yourKingsValueIsInfinite,
+      twoGeneralsAreBetter,
+      rememberWhichPieceIsTheMostValuable,
+      rememberTheKingIsMoreValuableThanEveryOtherPieceCombined,
       checkInTwo,
       twoMovesToGiveCheck,
       checkInTwoIntro,
       checkInTwoGoal,
       checkInTwoComplete,
       whatNext,
-      youKnowHowToPlayChess,
+      youKnowHowToPlayShogi,
       register,
       getAFreeLishogiAccount,
       shogiResources,
       curatedShogiResources,
       practice,
-      learnCommonChessPositions,
       puzzles,
       exerciseYourTacticalSkills,
       videos,
-      watchInstructiveChessVideos,
+      watchInstructiveShogiVideos,
       playPeople,
       opponentsFromAroundTheWorld,
       playMachine,

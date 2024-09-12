@@ -5,7 +5,7 @@ import play.api.i18n.Lang
 
 import lila.common.paginator.Paginator
 import lila.db.dsl._
-import lila.db.paginator.{ Adapter }
+import lila.db.paginator.Adapter
 import lila.user.{ User, UserRepo }
 
 final class CoachPager(
@@ -60,11 +60,10 @@ object CoachPager {
   object Order {
     case object Login         extends Order("login", "Last login", $sort desc "user.seenAt")
     case object LishogiRating extends Order("rating", "Lishogi rating", $sort desc "user.rating")
-    case object NbReview      extends Order("review", "User reviews", $sort desc "nbReviews")
     case object Alphabetical  extends Order("alphabetical", "Alphabetical", $sort asc "_id")
 
     val default                   = Login
-    val all                       = List(Login, LishogiRating, NbReview, Alphabetical)
+    val all                       = List(Login, LishogiRating, Alphabetical)
     def apply(key: String): Order = all.find(_.key == key) | default
   }
 }

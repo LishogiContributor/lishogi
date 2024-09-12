@@ -3,7 +3,7 @@ package views.html.user.show
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
-import lila.user.{ Trophy, TrophyKind }
+import lila.user.Trophy
 
 import controllers.routes
 
@@ -28,7 +28,7 @@ object otherTrophies {
         a(
           cls := "shield-trophy combo-trophy",
           ariaTitle(s"${shield.categ.name} Shield"),
-          href := routes.Tournament.shields()
+          href := routes.Tournament.shields
         )(shield.categ.iconChar.toString)
       },
       info.revolutions.map { revol =>
@@ -60,7 +60,7 @@ object otherTrophies {
       info.isCoach option
         a(
           href := routes.Coach.show(info.user.username),
-          cls := "trophy award icon3d coach",
+          cls  := "trophy award icon3d coach",
           ariaTitle(trans.coach.lishogiCoach.txt())
         )(":"),
       (info.isStreamer && ctx.noKid) option {

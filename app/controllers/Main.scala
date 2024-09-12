@@ -14,7 +14,6 @@ import views._
 
 final class Main(
     env: Env,
-    prismicC: Prismic,
     assetsC: ExternalAssets
 ) extends LilaController(env) {
 
@@ -70,22 +69,6 @@ final class Main(
       }
     }
 
-  def mobile =
-    Open { implicit ctx =>
-      pageHit
-      OptionOk(prismicC getBookmark "mobile-apk") { case (doc, resolver) =>
-        html.mobile(doc, resolver)
-      }
-    }
-
-  def dailyPuzzleSlackApp =
-    Open { implicit ctx =>
-      pageHit
-      fuccess {
-        html.site.dailyPuzzleSlackApp()
-      }
-    }
-
   def jslog(id: String) =
     Open { ctx =>
       env.round.selfReport(
@@ -104,19 +87,6 @@ final class Main(
       lila.mon.http.jsmon(event).increment()
       NoContent
     }
-
-  private lazy val glyphsResult: Result = {
-    import shogi.format.pgn.Glyph
-    import lila.tree.Node.glyphWriter
-    Ok(
-      Json.obj(
-        "move"        -> (Glyph.MoveAssessment.display: List[Glyph]),
-        "position"    -> (Glyph.PositionAssessment.display: List[Glyph]),
-        "observation" -> (Glyph.Observation.display: List[Glyph])
-      )
-    ) as JSON
-  }
-  val glyphs = Action(glyphsResult)
 
   def image(id: String, @nowarn("cat=unused") hash: String, @nowarn("cat=unused") name: String) =
     Action.async {
@@ -138,6 +108,7 @@ final class Main(
 Allow: /
 Disallow: /game/export/
 Disallow: /games/export/
+Disallow: /api/
 Allow: /game/export/gif/thumbnail/
 
 User-agent: Twitterbot
@@ -169,27 +140,6 @@ Allow: /
       } as JSON withHeaders (CACHE_CONTROL -> "max-age=1209600")
     }
 
-  def getFishnet =
-    Open { implicit ctx =>
-      pageHit
-      Ok(html.site.bits.getFishnet()).fuccess
-    }
-
-  def costs =
-    Action { req =>
-      pageHit(req)
-      Redirect("https://docs.google.com/spreadsheets/d/1CGgu-7aNxlZkjLl9l-OlL00fch06xp0Q7eCVDDakYEE/preview")
-    }
-
-  // Lichess.org Title Verification
-  def verifyTitle =
-    Action { req =>
-      pageHit(req)
-      Redirect(
-        "https://docs.google.com/forms/d/e/1FAIpQLSd64rDqXOihJzPlBsQba75di5ioL-WMFhkInS2_vhVTvDtBag/viewform"
-      )
-    }
-
   def contact =
     Open { implicit ctx =>
       pageHit
@@ -205,47 +155,6 @@ Allow: /
   def movedPermanently(to: String) =
     Action {
       MovedPermanently(to)
-    }
-
-  def instantChess =
-    Open { implicit ctx =>
-      pageHit
-      if (ctx.isAuth) fuccess(Redirect(routes.Lobby.home()))
-      else
-        fuccess {
-          Redirect(s"${routes.Lobby.home()}#pool/10+0").withCookies(
-            env.lilaCookie.withSession { s =>
-              s + ("theme" -> "ic") + ("pieceSet" -> "icpieces")
-            }
-          )
-        }
-    }
-
-  def legacyQaQuestion(id: Int, @nowarn("cat=unused") slug: String) =
-    Open { _ =>
-      MovedPermanently {
-        val faq = routes.Main.faq().url
-        id match {
-          case 103  => s"$faq#acpl"
-          case 258  => s"$faq#marks"
-          case 13   => s"$faq#titles"
-          case 87   => routes.Stat.ratingDistribution("blitz").url
-          case 110  => s"$faq#name"
-          case 29   => s"$faq#titles"
-          case 4811 => s"$faq#lm"
-          case 216  => routes.Main.mobile().url
-          case 340  => s"$faq#trophies"
-          case 6    => s"$faq#ratings"
-          case 207  => s"$faq#hide-ratings"
-          case 547  => s"$faq#leaving"
-          case 259  => s"$faq#trophies"
-          case 342  => s"$faq#provisional"
-          case 50   => routes.Page.help().url
-          case 46   => s"$faq#name"
-          case 122  => s"$faq#marks"
-          case _    => faq
-        }
-      }.fuccess
     }
 
   def devAsset(@nowarn("cat=unused") v: String, path: String, file: String) = assetsC.at(path, file)

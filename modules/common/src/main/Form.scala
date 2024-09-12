@@ -1,6 +1,7 @@
 package lila.common
 
 import org.joda.time.{ DateTime, DateTimeZone }
+import play.api.data.validation.Constraints
 import play.api.data.format.Formats._
 import play.api.data.format.{ Formatter, JodaFormats }
 import play.api.data.Forms._
@@ -8,6 +9,9 @@ import play.api.data.JodaForms._
 import play.api.data.validation.Constraint
 import play.api.data.{ Field, FormError, Mapping }
 import scala.util.Try
+import shogi.format.forsyth.Sfen
+
+import lila.common.base.StringUtils
 
 object Form {
 
@@ -58,15 +62,35 @@ object Form {
     of[Double].verifying(mustBeOneOf(choices.map(_._1)), hasKey(choices, _))
 
   def trim(m: Mapping[String]) = m.transform[String](_.trim, identity)
-  def clean(m: Mapping[String]) =
-    trim(m)
-      .verifying("This text contains invalid chars", s => !String.hasZeroWidthChars(s))
+
+  // trims and removes garbage chars before validation
+  val cleanTextFormatter: Formatter[String] = new Formatter[String] {
+    def bind(key: String, data: Map[String, String]) =
+      data
+        .get(key)
+        .map(_.trim)
+        .map(StringUtils.removeGarbageChars)
+        .toRight(Seq(FormError(key, "error.required", Nil)))
+    def unbind(key: String, value: String) = Map(key -> StringUtils.removeGarbageChars(value.trim))
+  }
+
+  val cleanText: Mapping[String] = of(cleanTextFormatter)
+  def cleanText(minLength: Int = 0, maxLength: Int = Int.MaxValue): Mapping[String] =
+    (minLength, maxLength) match {
+      case (min, Int.MaxValue) => cleanText.verifying(Constraints.minLength(min))
+      case (0, max)            => cleanText.verifying(Constraints.maxLength(max))
+      case (min, max)          => cleanText.verifying(Constraints.minLength(min), Constraints.maxLength(max))
+    }
+
+  val cleanNonEmptyText: Mapping[String] = cleanText.verifying(Constraints.nonEmpty)
+  def cleanNonEmptyText(minLength: Int = 0, maxLength: Int = Int.MaxValue): Mapping[String] =
+    cleanText(minLength, maxLength).verifying(Constraints.nonEmpty)
 
   def stringIn(choices: Options[String]) =
-    text.verifying(hasKey(choices, _))
+    cleanText.verifying(hasKey(choices, _))
 
   def stringIn(choices: Set[String]) =
-    text.verifying(mustBeOneOf(choices), choices.contains _)
+    cleanText.verifying(mustBeOneOf(choices), choices.contains _)
 
   def tolerantBoolean = of[Boolean](formatter.tolerantBooleanFormatter)
 
@@ -103,12 +127,17 @@ object Form {
     import play.api.data.{ validation => V }
     def minLength[A](from: A => String)(length: Int): Constraint[A] =
       Constraint[A]("constraint.minLength", length) { o =>
-        if (from(o).size >= length) V.Valid else V.Invalid(V.ValidationError("error.minLength", length))
+        if (from(o).sizeIs >= length) V.Valid else V.Invalid(V.ValidationError("error.minLength", length))
       }
     def maxLength[A](from: A => String)(length: Int): Constraint[A] =
       Constraint[A]("constraint.maxLength", length) { o =>
-        if (from(o).size <= length) V.Valid else V.Invalid(V.ValidationError("error.maxLength", length))
+        if (from(o).sizeIs <= length) V.Valid else V.Invalid(V.ValidationError("error.maxLength", length))
       }
+  }
+
+  object sfen {
+    implicit private val sfenFormat = formatter.stringFormatter[Sfen](_.value, Sfen.clean)
+    def clean                       = of[Sfen](sfenFormat)
   }
 
   def inTheFuture(m: Mapping[DateTime]) =
@@ -136,6 +165,7 @@ object Form {
   }
   object Timestamp {
     val formatter = new Formatter[org.joda.time.DateTime] {
+      @scala.annotation.nowarn("cat=lint")
       def bind(key: String, data: Map[String, String]) =
         stringFormat
           .bind(key, data)

@@ -1,7 +1,7 @@
 package lila.hub
 package actorApi
 
-import shogi.format.Uci
+import shogi.format.usi.Usi
 import org.joda.time.DateTime
 import play.api.libs.json._
 import scala.concurrent.Promise
@@ -80,7 +80,7 @@ package shutup {
     case class Study(id: String)       extends PublicSource("study")
     case class Watcher(gameId: String) extends PublicSource("watcher")
     case class Team(id: String)        extends PublicSource("team")
-    case class Swiss(id: String)       extends PublicSource("swiss")
+    case class Unknown(source: String) extends PublicSource("unknown")
   }
 }
 
@@ -93,6 +93,8 @@ package mod {
   case class SetPermissions(userId: String, permissions: List[String])
   case class AutoWarning(userId: String, subject: String)
   case class Impersonate(userId: String, by: Option[String])
+  case class DisableUser(userId: String)
+  case class Alert(msg: String)
 }
 
 package playban {
@@ -107,21 +109,11 @@ package captcha {
 
 package lobby {
   case class ReloadTournaments(html: String)
-  case class ReloadSimuls(html: String)
 }
 
 package simul {
   case class GetHostIds(promise: Promise[Set[String]])
   case class PlayerMove(gameId: String)
-}
-
-package slack {
-  sealed trait Event
-  case class Error(msg: String)                                                 extends Event
-  case class Warning(msg: String)                                               extends Event
-  case class Info(msg: String)                                                  extends Event
-  case class Victory(msg: String)                                               extends Event
-  case class TournamentName(userName: String, tourId: String, tourName: String) extends Event
 }
 
 package timeline {
@@ -167,12 +159,14 @@ package timeline {
   case class PlanStart(userId: String) extends Atom("planStart", true) {
     def userIds = List(userId)
   }
-  case class BlogPost(id: String, slug: String, title: String, langCode: String)
-      extends Atom("blogPost", true) {
+  case class BlogPost(id: String) extends Atom("blogPost", true) {
     def userIds = Nil
   }
   case class StreamStart(id: String, name: String) extends Atom("streamStart", true) {
     def userIds = List(id)
+  }
+  case class SystemNotification(msg: String) extends Atom("systemNotification", true) {
+    def userIds = Nil
   }
 
   object propagation {
@@ -223,12 +217,18 @@ package team {
 package fishnet {
   case class AutoAnalyse(gameId: String)
   case class NewKey(userId: String, key: String)
+  case class PostGameStudyRequest(
+      userId: String,
+      gameId: String,
+      studyId: String,
+      chapterId: String
+  )
   case class StudyChapterRequest(
       studyId: String,
       chapterId: String,
-      initialFen: Option[shogi.format.FEN],
+      initialSfen: Option[shogi.format.forsyth.Sfen],
       variant: shogi.variant.Variant,
-      moves: List[Uci],
+      moves: List[Usi],
       userId: String
   )
 }
@@ -240,8 +240,8 @@ package user {
 package round {
   case class MoveEvent(
       gameId: String,
-      fen: String,
-      move: String
+      sfen: String,
+      usi: String
   )
   case class CorresMoveEvent(
       move: MoveEvent,
@@ -258,13 +258,13 @@ package round {
       simulId: String,
       opponentUserId: String
   )
+  case class PostGameStudy(studyId: String)
   case class Berserk(gameId: String, userId: String)
   case class IsOnGame(color: shogi.Color, promise: Promise[Boolean])
   case class TourStandingOld(data: JsArray)
   case class TourStanding(tourId: String, data: JsArray)
-  case class FishnetPlay(uci: Uci, ply: Int)
-  case object FishnetStart
-  case class BotPlay(playerId: String, uci: Uci, promise: Option[scala.concurrent.Promise[Unit]] = None)
+  case class FishnetPlay(usi: Usi, ply: Int)
+  case class BotPlay(playerId: String, usi: Usi, promise: Option[scala.concurrent.Promise[Unit]] = None)
   case class RematchOffer(gameId: String)
   case class RematchYes(playerId: String)
   case class RematchNo(playerId: String)
@@ -292,6 +292,8 @@ package relation {
 
 package study {
   case class RemoveStudy(studyId: String, contributors: Set[String])
+  case class RoundRematch(studyId: String, gameId: String)
+  case class RoundRematchOffer(studyId: String, by: Option[shogi.Color])
 }
 
 package plan {

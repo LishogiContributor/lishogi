@@ -8,32 +8,32 @@ function miniPairing(ctrl) {
     var player = pairing.player;
     var result =
       pairing.game.status >= status.ids.mate
-        ? pairing.winnerColor === 'sente'
-          ? '1-0'
-          : pairing.winnerColor === 'gote'
-          ? '0-1'
-          : '½/½'
+        ? pairing.winnerColor
+          ? pairing.winnerColor === pairing.hostColor
+            ? ctrl.trans('xWon', ctrl.data.host.name)
+            : ctrl.trans('xLost', ctrl.data.host.name)
+          : ctrl.trans.noarg('draw')
         : '*';
     return m(
       'a',
       {
         href: '/' + game.id + '/' + game.orient,
-        class: ctrl.data.host.gameId === game.id ? 'host' : '',
+        class: ctrl.data.host.gameId === game.id && ctrl.data.isRunning ? 'host' : '',
       },
       [
         m(
           'span',
           {
-            class: 'mini-board mini-board-' + game.id + ' parse-fen is2d',
+            class: 'mini-board mini-board-' + game.id + ' parse-sfen' + ' v-' + game.variant,
             'data-color': game.orient,
-            'data-fen': game.fen,
-            'data-pocket': game.pockets,
+            'data-sfen': game.sfen,
             'data-lastmove': game.lastMove,
+            'data-variant': game.variant,
             config: function (el, isUpdate) {
-              if (!isUpdate) lishogi.parseFen($(el));
+              if (!isUpdate) lishogi.parseSfen($(el));
             },
           },
-          m('div.cg-wrap')
+          m('div.sg-wrap')
         ),
         m('span.vstext', [
           m('span.vstext__pl', [util.playerVariant(ctrl, player).name, m('br'), result]),

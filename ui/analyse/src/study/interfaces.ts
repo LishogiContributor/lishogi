@@ -1,24 +1,23 @@
-import { Prop } from 'common';
-import { NotifCtrl } from './notif';
+import { Prop } from 'common/common';
+import { Status } from 'game';
 import { AnalyseData, Redraw } from '../interfaces';
-import { StudyPracticeCtrl } from './practice/interfaces';
-import { StudyChaptersCtrl } from './studyChapters';
+import { CommentForm } from './commentForm';
 import { DescriptionCtrl } from './description';
 import GamebookPlayCtrl from './gamebook/gamebookPlayCtrl';
 import { GamebookOverride } from './gamebook/interfaces';
-import { GlyphCtrl } from './studyGlyph';
-import { CommentForm } from './commentForm';
-import { TopicsCtrl } from './topics';
-import RelayCtrl from './relay/relayCtrl';
-import { ServerEvalCtrl } from './serverEval';
 import { MultiBoardCtrl } from './multiBoard';
+import { NotifCtrl } from './notif';
+import { StudyPracticeCtrl } from './practice/interfaces';
+import { ServerEvalCtrl } from './serverEval';
+import { StudyChaptersCtrl } from './studyChapters';
+import { GlyphCtrl } from './studyGlyph';
+import { TopicsCtrl } from './topics';
 
 export interface StudyCtrl {
   data: StudyData;
   currentChapter(): StudyChapterMeta;
   socketHandler(t: string, d: any): boolean;
   vm: StudyVm;
-  relay?: RelayCtrl;
   multiBoard: MultiBoardCtrl;
   form: any;
   members: any;
@@ -33,6 +32,7 @@ export interface StudyCtrl {
   studyDesc: DescriptionCtrl;
   chapterDesc: DescriptionCtrl;
   toggleLike(): void;
+  rematch(yes: boolean): void;
   position(): Position;
   isChapterOwner(): boolean;
   canJumpTo(path: Tree.Path): boolean;
@@ -53,10 +53,9 @@ export interface StudyCtrl {
   practice?: StudyPracticeCtrl;
   gamebookPlay(): GamebookPlayCtrl | undefined;
   nextChapter(): StudyChapterMeta | undefined;
-  mutateCgConfig(config: any): void;
+  mutateSgConfig(config: any): void;
   isUpdatedRecently(): boolean;
   setGamebookOverride(o: GamebookOverride): void;
-  explorerGame(gameId: string, insert: boolean): void;
   onPremoveSet(): void;
   redraw: Redraw;
   trans: Trans;
@@ -91,6 +90,18 @@ export interface StudyData {
   visibility: 'public' | 'unlisted' | 'private';
   createdAt: number;
   from: string;
+  postGameStudy?: {
+    gameId: string;
+    players: {
+      sente: GamePlayer;
+      gote: GamePlayer;
+    };
+    rematches: {
+      sente: boolean;
+      gote: boolean;
+    };
+    withOpponent: boolean;
+  };
   likes: number;
   isNew?: boolean;
   liked: boolean;
@@ -109,7 +120,6 @@ type UserSelection = 'nobody' | 'owner' | 'contributor' | 'member' | 'everyone';
 
 export interface StudySettings {
   computer: UserSelection;
-  explorer: UserSelection;
   cloneable: UserSelection;
   chat: UserSelection;
   sticky: Boolean;
@@ -135,6 +145,7 @@ export interface StudyFeatures {
 export interface StudyChapterMeta {
   id: string;
   name: string;
+  variant: VariantKey;
 }
 
 export interface StudyChapterConfig extends StudyChapterMeta {
@@ -150,34 +161,33 @@ export interface StudyChapter {
   name: string;
   ownerId: string;
   setup: StudyChapterSetup;
+  initialSfen: Sfen;
   tags: TagArray[];
   practice: boolean;
   conceal?: number;
   gamebook: boolean;
   features: StudyChapterFeatures;
   description?: string;
-  relay?: StudyChapterRelay;
-}
-
-export interface StudyChapterRelay {
-  path: Tree.Path;
-  secondsSinceLastMove?: number;
-  lastMoveAt?: number;
+  gameLength?: number;
 }
 
 interface StudyChapterSetup {
   gameId?: string;
   variant: {
-    key: string;
+    key: VariantKey;
     name: string;
   };
   orientation: Color;
-  fromFen?: string;
+  endStatus?: {
+    status: Status;
+    winner?: Color;
+  };
+  fromSfen?: string;
+  fromNotation?: string;
 }
 
 interface StudyChapterFeatures {
   computer: boolean;
-  explorer: boolean;
 }
 
 export type StudyMember = {
@@ -208,7 +218,8 @@ export interface ChapterPreview {
     gote: ChapterPreviewPlayer;
   };
   orientation: Color;
-  fen: string;
+  variant: Variant;
+  sfen: string;
   lastMove?: string;
   playing: boolean;
 }
@@ -217,4 +228,9 @@ export interface ChapterPreviewPlayer {
   name: string;
   title?: string;
   rating?: number;
+}
+
+export interface GamePlayer {
+  playerId: string;
+  userId?: string;
 }

@@ -5,16 +5,16 @@ import org.joda.time.DateTime
 import play.api.data._
 import play.api.data.Forms._
 
-import shogi.StartingPosition
 import shogi.variant.Variant
 import lila.common.Form._
+import shogi.format.forsyth.Sfen
 
 object CrudForm {
 
   import DataForm._
   import lila.common.Form.UTCDate._
 
-  val maxHomepageHours = 72
+  val maxHomepageHours = 24 * 7
 
   lazy val apply = Form(
     mapping(
@@ -26,7 +26,7 @@ object CrudForm {
       "periods"        -> numberIn(periodsChoices),
       "minutes"        -> number(min = 20, max = 1440),
       "variant"        -> number.verifying(Variant exists _),
-      "position"       -> text.verifying(DataForm.positions contains _),
+      "position"       -> optional(lila.common.Form.sfen.clean),
       "date"           -> utcDate,
       "image"          -> stringIn(imageChoices),
       "headline"       -> text(minLength = 5, maxLength = 30),
@@ -37,6 +37,7 @@ object CrudForm {
     )(CrudForm.Data.apply)(CrudForm.Data.unapply)
       .verifying("Invalid clock", _.validClock)
       .verifying("Increase tournament duration, or decrease game clock", _.validTiming)
+      .verifying("Custom position is not valid", _.isCustomPositionValid)
   ) fill CrudForm.Data(
     name = "",
     homepageHours = 0,
@@ -46,7 +47,7 @@ object CrudForm {
     periods = periodsDefault,
     minutes = minuteDefault,
     variant = shogi.variant.Standard.id,
-    position = StartingPosition.initial.fen,
+    position = none,
     date = DateTime.now plusDays 7,
     image = "",
     headline = "",
@@ -65,7 +66,7 @@ object CrudForm {
       periods: Int,
       minutes: Int,
       variant: Int,
-      position: String,
+      position: Option[Sfen],
       date: DateTime,
       image: String,
       headline: String,
@@ -78,6 +79,11 @@ object CrudForm {
     def realVariant = Variant orDefault variant
 
     def validClock = (clockTime + clockIncrement) > 0 || (clockTime + clockByoyomi) > 0
+
+    def isCustomPositionValid =
+      position.fold(true) { sfen =>
+        sfen.toSituation(realVariant).exists(_.playable(strict = true, withImpasse = true))
+      }
 
     def validTiming = (minutes * 60) >= (3 * estimatedGameDuration)
 

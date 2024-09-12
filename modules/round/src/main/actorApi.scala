@@ -3,8 +3,8 @@ package actorApi
 
 import scala.concurrent.Promise
 
-import shogi.format.Uci
-import shogi.{ Color, MoveMetrics }
+import shogi.format.usi.Usi
+import shogi.{ Color, LagMetrics }
 
 import lila.common.IpAddress
 import lila.game.Game.PlayerId
@@ -30,13 +30,13 @@ package round {
 
   case class HumanPlay(
       playerId: PlayerId,
-      uci: Uci,
+      usi: Usi,
       blur: Boolean,
-      moveMetrics: MoveMetrics = MoveMetrics(),
+      lagMetrics: LagMetrics = LagMetrics(),
       promise: Option[Promise[Unit]] = None
   )
 
-  case class PlayResult(events: Events, fen: String, lastMove: Option[String])
+  case class PlayResult(events: Events, sfen: String, lastUsi: Option[String])
 
   case object AbortForce
   case object ResignAi
@@ -45,16 +45,20 @@ package round {
   case class DrawClaim(playerId: PlayerId)
   case class DrawYes(playerId: PlayerId)
   case class DrawNo(playerId: PlayerId)
+  case class PauseYes(playerId: PlayerId)
+  case class PauseNo(playerId: PlayerId)
+  case class ResumeYes(playerId: PlayerId)
+  case class ResumeNo(playerId: PlayerId)
   case class TakebackYes(playerId: PlayerId)
   case class TakebackNo(playerId: PlayerId)
   case class Moretime(playerId: PlayerId)
   case object QuietFlag
   case class ClientFlag(color: Color, fromPlayerId: Option[PlayerId])
   case object Abandon
-  case class ForecastPlay(lastMove: Uci)
+  case class ForecastPlay(lastUsi: Usi)
   case class Cheat(color: Color)
   case class HoldAlert(playerId: PlayerId, mean: Int, sd: Int, ip: IpAddress)
-  case class GoBerserk(color: Color)
+  case class GoBerserk(color: Color, promise: Promise[Boolean])
   case object NoStart
   case object TooManyPlies
 }

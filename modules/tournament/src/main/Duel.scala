@@ -65,9 +65,9 @@ final private class DuelStore {
       tourId <- game.tournamentId
       tb     <- get(tourId)
     } {
-      if (tb.size <= 1) byTourId.remove(tourId)
+      if (tb.sizeIs <= 1) byTourId.remove(tourId)
       else byTourId.put(tourId, tb.filter(_.gameId != game.id))
     }
 
-  def remove(tour: Tournament): Unit = byTourId.remove(tour.id)
+  def remove(tour: Tournament): Unit = byTourId.remove(tour.id).unit
 }

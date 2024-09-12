@@ -1,10 +1,10 @@
+import { transWithColorName } from 'common/colorName';
+import { MaybeVNodes, bind } from 'common/snabbdom';
+import { isHandicap } from 'shogiops/handicaps';
 import { Outcome } from 'shogiops/types';
-import { bind } from '../util';
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { PracticeCtrl, Comment } from './practiceCtrl';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
-import { MaybeVNodes } from '../interfaces';
+import { Comment, PracticeCtrl } from './practiceCtrl';
 
 function commentBest(c: Comment, root: AnalyseCtrl, ctrl: PracticeCtrl): MaybeVNodes {
   return c.best
@@ -23,7 +23,7 @@ function commentBest(c: Comment, root: AnalyseCtrl, ctrl: PracticeCtrl): MaybeVN
               destroy: () => ctrl.commentShape(false),
             },
           },
-          c.best.san
+          c.best.usi
         )
       )
     : [];
@@ -46,7 +46,18 @@ function renderEnd(root: AnalyseCtrl, end: Outcome): VNode {
     h('div.instruction', [
       h('strong', root.trans.noarg(end.winner ? 'checkmate' : 'draw')),
       end.winner
-        ? h('em', h('color', root.trans.noarg(end.winner === 'sente' ? 'blackWinsGame' : 'whiteWinsGame')))
+        ? h(
+            'em',
+            h(
+              'color',
+              transWithColorName(
+                root.trans,
+                'xWinsGame',
+                end.winner,
+                isHandicap({ rules: root.data.game.variant.key, sfen: root.data.game.initialSfen })
+              )
+            )
+          )
         : h('em', root.trans.noarg('theGameIsADraw')),
     ]),
   ]);
@@ -101,7 +112,7 @@ export default function (root: AnalyseCtrl): VNode | undefined {
   if (!ctrl) return;
   const comment: Comment | null = ctrl.comment();
   const running: boolean = ctrl.running();
-  const end = ctrl.currentNode().threefold ? { winner: undefined } : root.outcome();
+  const end: Outcome | undefined = ctrl.currentNode().fourfold ? { result: 'draw', winner: undefined } : root.outcome();
   return h('div.practice-box.training-box.sub-box.' + (comment ? comment.verdict : 'no-verdict'), [
     h('div.title', root.trans.noarg('practiceWithComputer')),
     h('div.feedback', !running ? renderOffTrack(root, ctrl) : end ? renderEnd(root, end) : renderRunning(root, ctrl)),
@@ -115,7 +126,7 @@ export default function (root: AnalyseCtrl): VNode | undefined {
             : [ctrl.isMyTurn() || end ? '' : h('span.wait', root.trans.noarg('evaluatingYourMove'))]
         )
       : running
-      ? h('div.comment')
-      : null,
+        ? h('div.comment')
+        : null,
   ]);
 }

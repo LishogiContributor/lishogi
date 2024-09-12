@@ -1,14 +1,5 @@
-import { initial as initialBoardFen } from 'shogiground/fen';
 import { ops as treeOps } from 'tree';
 import AnalyseCtrl from './ctrl';
-
-type DestCache = {
-  [fen: string]: DestCacheEntry;
-};
-type DestCacheEntry = {
-  path: string;
-  dests: string;
-};
 
 interface Handlers {
   [key: string]: any; // #TODO
@@ -21,31 +12,12 @@ interface Req {
 export interface Socket {
   send: SocketSend;
   receive(type: string, data: any): boolean;
-  sendAnaMove(req: Req): void;
-  sendAnaDrop(req: Req): void;
-  sendAnaDests(req: Req): void;
+  sendAnaUsi(req: Req): void;
   sendForecasts(req: Req): void;
-  clearCache(): void;
 }
 
 export function make(send: SocketSend, ctrl: AnalyseCtrl): Socket {
-  let anaMoveTimeout: number | undefined;
-  let anaDestsTimeout: number | undefined;
-
-  let anaDestsCache: DestCache = {};
-
-  function clearCache() {
-    anaDestsCache = {};
-    ctrl.data.game.variant.key === 'standard' && ctrl.tree.root.fen.split(' ', 1)[0] === initialBoardFen
-      ? {
-          '': {
-            path: '',
-            dests: 'aj fonp uD gpo vE clm wF dmln sB qponmlr ir tC enmo yH zI AJ xG',
-          },
-        }
-      : {};
-  }
-  clearCache();
+  let anaUsiTimeout: number | undefined;
 
   // forecast mode: reload when opponent moves
   if (!ctrl.synthetic)
@@ -72,28 +44,17 @@ export function make(send: SocketSend, ctrl: AnalyseCtrl): Socket {
 
   const handlers: Handlers = {
     node(data) {
-      clearTimeout(anaMoveTimeout);
+      clearTimeout(anaUsiTimeout);
       // no strict equality here!
       if (data.ch == currentChapterId()) ctrl.addNode(data.node, data.path);
       else console.log('socket handler node got wrong chapter id', data);
     },
     stepFailure() {
-      clearTimeout(anaMoveTimeout);
+      clearTimeout(anaUsiTimeout);
       ctrl.reset();
     },
-    dests(data) {
-      clearTimeout(anaDestsTimeout);
-      if (!data.ch || data.ch === currentChapterId()) {
-        anaDestsCache[data.path] = data;
-        ctrl.addDests(data.dests, data.path);
-      } else console.log('socket handler node got wrong chapter id', data);
-    },
-    destsFailure(data) {
-      console.log(data);
-      clearTimeout(anaDestsTimeout);
-    },
-    fen(e) {
-      if (ctrl.forecast && e.id === ctrl.data.game.id && treeOps.last(ctrl.mainline)!.fen.indexOf(e.fen) !== 0) {
+    sfen(e) {
+      if (ctrl.forecast && e.id === ctrl.data.game.id && treeOps.last(ctrl.mainline)!.sfen.indexOf(e.sfen) !== 0) {
         ctrl.forecast.reloadToLastPly();
       }
     },
@@ -112,37 +73,12 @@ export function make(send: SocketSend, ctrl: AnalyseCtrl): Socket {
     if (obj.variant === 'standard') delete obj.variant;
   }
 
-  function sendAnaDests(req) {
-    clearTimeout(anaDestsTimeout);
-    if (anaDestsCache[req.path])
-      setTimeout(function () {
-        handlers.dests(anaDestsCache[req.path]);
-      }, 300);
-    else {
-      withoutStandardVariant(req);
-      addStudyData(req);
-      send('anaDests', req);
-      anaDestsTimeout = setTimeout(function () {
-        console.log(req, 'resendAnaDests');
-        sendAnaDests(req);
-      }, 3000);
-    }
-  }
-
-  function sendAnaMove(req) {
-    clearTimeout(anaMoveTimeout);
+  function sendAnaUsi(req) {
+    clearTimeout(anaUsiTimeout);
     withoutStandardVariant(req);
     addStudyData(req, true);
-    send('anaMove', req);
-    anaMoveTimeout = setTimeout(() => sendAnaMove(req), 3000);
-  }
-
-  function sendAnaDrop(req) {
-    clearTimeout(anaMoveTimeout);
-    withoutStandardVariant(req);
-    addStudyData(req, true);
-    send('anaDrop', req);
-    anaMoveTimeout = setTimeout(() => sendAnaDrop(req), 3000);
+    send('anaUsi', req);
+    anaUsiTimeout = setTimeout(() => sendAnaUsi(req), 3000);
   }
 
   return {
@@ -151,13 +87,10 @@ export function make(send: SocketSend, ctrl: AnalyseCtrl): Socket {
       if (handler) handler(data);
       return !!ctrl.study && ctrl.study.socketHandler(type, data);
     },
-    sendAnaMove,
-    sendAnaDrop,
-    sendAnaDests,
+    sendAnaUsi,
     sendForecasts(req) {
       send('forecasts', req);
     },
-    clearCache,
     send,
   };
 }

@@ -4,7 +4,7 @@
   <string name="advantageDescription">Saisissez votre chance de gagner un avantage décisif.</string>
   <string name="castling">Roque</string>
   <string name="castlingDescription">Amener le roi en sécurité.</string>
-  <string name="crushing">Ecrasant</string>
+  <string name="crushing">Écrasant</string>
   <string name="crushingDescription">Repérez la gaffe de l\'adversaire pour obtenir un avantage écrasant.</string>
   <string name="equality">Égalité</string>
   <string name="equalityDescription">Revenir d\'une position perdante et assurer une nulle ou une position équilibrée.</string>
@@ -64,7 +64,7 @@
   <string name="strikingPawnDescription">Une tactique qui consiste à parachuter un pion devant une pièce de l\'adversaire pour l\'attaquer.</string>
   <string name="joiningPawn">Joining pawn</string>
   <string name="joiningPawnDescription">Une tactique où un pion est sacrificiellement parachuté devant une pièce adverse.</string>
-  <string name="dancingPawns">Dancing pawns</string>
+  <string name="dancingPawns">Pions dansants</string>
   <string name="dancingPawnsDescription">Une tactique pour capturer un général d\'or adverse par un sacrifice de pion.</string>
   <string name="edgeAttack">Attaque sur le flanc</string>
   <string name="edgeAttackDescription">Une tactique qui consiste à attaquer l\'adversaire par la première ou la neuvième colonne.</string>

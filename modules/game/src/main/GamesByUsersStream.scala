@@ -5,13 +5,13 @@ import play.api.libs.json._
 import scala.concurrent.duration._
 
 import actorApi.{ FinishGame, StartGame }
-import shogi.format.FEN
+import shogi.format.forsyth.Sfen
 import lila.common.Bus
 import lila.common.Json.jodaWrites
 import lila.game.Game
 import lila.user.User
 
-final class GamesByUsersStream(gameRepo: lila.game.GameRepo)(implicit
+final class GamesByUsersStream()(implicit
     ec: scala.concurrent.ExecutionContext
 ) {
 
@@ -20,8 +20,7 @@ final class GamesByUsersStream(gameRepo: lila.game.GameRepo)(implicit
 
   private val blueprint = Source
     .queue[Game](64, akka.stream.OverflowStrategy.dropHead)
-    .mapAsync(1)(gameRepo.withInitialFen)
-    .map(gameWithInitialFenWriter.writes)
+    .map(gameWriter.writes)
     .map(some)
     .keepAlive(keepAliveInterval, () => none)
 
@@ -33,47 +32,46 @@ final class GamesByUsersStream(gameRepo: lila.game.GameRepo)(implicit
           case _                        => false
         }
       val sub = Bus.subscribeFun(chans: _*) {
-        case StartGame(game) if matches(game)        => queue offer game
-        case FinishGame(game, _, _) if matches(game) => queue offer game
+        case StartGame(game) if matches(game)        => queue.offer(game).unit
+        case FinishGame(game, _, _) if matches(game) => queue.offer(game).unit
       }
       queue.watchCompletion().foreach { _ =>
         Bus.unsubscribe(sub, chans)
       }
     }
 
-  implicit private val fenWriter: Writes[FEN] = Writes[FEN] { f =>
-    JsString(f.value)
+  implicit private val sfenWriter: Writes[Sfen] = Writes[Sfen] { sf =>
+    JsString(sf.value)
   }
 
-  private val gameWithInitialFenWriter: OWrites[Game.WithInitialFen] = OWrites {
-    case Game.WithInitialFen(g, initialFen) =>
-      Json
-        .obj(
-          "id"        -> g.id,
-          "rated"     -> g.rated,
-          "variant"   -> g.variant.key,
-          "speed"     -> g.speed.key,
-          "perf"      -> PerfPicker.key(g),
-          "createdAt" -> g.createdAt,
-          "status"    -> g.status.id,
-          "players" -> JsObject(g.players map { p =>
-            p.color.name -> Json
-              .obj(
-                "userId" -> p.userId,
-                "rating" -> p.rating
-              )
-              .add("provisional" -> p.provisional)
-          })
-        )
-        .add("initialFen" -> initialFen)
-        .add("clock" -> g.clock.map { clock =>
-          Json.obj(
-            "initial"   -> clock.limitSeconds,
-            "increment" -> clock.incrementSeconds,
-            "byoyomi"   -> clock.byoyomiSeconds,
-            "periods"   -> clock.periods
-          )
+  private val gameWriter: OWrites[Game] = OWrites { g =>
+    Json
+      .obj(
+        "id"        -> g.id,
+        "rated"     -> g.rated,
+        "variant"   -> g.variant.key,
+        "speed"     -> g.speed.key,
+        "perf"      -> PerfPicker.key(g),
+        "createdAt" -> g.createdAt,
+        "status"    -> g.status.id,
+        "players" -> JsObject(g.players map { p =>
+          p.color.name -> Json
+            .obj(
+              "userId" -> p.userId,
+              "rating" -> p.rating
+            )
+            .add("provisional" -> p.provisional)
         })
-        .add("daysPerTurn" -> g.daysPerTurn)
+      )
+      .add("initialSfen" -> g.initialSfen)
+      .add("clock" -> g.clock.map { clock =>
+        Json.obj(
+          "initial"   -> clock.limitSeconds,
+          "increment" -> clock.incrementSeconds,
+          "byoyomi"   -> clock.byoyomiSeconds,
+          "periods"   -> clock.periodsTotal
+        )
+      })
+      .add("daysPerTurn" -> g.daysPerTurn)
   }
 }

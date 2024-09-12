@@ -4,7 +4,7 @@ import scala.concurrent.duration._
 
 final private class Monitor(
     repo: FishnetRepo,
-    moveDb: MoveDB,
+    @scala.annotation.unused moveDb: MoveDB,
     cacheApi: lila.memo.CacheApi
 )(implicit
     ec: scala.concurrent.ExecutionContext,
@@ -12,7 +12,7 @@ final private class Monitor(
 ) {
 
   val statusCache = cacheApi.unit[Monitor.Status] {
-    _.refreshAfterWrite(1 minute)
+    _.refreshAfterWrite(2 minute)
       .buildAsyncFuture { _ =>
         repo.status.compute
       }
@@ -32,11 +32,11 @@ final private class Monitor(
   ) = {
     Monitor.success(work, client)
 
-    val threads = result.stockfish.options.threadsInt
+    val threads = result.yaneuraou.options.threadsInt
     val userId  = client.userId.value
 
-    result.stockfish.options.hashInt foreach { monBy.hash(userId).update(_) }
-    result.stockfish.options.threadsInt foreach { monBy.threads(userId).update(_) }
+    result.yaneuraou.options.hashInt foreach { monBy.hash(userId).update(_) }
+    result.yaneuraou.options.threadsInt foreach { monBy.threads(userId).update(_) }
 
     monBy.totalSecond(userId).increment(sumOf(result.evaluations)(_.time) * threads.|(1) / 1000)
     monBy
@@ -68,7 +68,7 @@ final private class Monitor(
   }
 
   private def sample[A](elems: List[A], n: Int) =
-    if (elems.size <= n) elems else lila.common.ThreadLocalRandom shuffle elems take n
+    if (elems.sizeIs <= n) elems else lila.common.ThreadLocalRandom shuffle elems take n
 
   private def monitorClients(): Funit =
     repo.allRecentClients map { clients =>
@@ -82,7 +82,7 @@ final private class Monitor(
       instances.map(_.version.value).groupBy(identity).view.mapValues(_.size) foreach { case (v, nb) =>
         version(v).update(nb)
       }
-      instances.map(_.engines.stockfish.name).groupBy(identity).view.mapValues(_.size) foreach {
+      instances.map(_.engines.yaneuraou.name).groupBy(identity).view.mapValues(_.size) foreach {
         case (s, nb) => stockfish(s).update(nb)
       }
       instances.map(_.python.value).groupBy(identity).view.mapValues(_.size) foreach { case (s, nb) =>
@@ -96,23 +96,29 @@ final private class Monitor(
       lila.mon.fishnet.work("queued", "user").update(c.user.queued)
       lila.mon.fishnet.work("acquired", "system").update(c.system.acquired)
       lila.mon.fishnet.work("acquired", "user").update(c.user.acquired)
+      lila.mon.fishnet.work("puzzles", "verifiable").update(c.puzzles.verifiable)
+      lila.mon.fishnet.work("puzzles", "candidates").update(c.puzzles.candidates)
       lila.mon.fishnet.oldest("system").update(c.system.oldest)
       lila.mon.fishnet.oldest("user").update(c.user.oldest)
+      ()
     }
 
   system.scheduler.scheduleWithFixedDelay(1 minute, 1 minute) { () =>
     monitorClients() >> monitorStatus()
+    ()
   }
 }
 
 object Monitor {
 
   case class StatusFor(acquired: Int, queued: Int, oldest: Int)
-  case class Status(user: StatusFor, system: StatusFor)
+  case class StatusPuzzle(verifiable: Int, candidates: Int)
+
+  case class Status(user: StatusFor, system: StatusFor, puzzles: StatusPuzzle)
 
   private val monResult = lila.mon.fishnet.client.result
 
-  private[fishnet] def move(work: Work.Move, client: Client) = {
+  private[fishnet] def move(client: Client) = {
     monResult.success(client.userId.value).increment()
   }
 
@@ -128,15 +134,8 @@ object Monitor {
   }
 
   private[fishnet] def failure(work: Work, client: Client, e: Exception) = {
-    logger.warn(s"Received invalid analysis ${work.id} for ${work.game.id} by ${client.fullId}", e)
+    logger.warn(s"Received invalid ${work.name} ${work.id} for ${work.game.id} by ${client.fullId}", e)
     monResult.failure(client.userId.value).increment()
-  }
-
-  private[fishnet] def weak(work: Work, client: Client, data: JsonApi.Request.CompleteAnalysis) = {
-    logger.warn(
-      s"Received weak analysis ${work.id} (nodes: ${~data.medianNodes}) for ${work.game.id} by ${client.fullId}"
-    )
-    monResult.weak(client.userId.value).increment()
   }
 
   private[fishnet] def timeout(userId: Client.UserId) =
@@ -145,14 +144,14 @@ object Monitor {
   private[fishnet] def abort(client: Client) =
     monResult.abort(client.userId.value).increment()
 
-  private[fishnet] def notFound(id: Work.Id, client: Client) = {
-    logger.info(s"Received unknown analysis $id by ${client.fullId}")
+  private[fishnet] def notFound(id: Work.Id, name: String, client: Client) = {
+    logger.info(s"Received unknown ${name} $id by ${client.fullId}")
     monResult.notFound(client.userId.value).increment()
   }
 
   private[fishnet] def notAcquired(work: Work, client: Client) = {
     logger.info(
-      s"Received unacquired analysis ${work.id} for ${work.game.id} by ${client.fullId}. Work current tries: ${work.tries} acquired: ${work.acquired}"
+      s"Received unacquired ${work.name} ${work.id} for ${work.game.id} by ${client.fullId}. Work current tries: ${work.tries} acquired: ${work.acquired}"
     )
     monResult.notAcquired(client.userId.value).increment()
   }

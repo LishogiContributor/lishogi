@@ -16,7 +16,7 @@ import lila.app._
 import lila.app.mashup.{ GameFilter, GameFilterMenu }
 import lila.common.paginator.Paginator
 import lila.common.{ HTTPRequest, IpAddress }
-import lila.game.{ Pov, Game => GameModel }
+import lila.game.{ Game => GameModel, Pov }
 import lila.rating.PerfType
 import lila.socket.UserLagCache
 import lila.user.{ User => UserModel }
@@ -101,7 +101,7 @@ final class User(
                 filter = filters.current,
                 me = ctx.me,
                 page = page
-              )(ctx.body)
+              )(ctx.body, formBinding)
               _ <- env.user.lightUserApi preloadMany pag.currentPageResults.flatMap(_.userIds)
               _ <- env.tournament.cached.nameCache preloadMany {
                 pag.currentPageResults.flatMap(_.tournamentId).map(_ -> ctxLang)
@@ -113,7 +113,7 @@ final class User(
                   social <- env.socialInfo(u, ctx)
                   searchForm =
                     (filters.current == GameFilter.Search) option
-                      GameFilterMenu.searchForm(userGameSearch, filters.current)(ctx.body)
+                      GameFilterMenu.searchForm(userGameSearch, filters.current)(ctx.body, formBinding)
                 } yield html.user.show.page.games(u, info, pag, filters, searchForm, social)
                 else fuccess(html.user.show.gamesContent(u, nbs, pag, filters, filter))
             } yield res,
@@ -146,7 +146,7 @@ final class User(
             ctx.userId.?? { env.game.crosstableApi.fetchOrEmpty(user.id, _) dmap some } zip
             ctx.isAuth.?? { env.pref.api.followable(user.id) } zip
             ctx.userId.?? { relationApi.fetchRelation(_, user.id) } flatMap {
-              case blocked ~ crosstable ~ followable ~ relation =>
+              case (((blocked, crosstable), followable), relation) =>
                 val ping = env.socket.isOnline(user.id) ?? UserLagCache.getLagRating(user.id)
                 negotiate(
                   html = !ctx.is(user) ?? currentlyPlaying(user) map { pov =>
@@ -230,7 +230,7 @@ final class User(
           filter = GameFilterMenu.currentOf(GameFilterMenu.all, filterName),
           me = ctx.me,
           page = page
-        )(ctx.body)
+        )(ctx.body, formBinding)
         pag <- pagFromDb.mapFutureResults(env.round.proxyRepo.upgradeIfPresent)
         _ <- env.tournament.cached.nameCache preloadMany {
           pag.currentPageResults.flatMap(_.tournamentId).map(_ -> ctxLang)
@@ -268,7 +268,12 @@ final class User(
                   "rapid"          -> leaderboards.rapid,
                   "classical"      -> leaderboards.classical,
                   "ultraBullet"    -> leaderboards.ultraBullet,
-                  "correspondence" -> leaderboards.correspondence // todo variant
+                  "correspondence" -> leaderboards.correspondence,
+                  "minishogi"      -> leaderboards.minishogi,
+                  "chushogi"       -> leaderboards.chushogi,
+                  "annanshogi"     -> leaderboards.annanshogi,
+                  "kyotoshogi"     -> leaderboards.kyotoshogi,
+                  "checkshogi"     -> leaderboards.checkshogi
                 )
               )
             }
@@ -328,7 +333,10 @@ final class User(
 
         val nbOthers = getInt("nbOthers") | 100
 
-        val modLog = env.mod.logApi.userHistory(user.id).map(view.modLog)
+        val modLog = for {
+          history <- env.mod.logApi.userHistory(user.id)
+          appeal  <- env.appeal.api.get(user)
+        } yield view.modLog(history, appeal)
 
         val plan = env.plan.api.recentChargesOf(user).map(view.plan).dmap(~_)
 
@@ -354,18 +362,13 @@ final class User(
             .logTimeIfGt(s"$username noteApi.forMod", 2 seconds)) zip
             env.playban.api.bans(familyUserIds).logTimeIfGt(s"$username playban.bans", 2 seconds) zip
             lila.security.UserSpy.withMeSortedWithEmails(env.user.repo, user, spy) map {
-              case notes ~ bans ~ othersWithEmail =>
+              case ((notes, bans), othersWithEmail) =>
                 html.user.mod.otherUsers(user, spy, othersWithEmail, notes, bans, nbOthers)
             }
         }
         val identification = spyFu map { spy =>
           (isGranted(_.Doxing) || (user.lameOrAlt && !user.hasTitle)) ??
             html.user.mod.identification(spy)
-        }
-        val irwin = env.irwin.api.reports.withPovs(user) map {
-          _ ?? { reps =>
-            html.irwin.report(reps)
-          }
         }
         val assess = env.mod.assessApi.getPlayerAggregateAssessmentWithGames(user.id) flatMap {
           _ ?? { as =>
@@ -384,7 +387,6 @@ final class User(
             modZoneSegment(rageSit, "rageSit", user) merge
             modZoneSegment(others, "others", user) merge
             modZoneSegment(identification, "identification", user) merge
-            modZoneSegment(irwin, "irwin", user) merge
             modZoneSegment(assess, "assess", user) via
             EventSource.flow
         }.as(ContentTypes.EVENT_STREAM) pipe noProxyBuffer
@@ -471,7 +473,7 @@ final class User(
               oldPerfStat <- env.perfStat.get(u, perfType)
               perfStat = oldPerfStat.copy(playStreak = oldPerfStat.playStreak.checkCurrent)
               distribution <- u.perfs(perfType).established ?? {
-                env.user.rankingApi.weeklyRatingDistribution(perfType) dmap some
+                env.user.rankingApi.monthlyRatingDistribution(perfType) dmap some
               }
               percentile = distribution.map { distrib =>
                 lila.user.Stat.percentile(distrib, u.perfs(perfType).intRating) match {
@@ -507,9 +509,8 @@ final class User(
           }
         case Some(term) =>
           {
-            (get("tour"), get("swiss")) match {
-              case (Some(tourId), _)  => env.tournament.playerRepo.searchPlayers(tourId, term, 10)
-              case (_, Some(swissId)) => env.swiss.api.searchPlayers(lila.swiss.Swiss.Id(swissId), term, 10)
+            get("tour") match {
+              case Some(tourId) => env.tournament.playerRepo.searchPlayers(tourId, term, 10)
               case _ =>
                 ctx.me.ifTrue(getBool("friend")) match {
                   case Some(follower) =>

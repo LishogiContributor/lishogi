@@ -1,17 +1,15 @@
-import { empty } from 'common';
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { Hooks } from 'snabbdom/hooks';
-import { MaybeVNodes } from './interfaces';
-import { AutoplayDelay } from './autoplay';
-import { boolSetting, BoolSetting } from './boolSetting';
-import AnalyseCtrl from './ctrl';
+import { isEmpty } from 'common/common';
+import { editor, encodeSfen, setup } from 'common/links';
+import { MaybeVNodes, bind, bindNonPassive, dataIcon } from 'common/snabbdom';
 import { cont as contRoute } from 'game/router';
-import { bind, dataIcon } from './util';
-import * as pgnExport from './pgnExport';
+import { Hooks, VNode, h } from 'snabbdom';
+import { AutoplayDelay } from './autoplay';
+import { BoolSetting, boolSetting } from './boolSetting';
+import AnalyseCtrl from './ctrl';
+import * as kifExport from './notationExport';
 
 interface AutoplaySpeed {
-  name: string;
+  name: I18nKey;
   delay: AutoplayDelay;
 }
 
@@ -46,7 +44,7 @@ function deleteButton(ctrl: AnalyseCtrl, userId: string | null): VNode | undefin
           method: 'post',
           action: '/' + g.id + '/delete',
         },
-        hook: bind('submit', _ => confirm(ctrl.trans.noarg('deleteThisImportedGame'))),
+        hook: bindNonPassive('submit', _ => confirm(ctrl.trans.noarg('deleteThisImportedGame'))),
       },
       [
         h(
@@ -68,7 +66,7 @@ function autoplayButtons(ctrl: AnalyseCtrl): VNode {
   const d = ctrl.data;
   const speeds = [
     ...baseSpeeds,
-    ...(d.game.speed !== 'correspondence' && !empty(d.game.moveCentis) ? [realtimeSpeed] : []),
+    ...(d.game.speed !== 'correspondence' && !isEmpty(d.game.moveCentis) ? [realtimeSpeed] : []),
     ...(d.analysis ? [cplSpeed] : []),
   ];
   return h(
@@ -129,15 +127,15 @@ function studyButton(ctrl: AnalyseCtrl) {
         action: '/study/as',
       },
       hook: bind('submit', e => {
-        const pgnInput = (e.target as HTMLElement).querySelector('input[name=pgn]') as HTMLInputElement;
-        if (pgnInput) pgnInput.value = pgnExport.renderFullTxt(ctrl);
+        const kifInput = (e.target as HTMLElement).querySelector('input[name=notation]') as HTMLInputElement;
+        if (kifInput) kifInput.value = kifExport.renderFullKif(ctrl);
       }),
     },
     [
-      !ctrl.synthetic ? hiddenInput('gameId', ctrl.data.game.id) : hiddenInput('pgn', ''),
+      !ctrl.synthetic ? hiddenInput('gameId', ctrl.data.game.id) : hiddenInput('notation', ''),
       hiddenInput('orientation', ctrl.shogiground.state.orientation),
       hiddenInput('variant', ctrl.data.game.variant.key),
-      hiddenInput('fen', ctrl.tree.root.fen),
+      hiddenInput('sfen', ctrl.tree.root.sfen),
       h(
         'button.button.button-empty',
         {
@@ -160,8 +158,7 @@ export class Ctrl {
 export function view(ctrl: AnalyseCtrl): VNode {
   const d = ctrl.data,
     noarg = ctrl.trans.noarg,
-    canContinue =
-      !ctrl.ongoing && !ctrl.embed && (d.game.variant.key === 'standard' || d.game.variant.key === 'fromPosition'),
+    canContinue = !ctrl.ongoing && !ctrl.embed,
     ceval = ctrl.getCeval(),
     mandatoryCeval = ctrl.mandatoryCeval();
 
@@ -182,8 +179,8 @@ export function view(ctrl: AnalyseCtrl): VNode {
             {
               attrs: {
                 href: d.userAnalysis
-                  ? '/editor?fen=' + ctrl.encodeNodeFen()
-                  : '/' + d.game.id + '/edit?fen=' + ctrl.encodeNodeFen(),
+                  ? editor(d.game.variant.key, ctrl.node.sfen, ctrl.shogiground.state.orientation)
+                  : '/' + d.game.id + '/edit?sfen=' + encodeSfen(ctrl.node.sfen, true),
                 rel: 'nofollow',
                 target: ctrl.embed ? '_blank' : '',
                 'data-icon': 'm',
@@ -205,13 +202,15 @@ export function view(ctrl: AnalyseCtrl): VNode {
     ]),
   ];
 
+  const notSupported = 'Browser does not support this option';
+
   const cevalConfig: MaybeVNodes =
     ceval && ceval.possible && ceval.allowed()
       ? ([h('h2', noarg('computerAnalysis'))] as MaybeVNodes)
           .concat([
             ctrlBoolSetting(
               {
-                name: 'enable',
+                name: noarg('enable'),
                 title: (mandatoryCeval ? 'Required by practice mode' : 'Engine') + ' (Hotkey: z)',
                 id: 'all',
                 checked: ctrl.showComputer(),
@@ -226,7 +225,7 @@ export function view(ctrl: AnalyseCtrl): VNode {
               ? [
                   ctrlBoolSetting(
                     {
-                      name: 'bestMoveArrow',
+                      name: noarg('bestMoveArrow'),
                       title: 'Hotkey: a',
                       id: 'shapes',
                       checked: ctrl.showAutoShapes(),
@@ -236,7 +235,7 @@ export function view(ctrl: AnalyseCtrl): VNode {
                   ),
                   ctrlBoolSetting(
                     {
-                      name: 'evaluationGauge',
+                      name: noarg('evaluationGauge'),
                       id: 'gauge',
                       checked: ctrl.showGauge(),
                       change: ctrl.toggleGauge,
@@ -245,11 +244,42 @@ export function view(ctrl: AnalyseCtrl): VNode {
                   ),
                   ctrlBoolSetting(
                     {
-                      name: 'infiniteAnalysis',
-                      title: 'removesTheDepthLimit',
+                      name: 'Move annotation',
+                      id: 'move-annotation',
+                      checked: ctrl.showMoveAnnotation(),
+                      change: ctrl.toggleMoveAnnotation,
+                    },
+                    ctrl
+                  ),
+                  ctrlBoolSetting(
+                    {
+                      name: noarg('infiniteAnalysis'),
+                      title: noarg('removesTheDepthLimit'),
                       id: 'infinite',
                       checked: ceval.infinite(),
                       change: ctrl.cevalSetInfinite,
+                    },
+                    ctrl
+                  ),
+                  ctrlBoolSetting(
+                    {
+                      name: 'Use NNUE',
+                      title: ceval.supportsNnue ? 'Use NNUE  (page reload required after change)' : notSupported,
+                      id: 'enable-nnue',
+                      checked: ceval.supportsNnue && ceval.enableNnue(),
+                      change: ctrl.cevalSetEnableNnue,
+                      disabled: !ceval.supportsNnue,
+                    },
+                    ctrl
+                  ),
+                  ctrlBoolSetting(
+                    {
+                      name: noarg('impasse') + ' - ' + noarg('computerAnalysis'),
+                      title: ceval.supportsNnue ? 'YaneuraOu - EnteringKingRule' : notSupported,
+                      id: 'enteringKingRule',
+                      checked: ceval.supportsNnue && ceval.enteringKingRule(),
+                      change: ctrl.cevalSetEnteringKingRule,
+                      disabled: !ceval.supportsNnue,
                     },
                     ctrl
                   ),
@@ -272,15 +302,25 @@ export function view(ctrl: AnalyseCtrl): VNode {
                   ceval.threads
                     ? (id => {
                         return h('div.setting', [
-                          h('label', { attrs: { for: id } }, noarg('cpus')),
+                          h(
+                            'label',
+                            {
+                              attrs: {
+                                for: id,
+                                ...(ceval.maxThreads <= 1 ? { title: notSupported } : null),
+                              },
+                            },
+                            noarg('cpus')
+                          ),
                           h('input#' + id, {
                             attrs: {
                               type: 'range',
                               min: 1,
                               max: ceval.maxThreads,
                               step: 1,
+                              disabled: ceval.maxThreads <= 1,
                             },
-                            hook: rangeConfig(() => parseInt(ceval.threads!()), ctrl.cevalSetThreads),
+                            hook: rangeConfig(() => ceval.threads!(), ctrl.cevalSetThreads),
                           }),
                           h('div.range_value', `${ceval.threads()} / ${ceval.maxThreads}`),
                         ]);
@@ -289,20 +329,30 @@ export function view(ctrl: AnalyseCtrl): VNode {
                   ceval.hashSize
                     ? (id =>
                         h('div.setting', [
-                          h('label', { attrs: { for: id } }, noarg('memory')),
+                          h(
+                            'label',
+                            {
+                              attrs: {
+                                for: id,
+                                ...(ceval.maxHashSize <= 16 ? { title: notSupported } : null),
+                              },
+                            },
+                            noarg('memory')
+                          ),
                           h('input#' + id, {
                             attrs: {
                               type: 'range',
                               min: 4,
                               max: Math.floor(Math.log2(ceval.maxHashSize)),
                               step: 1,
+                              disabled: ceval.maxHashSize <= 16,
                             },
                             hook: rangeConfig(
-                              () => Math.floor(Math.log2(parseInt(ceval.hashSize!()))),
+                              () => Math.floor(Math.log2(ceval.hashSize!())),
                               v => ctrl.cevalSetHashSize(Math.pow(2, v))
                             ),
                           }),
-                          h('div.range_value', formatHashSize(parseInt(ceval.hashSize()))),
+                          h('div.range_value', formatHashSize(ceval.hashSize())),
                         ]))('analyse-memory')
                     : null,
                 ]
@@ -341,8 +391,8 @@ export function view(ctrl: AnalyseCtrl): VNode {
                 {
                   attrs: {
                     href: d.userAnalysis
-                      ? '/?fen=' + ctrl.encodeNodeFen() + '#ai'
-                      : contRoute(d, 'ai') + '?fen=' + ctrl.encodeNodeFen(),
+                      ? setup('/', ctrl.data.game.variant.key, ctrl.node.sfen, 'ai')
+                      : setup(contRoute(d, 'ai'), ctrl.data.game.variant.key, ctrl.node.sfen),
                     rel: 'nofollow',
                   },
                 },
@@ -353,8 +403,8 @@ export function view(ctrl: AnalyseCtrl): VNode {
                 {
                   attrs: {
                     href: d.userAnalysis
-                      ? '/?fen=' + ctrl.encodeNodeFen() + '#friend'
-                      : contRoute(d, 'friend') + '?fen=' + ctrl.encodeNodeFen(),
+                      ? setup('/', ctrl.data.game.variant.key, ctrl.node.sfen, 'friend')
+                      : setup(contRoute(d, 'friend'), ctrl.data.game.variant.key, ctrl.node.sfen),
                     rel: 'nofollow',
                   },
                 },
@@ -367,5 +417,5 @@ export function view(ctrl: AnalyseCtrl): VNode {
 }
 
 function ctrlBoolSetting(o: BoolSetting, ctrl: AnalyseCtrl) {
-  return boolSetting(o, ctrl.trans, ctrl.redraw);
+  return boolSetting(o, ctrl.redraw);
 }

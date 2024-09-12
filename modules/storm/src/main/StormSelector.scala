@@ -1,10 +1,8 @@
 package lila.storm
 
-import reactivemongo.api.bson.BSONNull
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
 
-import lila.db.AsyncColl
 import lila.db.dsl._
 import lila.memo.CacheApi
 import lila.puzzle.PuzzleColls
@@ -19,7 +17,7 @@ final class StormSelector(colls: PuzzleColls, cacheApi: CacheApi)(implicit ec: E
 
   def apply: Fu[List[StormPuzzle]] = current.get {}
 
-  private val theme        = lila.puzzle.PuzzleTheme.tsume.key.value
+  private val theme        = lila.puzzle.PuzzleTheme.mix.key.value
   private val tier         = lila.puzzle.PuzzleTier.Good.key
   private val maxDeviation = 85
 
@@ -42,7 +40,7 @@ final class StormSelector(colls: PuzzleColls, cacheApi: CacheApi)(implicit ec: E
   }
 
   private val current = cacheApi.unit[List[StormPuzzle]] {
-    _.refreshAfterWrite(6 seconds)
+    _.refreshAfterWrite(10 seconds)
       .buildAsyncFuture { _ =>
         colls
           .path {
@@ -71,7 +69,6 @@ final class StormSelector(colls: PuzzleColls, cacheApi: CacheApi)(implicit ec: E
                           "pipeline" -> $arr(
                             $doc(
                               "$match" -> $doc(
-                                "gameId" -> $exists(false),
                                 "$expr" -> $doc(
                                   "$and" -> $arr(
                                     $doc("$eq"  -> $arr("$_id", "$$id")),
@@ -82,7 +79,7 @@ final class StormSelector(colls: PuzzleColls, cacheApi: CacheApi)(implicit ec: E
                             ),
                             $doc(
                               "$project" -> $doc(
-                                "fen"    -> true,
+                                "sfen"   -> true,
                                 "line"   -> true,
                                 "rating" -> $doc("$toInt" -> "$glicko.r")
                               )
@@ -100,7 +97,8 @@ final class StormSelector(colls: PuzzleColls, cacheApi: CacheApi)(implicit ec: E
                 Project($doc("all" -> $doc("$setUnion" -> ratingBuckets.map(r => s"$$${r._1}")))),
                 UnwindField("all"),
                 ReplaceRootField("all"),
-                Sort(Ascending("rating"))
+                Sort(Ascending("rating")),
+                Limit(poolSize)
               )
             }.map {
               _.flatMap(StormPuzzleBSONReader.readOpt)
@@ -126,7 +124,7 @@ final class StormSelector(colls: PuzzleColls, cacheApi: CacheApi)(implicit ec: E
       (0 to poolSize by 10) foreach { i =>
         val slice = rest drop i take 10
         lila.common.Maths.mean(slice.map(_.rating)) foreach { r =>
-          lila.mon.storm.selector.ratingSlice(i).record(r.toInt)
+          lila.mon.storm.selector.ratingSlice(i).record(r.toInt).unit
         }
       }
       colls.puzzle {
@@ -135,7 +133,7 @@ final class StormSelector(colls: PuzzleColls, cacheApi: CacheApi)(implicit ec: E
           $inc("storm" -> 1),
           multi = true
         )
-      }
+      }.unit
     }
   }
 }

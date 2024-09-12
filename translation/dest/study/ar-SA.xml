@@ -9,6 +9,7 @@
   <string name="whatAreStudies">ما هي الدراسات؟</string>
   <string name="allStudies">كل الدراسات</string>
   <string name="studiesCreatedByX">الدراسات التي أنشئها %s</string>
+  <string name="studyByX" comment="By username">A shogi study by %s</string>
   <string name="noneYet">لا يوجد.</string>
   <string name="hot">ذات شعبية</string>
   <string name="dateAddedNewest">تاريخ الإضافة (الأحدث)</string>
@@ -50,7 +51,7 @@
   <string name="leaveTheStudy">مغادرة الدراسة</string>
   <string name="youAreNowAContributor">انت الان اصبحت مساهم</string>
   <string name="youAreNowASpectator">انت الان اصبحت مشاهد</string>
-  <string name="pgnTags">وسم PGN</string>
+  <string name="tags">Tags</string>
   <string name="like">إعجاب</string>
   <string name="newTag">علامة جديدة</string>
   <string name="commentThisPosition">التعليق على هذا الوضع</string>
@@ -69,10 +70,11 @@
   <string name="last">الأخير</string>
   <string name="shareAndExport">مشاركة و تصدير</string>
   <string name="cloneStudy">استنساخ</string>
-  <string name="studyPgn">PGN الدراسة</string>
   <string name="downloadAllGames">Download all games</string>
-  <string name="chapterPgn">PGN الفصل</string>
   <string name="downloadGame">Download game</string>
+  <string name="studyKif">Study KIF</string>
+  <string name="chapterKif">Chapter KIF</string>
+  <string name="chapterCsa">Chapter CSA</string>
   <string name="studyUrl">رابط الدراسة</string>
   <string name="broadcastUrl">Broadcast URL</string>
   <string name="currentChapterUrl">رابط الفصل الحالي</string>
@@ -107,19 +109,10 @@
   <string name="editor">Editor</string>
   <string name="startFromCustomPosition">البدء من وضع مخصص</string>
   <string name="loadAGameByUrl">تحميل لعبة من رابط</string>
-  <string name="loadAPositionFromFen">تحميل موقف من FEN</string>
-  <string name="loadAGameFromPgn">Load games from PGN</string>
+  <string name="loadAPositionFromSfen">Load a position from SFEN</string>
   <string name="automatic">تلقائي</string>
-  <plurals name="pasteYourPgnTextHereUpToNbGames">
-    <item quantity="zero">Paste your PGN text here, up to %s games</item>
-    <item quantity="one">Paste your PGN text here, up to %s game</item>
-    <item quantity="two">Paste your PGN text here, up to %s games</item>
-    <item quantity="few">Paste your PGN text here, up to %s games</item>
-    <item quantity="many">Paste your PGN text here, up to %s games</item>
-    <item quantity="other">Paste your PGN text here, up to %s games</item>
-  </plurals>
   <string name="urlOfTheGame">رابط اللعبة</string>
-  <string name="loadAGameFromXOrY">استيراد لعبة من %1$s</string>
+  <string name="loadAGameFromX">Load games from %1$s</string>
   <string name="createChapter">أنشئ الفصل</string>
   <string name="configureLiveBroadcast">تهيئة بث مباشر</string>
   <string name="createStudy">أنشى الدراسة</string>
@@ -145,4 +138,40 @@
   <string name="deleteStudy">Delete study</string>
   <string name="deleteTheEntireStudy">Delete the entire study? There is no going back!</string>
   <string name="whereDoYouWantToStudyThat">Where do you want to study that?</string>
+  <string name="studyTopics">Study topics</string>
+  <string name="topicsDescription">Topics to organize your studies with</string>
+  <string name="myTopics">My topics</string>
+  <string name="popularTopics">Popular topics</string>
+  <string name="manageTopics">Manage topics</string>
+  <string name="startTag" comment="Tags for kif and csa">Start</string>
+  <string name="endTag" comment="Tags for kif and csa">End</string>
+  <string name="siteTag" comment="Tags for kif and csa">Site</string>
+  <string name="eventTag" comment="Tags for kif and csa">Event</string>
+  <string name="timeControlTag" comment="Tags for kif and csa">Time control</string>
+  <string name="xEloTag" comment="Tags for kif and csa; Sente/Gote">%s Elo</string>
+  <string name="xTitleTag" comment="Tags for kif and csa; Sente/Gote">%s title</string>
+  <string name="xTeamTag" comment="Tags for kif and csa; Sente/Gote">%s team</string>
+  <string name="openingTag" comment="Tags for kif and csa">Opening</string>
+  <string name="resultTag" comment="Tags for kif and csa">Result</string>
+  <string name="problemNameTag" comment="Tags for kif and csa">Problem name</string>
+  <string name="problemIdTag" comment="Tags for kif and csa">Problem Id</string>
+  <string name="dateOfPublicationTag" comment="Tags for kif and csa">Date of publication</string>
+  <string name="composerTag" comment="Tags for kif and csa">Composer</string>
+  <string name="publicationTag" comment="Tags for kif and csa">Publication</string>
+  <string name="collectionTag" comment="Tags for kif and csa">Collection</string>
+  <string name="lengthTag" comment="Tags for kif and csa">Length</string>
+  <string name="prizeTag" comment="Tags for kif and csa">Prize</string>
+  <string name="initHelp" comment="Interactive study lesson">Help the player find the initial move, with a comment.</string>
+  <string name="introGamebook" comment="Interactive study lesson">Introduce the gamebook with a comment</string>
+  <string name="putFirstMove" comment="Interactive study lesson">Put the opponent\'s first move on the board.</string>
+  <string name="explainMove" comment="Interactive study lesson">Explain the opponent move, and help the player find the next move, with a comment.</string>
+  <string name="reflectOnMove" comment="Interactive study lesson">You may reflect on the player\'s correct move, with a comment; or leave empty to jump immediately to the next move.</string>
+  <string name="variationMoves" comment="Interactive study lesson">Add variation moves to explain why specific other moves are wrong.</string>
+  <string name="explainWrongMove" comment="Interactive study lesson">Explain why this move is wrong in a comment</string>
+  <string name="orPromote" comment="Interactive study lesson">Or promote it as the mainline if it is the right move.</string>
+  <string name="otherMove" comment="Interactive study lesson">When any other wrong move is played:</string>
+  <string name="explainAllWrong" comment="Interactive study lesson">Explain why all other moves are wrong</string>
+  <string name="hintOnDemand" comment="Interactive study lesson">Optional, on-demand hint for the player:</string>
+  <string name="playerTip" comment="Interactive study lesson">Give the player a tip so they can find the right move</string>
+  <string name="playQuestion" comment="Interactive study lesson">What would you play in this position?</string>
 </resources>

@@ -9,6 +9,7 @@
   <string name="whatAreStudies">研究（study）とは？</string>
   <string name="allStudies">すべての研究</string>
   <string name="studiesCreatedByX">%s による研究</string>
+  <string name="studyByX" comment="By username">%s による将棋研究</string>
   <string name="noneYet">まだなし</string>
   <string name="hot">注目</string>
   <string name="dateAddedNewest">投稿日（新しい順）</string>
@@ -35,7 +36,7 @@
   <string name="leaveTheStudy">この研究から出る</string>
   <string name="youAreNowAContributor">参加者になりました</string>
   <string name="youAreNowASpectator">観戦者になりました</string>
-  <string name="pgnTags">PGN タグ</string>
+  <string name="tags">タグ</string>
   <string name="like">いいね</string>
   <string name="newTag">新しいタグ</string>
   <string name="commentThisPosition">この局面にコメントする</string>
@@ -54,10 +55,11 @@
   <string name="last">最後</string>
   <string name="shareAndExport">共有とエクスポート</string>
   <string name="cloneStudy">研究をコピー</string>
-  <string name="studyPgn">研究の PGN</string>
   <string name="downloadAllGames">全対局をダウンロード</string>
-  <string name="chapterPgn">章の PGN</string>
   <string name="downloadGame">1 局をダウンロード</string>
+  <string name="studyKif">研究の KIF</string>
+  <string name="chapterKif">章の KIF</string>
+  <string name="chapterCsa">章の CSA</string>
   <string name="studyUrl">研究の URL</string>
   <string name="broadcastUrl">ブロードキャスト URL</string>
   <string name="currentChapterUrl">現在の章の URL</string>
@@ -92,14 +94,10 @@
   <string name="editor">エディタ</string>
   <string name="startFromCustomPosition">指定した局面から</string>
   <string name="loadAGameByUrl">棋譜を URL で読み込み</string>
-  <string name="loadAPositionFromFen">局面を FEN で読み込み</string>
-  <string name="loadAGameFromPgn">棋譜を PGN で読み込み</string>
+  <string name="loadAPositionFromSfen">SFENから局面を読み込み</string>
   <string name="automatic">自動</string>
-  <plurals name="pasteYourPgnTextHereUpToNbGames">
-    <item quantity="other">ここに PGN をペースト（%s 局まで）</item>
-  </plurals>
   <string name="urlOfTheGame">対局棋譜の URL、１行に一つ</string>
-  <string name="loadAGameFromXOrY">%1$s から棋譜を読み込み</string>
+  <string name="loadAGameFromX">%1$s から対局を読み込み</string>
   <string name="createChapter">章を作成</string>
   <string name="configureLiveBroadcast">ライブ放送の設定</string>
   <string name="createStudy">研究を作成</string>
@@ -125,4 +123,40 @@
   <string name="deleteStudy">研究を削除</string>
   <string name="deleteTheEntireStudy">ほんとうに削除しますか？　戻せませんよ！</string>
   <string name="whereDoYouWantToStudyThat">どこで研究しますか？</string>
+  <string name="studyTopics">研究トピック</string>
+  <string name="topicsDescription">Topics to organize your studies with</string>
+  <string name="myTopics">自分のトピック</string>
+  <string name="popularTopics">人気のトピック</string>
+  <string name="manageTopics">Manage topics</string>
+  <string name="startTag" comment="Tags for kif and csa">開始</string>
+  <string name="endTag" comment="Tags for kif and csa">終了</string>
+  <string name="siteTag" comment="Tags for kif and csa">場所</string>
+  <string name="eventTag" comment="Tags for kif and csa">イベント</string>
+  <string name="timeControlTag" comment="Tags for kif and csa">持ち時間</string>
+  <string name="xEloTag" comment="Tags for kif and csa; Sente/Gote">%sのElo</string>
+  <string name="xTitleTag" comment="Tags for kif and csa; Sente/Gote">%s title</string>
+  <string name="xTeamTag" comment="Tags for kif and csa; Sente/Gote">%sのチーム</string>
+  <string name="openingTag" comment="Tags for kif and csa">戦型</string>
+  <string name="resultTag" comment="Tags for kif and csa">結果</string>
+  <string name="problemNameTag" comment="Tags for kif and csa">作品名</string>
+  <string name="problemIdTag" comment="Tags for kif and csa">作品番号</string>
+  <string name="dateOfPublicationTag" comment="Tags for kif and csa">発表年月</string>
+  <string name="composerTag" comment="Tags for kif and csa">作者</string>
+  <string name="publicationTag" comment="Tags for kif and csa">発表誌</string>
+  <string name="collectionTag" comment="Tags for kif and csa">出典</string>
+  <string name="lengthTag" comment="Tags for kif and csa">手数</string>
+  <string name="prizeTag" comment="Tags for kif and csa">受賞</string>
+  <string name="initHelp" comment="Interactive study lesson">Help the player find the initial move, with a comment.</string>
+  <string name="introGamebook" comment="Interactive study lesson">Introduce the gamebook with a comment</string>
+  <string name="putFirstMove" comment="Interactive study lesson">Put the opponent\'s first move on the board.</string>
+  <string name="explainMove" comment="Interactive study lesson">Explain the opponent move, and help the player find the next move, with a comment.</string>
+  <string name="reflectOnMove" comment="Interactive study lesson">You may reflect on the player\'s correct move, with a comment; or leave empty to jump immediately to the next move.</string>
+  <string name="variationMoves" comment="Interactive study lesson">Add variation moves to explain why specific other moves are wrong.</string>
+  <string name="explainWrongMove" comment="Interactive study lesson">Explain why this move is wrong in a comment</string>
+  <string name="orPromote" comment="Interactive study lesson">Or promote it as the mainline if it is the right move.</string>
+  <string name="otherMove" comment="Interactive study lesson">When any other wrong move is played:</string>
+  <string name="explainAllWrong" comment="Interactive study lesson">Explain why all other moves are wrong</string>
+  <string name="hintOnDemand" comment="Interactive study lesson">Optional, on-demand hint for the player:</string>
+  <string name="playerTip" comment="Interactive study lesson">Give the player a tip so they can find the right move</string>
+  <string name="playQuestion" comment="Interactive study lesson">What would you play in this position?</string>
 </resources>

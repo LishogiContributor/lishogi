@@ -22,15 +22,19 @@ final class SeekApi(
 
   private def allCursor =
     coll.ext
-      .find($empty)
+      .find(
+        $doc(
+          "createdAt" $gt DateTime.now.minusDays(14) // expire index in db for older entries
+        )
+      )
       .sort($sort desc "createdAt")
       .cursor[Seek]()
 
   private val cache = cacheApi[CacheKey, List[Seek]](2, "lobby.seek.list") {
-    _.refreshAfterWrite(3 seconds)
+    _.refreshAfterWrite(5 seconds)
       .buildAsyncFuture {
         case ForAnon => allCursor.list(maxPerPage.value)
-        case ForUser => allCursor.list()
+        case ForUser => allCursor.list(maxHard.value + 100)
       }
   }
 
@@ -51,7 +55,7 @@ final class SeekApi(
       val filtered = seeks.filter { seek =>
         seek.user.id == user.id || biter.canJoin(seek, user)
       }
-      noDupsFor(user, filtered) take maxPerPage.value
+      noDupsFor(user, filtered) take maxHard.value
     }
 
   private def noDupsFor(user: LobbyUser, seeks: List[Seek]) =
@@ -59,7 +63,8 @@ final class SeekApi(
       .foldLeft(List.empty[Seek] -> Set.empty[String]) {
         case ((res, h), seek) if seek.user.id == user.id => (seek :: res, h)
         case ((res, h), seek) =>
-          val seekH = List(seek.variant, seek.daysPerTurn, seek.mode, seek.color, seek.user.id) mkString ","
+          val seekH =
+            List[Any](seek.variant, seek.daysPerTurn, seek.mode, seek.color, seek.user.id) mkString ","
           if (h contains seekH) (res, h)
           else (seek :: res, h + seekH)
       }
@@ -71,8 +76,8 @@ final class SeekApi(
 
   def insert(seek: Seek) =
     coll.insert.one(seek) >> findByUser(seek.user.id).flatMap {
-      case seeks if maxPerUser >= seeks.size => funit
-      case seeks                             => seeks.drop(maxPerUser.value).map(remove).sequenceFu
+      case seeks if seeks.sizeIs <= maxPerUser.value => funit
+      case seeks                                     => seeks.drop(maxPerUser.value).map(remove).sequenceFu
     }.void >>- cacheClear()
 
   def findByUser(userId: String): Fu[List[Seek]] =
@@ -118,6 +123,7 @@ private object SeekApi {
       val coll: Coll,
       val archiveColl: Coll,
       val maxPerPage: MaxPerPage,
-      val maxPerUser: Max
+      val maxPerUser: Max,
+      val maxHard: Max
   )
 }

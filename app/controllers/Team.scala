@@ -1,6 +1,7 @@
 package controllers
 
 import play.api.data.Form
+import play.api.data.Forms._
 import play.api.libs.json._
 import play.api.mvc._
 import scala.concurrent.duration._
@@ -8,6 +9,7 @@ import scala.concurrent.duration._
 import lila.api.Context
 import lila.app._
 import lila.common.config.MaxPerSecond
+import lila.common.HTTPRequest
 import lila.hub.LightTeam
 import lila.security.Granter
 import lila.team.{ Joined, Motivate, Team => TeamModel }
@@ -33,7 +35,7 @@ final class Team(
   def home(page: Int) =
     Open { implicit ctx =>
       ctx.me.??(api.hasTeams) map {
-        case true  => Redirect(routes.Team.mine())
+        case true  => Redirect(routes.Team.mine)
         case false => Redirect(routes.Team.all(page))
       }
     }
@@ -50,7 +52,7 @@ final class Team(
         env.teamSearch(text, page) map { html.team.list.search(text, _) }
     }
 
-  private def renderTeam(team: TeamModel, page: Int = 1)(implicit ctx: Context) =
+  private def renderTeam(team: TeamModel, page: Int)(implicit ctx: Context) =
     for {
       info    <- env.teamInfo(team, ctx.me)
       members <- paginator.teamMembers(team, page)
@@ -66,7 +68,7 @@ final class Team(
     } yield html.team.show(team, members, info, chat, version)
 
   private def canHaveChat(team: TeamModel, info: lila.app.mashup.TeamInfo)(implicit ctx: Context): Boolean =
-    !team.isChatFor(_.NONE) && ctx.noKid && {
+    !team.isChatFor(_.NONE) && ctx.noKid && HTTPRequest.isHuman(ctx.req) && {
       (team.isChatFor(_.LEADERS) && ctx.userId.exists(team.leaders)) ||
       (team.isChatFor(_.MEMBERS) && info.mine) ||
       isGranted(_.ChatTimeout)
@@ -126,7 +128,7 @@ final class Team(
     Auth { implicit ctx => me =>
       WithOwnedTeam(id) { team =>
         env.team.memberRepo userIdsByTeam team.id map { userIds =>
-          html.team.admin.kick(team, userIds - me.id)
+          html.team.admin.kick(team, userIds.filter(me.id !=))
         }
       }
     }
@@ -161,7 +163,9 @@ final class Team(
     AuthBody { implicit ctx => me =>
       WithOwnedTeam(id) { team =>
         implicit val req = ctx.body
-        forms.leaders(team).bindFromRequest().value ?? { api.setLeaders(team, _, me, isGranted(_.ManageTeam)) } inject Redirect(
+        forms.leaders(team).bindFromRequest().value ?? {
+          api.setLeaders(team, _, me, isGranted(_.ManageTeam))
+        } inject Redirect(
           routes.Team.show(team.id)
         ).flashSuccess
       }
@@ -173,6 +177,15 @@ final class Team(
         (api delete team) >>
           env.mod.logApi.deleteTeam(me.id, team.name, team.description) inject
           Redirect(routes.Team all 1).flashSuccess
+      }
+    }
+
+  def disable(id: String) =
+    Auth { implicit ctx => me =>
+      WithOwnedTeam(id) { team =>
+        (api disable team) >>
+          env.mod.logApi.disableTeam(me.id, team.name, team.description) inject
+          Redirect(routes.Team show id).flashSuccess
       }
     }
 
@@ -262,9 +275,7 @@ final class Team(
             .fold(
               newJsonFormError,
               msg =>
-                env.oAuth.server.fetchAppAuthor(req) flatMap {
-                  api.joinApi(id, me, _, msg)
-                } flatMap {
+                api.join(id, me, msg) flatMap {
                   case Some(Joined(_)) => jsonOkResult.fuccess
                   case Some(Motivate(_)) =>
                     Forbidden(
@@ -275,6 +286,17 @@ final class Team(
             )
         }
     )
+
+  def subscribe(teamId: String) = {
+    def doSub(req: Request[_], me: UserModel) =
+      Form(single("v" -> boolean))
+        .bindFromRequest()(req, formBinding)
+        .fold(_ => funit, v => api.subscribe(teamId, me.id, v))
+    AuthOrScopedBody(_.Team.Write)(
+      auth = ctx => me => doSub(ctx.body, me) inject Redirect(routes.Team.show(teamId)),
+      scoped = req => me => doSub(req, me) inject jsonOkResult
+    )
+  }
 
   def requests =
     Auth { implicit ctx => me =>
@@ -311,10 +333,11 @@ final class Team(
 
   def requestProcess(requestId: String) =
     AuthBody { implicit ctx => me =>
+      import cats.implicits._
       OptionFuRedirectUrl(for {
         requestOption <- api request requestId
         teamOption    <- requestOption.??(req => env.team.teamRepo.byLeader(req.team, me.id))
-      } yield (teamOption |@| requestOption).tupled) { case (team, request) =>
+      } yield (teamOption, requestOption).mapN((_, _))) { case (team, request) =>
         implicit val req = ctx.body
         forms.processRequest
           .bindFromRequest()
@@ -331,7 +354,7 @@ final class Team(
     AuthOrScoped(_.Team.Write)(
       auth = implicit ctx =>
         me =>
-          OptionFuResult(api.quit(id, me)) { team =>
+          OptionFuResult(api.cancelRequest(id, me) orElse api.quit(id, me)) { team =>
             negotiate(
               html = Redirect(routes.Team.show(team.id)).flashSuccess.fuccess,
               api = _ => jsonOkResult.fuccess
@@ -466,10 +489,11 @@ final class Team(
         msg =>
           Right {
             PmAllLimitPerUser(me.id) {
+              val url = s"${env.net.baseUrl}${routes.Team.show(team.id)}"
               val full = s"""$msg
 ---
-You received this message because you are part of the team lishogi.org${routes.Team.show(team.id)}."""
-              env.msg.api.multiPost(me, env.team.memberStream.ids(team, MaxPerSecond(50)), full)
+You received this because you are subscribed to messages of the team $url."""
+              env.msg.api.multiPost(me, env.team.memberStream.subscribedIds(team, MaxPerSecond(50)), full)
               funit // we don't wait for the stream to complete, it would make lishogi time out
             }(funit)
           }
@@ -493,7 +517,7 @@ You received this message because you are part of the team lishogi.org${routes.T
   private def WithOwnedTeam(teamId: String)(f: TeamModel => Fu[Result])(implicit ctx: Context): Fu[Result] =
     OptionFuResult(api team teamId) { team =>
       if (ctx.userId.exists(team.leaders.contains) || isGranted(_.ManageTeam)) f(team)
-      else renderTeam(team) map { Forbidden(_) }
+      else Redirect(routes.Team.show(team.id)).fuccess
     }
 
   private[controllers] def teamsIBelongTo(me: lila.user.User): Fu[List[LightTeam]] =

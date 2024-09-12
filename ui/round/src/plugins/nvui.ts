@@ -1,26 +1,30 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import sanWriter from './sanWriter';
-import RoundController from '../ctrl';
-import { renderClock } from '../clock/clockView';
-import { renderTableWatch, renderTablePlay, renderTableEnd } from '../view/table';
-import { makeConfig as makeCgConfig } from '../ground';
+import * as game from 'game';
+import { commands } from 'nvui/command';
+import { Notify } from 'nvui/notify';
+import { renderSetting } from 'nvui/setting';
+import {
+  Style,
+  renderBoard,
+  renderHand,
+  renderMove,
+  renderPieces,
+  styleSetting,
+  supportedVariant,
+  validUsi,
+} from 'nvui/shogi';
 import { Shogiground } from 'shogiground';
+import { VNode, h } from 'snabbdom';
+import { renderClock } from '../clock/clockView';
 import renderCorresClock from '../corresClock/corresClockView';
-import { renderResult } from '../view/replay';
+import RoundController from '../ctrl';
+import { makeConfig as makeSgConfig } from '../ground';
+import { Position, Redraw, Step } from '../interfaces';
 import { plyStep } from '../round';
 import { onInsert } from '../util';
-import { Step, Dests, Position, Redraw } from '../interfaces';
-import * as game from 'game';
-import { renderSan, renderPieces, renderBoard, styleSetting } from 'nvui/chess';
-import { renderSetting } from 'nvui/setting';
-import { Notify } from 'nvui/notify';
-import { castlingFlavours, supportedVariant, Style } from 'nvui/chess';
-import { commands } from 'nvui/command';
-
-type Sans = {
-  [key: string]: Uci;
-};
+import { renderResult } from '../view/replay';
+import { renderTableEnd, renderTablePlay, renderTableWatch } from '../view/table';
+import { opposite } from 'shogiground/util';
+import { engineNameFromCode } from 'common/engineName';
 
 window.lishogi.RoundNVUI = function (redraw: Redraw) {
   const notify = new Notify(redraw),
@@ -36,18 +40,17 @@ window.lishogi.RoundNVUI = function (redraw: Redraw) {
       const d = ctrl.data,
         step = plyStep(d, ctrl.ply),
         style = moveStyle.get(),
-        variantNope = !supportedVariant(d.game.variant.key) && 'Sorry, this variant is not supported in blind mode.';
+        variantNope = !supportedVariant(d.game.variant.key) && 'Sorry, this variant is not supported in blind mode.',
+        noarg = ctrl.trans.noarg;
       if (!ctrl.shogiground) {
-        ctrl.setShogiground(
-          Shogiground(document.createElement('div'), {
-            ...makeCgConfig(ctrl),
-            animation: { enabled: false },
-            drawable: { enabled: false },
-            coordinates: false,
-          })
-        );
-        if (variantNope) setTimeout(() => notify.set(variantNope), 3000);
+        ctrl.shogiground = Shogiground({
+          ...makeSgConfig(ctrl),
+          animation: { enabled: false },
+          drawable: { enabled: false },
+          coordinates: { enabled: false },
+        });
       }
+      if (variantNope) setTimeout(() => notify.set(variantNope), 3000);
       return h(
         'div.nvui',
         {
@@ -55,13 +58,15 @@ window.lishogi.RoundNVUI = function (redraw: Redraw) {
         },
         [
           h('h1', gameText(ctrl)),
-          h('h2', 'Game info'),
+          h('h2', noarg('gameInfo')),
           ...['sente', 'gote'].map((color: Color) =>
             h('p', [color + ' player: ', playerHtml(ctrl, ctrl.playerByColor(color))])
           ),
-          h('p', `${d.game.rated ? 'Rated' : 'Casual'} ${d.game.perf}`),
-          d.clock ? h('p', `Clock: ${d.clock.initial / 60} + ${d.clock.increment}`) : null,
-          h('h2', 'Moves'),
+          h('p', `${noarg(d.game.rated ? 'rated' : 'casual')} ${d.game.perf}`),
+          d.clock
+            ? h('p', noarg('clock') + `: ${d.clock.initial / 60} + ${d.clock.increment} | ${d.clock.byoyomi})`)
+            : null,
+          h('h2', noarg('moves')),
           h(
             'p.moves',
             {
@@ -70,9 +75,9 @@ window.lishogi.RoundNVUI = function (redraw: Redraw) {
                 'aria-live': 'off',
               },
             },
-            renderMoves(d.steps.slice(1), style)
+            renderMoves(d.steps.slice(1), ctrl.data.game.variant.key, style)
           ),
-          h('h2', 'Pieces'),
+          h('h2', noarg('pieces')),
           h('div.pieces', renderPieces(ctrl.shogiground.state.pieces, style)),
           h('h2', 'Game status'),
           h(
@@ -81,7 +86,7 @@ window.lishogi.RoundNVUI = function (redraw: Redraw) {
               attrs: {
                 role: 'status',
                 'aria-live': 'assertive',
-                'aria-atomic': true,
+                'aria-atomic': 'true',
               },
             },
             [ctrl.data.game.status.name === 'started' ? 'Playing' : renderResult(ctrl)]
@@ -92,14 +97,14 @@ window.lishogi.RoundNVUI = function (redraw: Redraw) {
             {
               attrs: {
                 'aria-live': 'assertive',
-                'aria-atomic': true,
+                'aria-atomic': 'true',
               },
             },
-            renderSan(step.san, step.uci, style)
+            renderMove(step.usi, step.sfen, ctrl.data.game.variant.key, style)
           ),
           ...(ctrl.isPlaying()
             ? [
-                h('h2', 'Move form'),
+                h('h2', noarg('moveForm')),
                 h(
                   'form',
                   {
@@ -135,14 +140,37 @@ window.lishogi.RoundNVUI = function (redraw: Redraw) {
           h('h2', 'Actions'),
           ...(ctrl.data.player.spectator
             ? renderTableWatch(ctrl)
-            : game.playable(ctrl.data)
-            ? renderTablePlay(ctrl)
-            : renderTableEnd(ctrl)),
-          h('h2', 'Board'),
-          h('pre.board', renderBoard(ctrl.shogiground.state.pieces, ctrl.data.player.color)),
-          h('h2', 'Settings'),
-          h('label', ['Move notation', renderSetting(moveStyle, ctrl.redraw)]),
-          h('h2', 'Commands'),
+            : game.playableEvenPaused(ctrl.data)
+              ? renderTablePlay(ctrl)
+              : renderTableEnd(ctrl)),
+          h('h2', [noarg('board'), ' & ', noarg('hands')]),
+          h(
+            'pre.hand',
+            renderHand(
+              'top',
+              opposite(ctrl.data.player.color),
+              ctrl.shogiground.state.hands.handMap.get(opposite(ctrl.data.player.color)),
+              ctrl.data.game.variant.key,
+              style
+            )
+          ),
+          h(
+            'pre.board',
+            renderBoard(ctrl.shogiground.state.pieces, ctrl.data.player.color, ctrl.data.game.variant.key, style)
+          ),
+          h(
+            'pre.hand',
+            renderHand(
+              'bottom',
+              ctrl.data.player.color,
+              ctrl.shogiground.state.hands.handMap.get(ctrl.data.player.color),
+              ctrl.data.game.variant.key,
+              style
+            )
+          ),
+          h('h2', noarg('settings')),
+          h('label', [noarg('notationSystem'), renderSetting(moveStyle, ctrl.redraw)]),
+          h('h2', noarg('commands')),
           h('p', [
             'Type these commands in the move input.',
             h('br'),
@@ -163,53 +191,33 @@ window.lishogi.RoundNVUI = function (redraw: Redraw) {
             'takeback: Offer or accept take back.',
             h('br'),
           ]),
-          h('h2', 'Promotion'),
-          h('p', [
-            'Standard PGN notation selects the piece to promote to. Example: a8=n promotes to a knight.',
-            h('br'),
-            'Omission results in promotion to queen',
-          ]),
         ]
       );
     },
   };
 };
 
-const promotionRegex = /^([RNBSGLP])([a-i]x?)?[a-i][1-9]=\w$/;
-
 function onSubmit(ctrl: RoundController, notify: (txt: string) => void, style: () => Style, $input: JQuery) {
   return function () {
-    let input = castlingFlavours($input.val().trim());
+    let input = $input.val().trim();
     if (isShortCommand(input)) input = '/' + input;
     if (input[0] === '/') onCommand(ctrl, notify, input.slice(1), style());
     else {
       const d = ctrl.data,
-        legalUcis = destsToUcis(ctrl.shogiground.state.movable.dests!),
-        sans: Sans = sanWriter(plyStep(d, ctrl.ply).fen, legalUcis) as Sans;
-      let uci = sanToUci(input, sans) || input,
-        promotion = '';
+        usi = validUsi(input, plyStep(d, ctrl.ply).sfen, ctrl.data.game.variant.key);
 
-      if (input.match(promotionRegex)) {
-        uci = sanToUci(input.slice(0, -2), sans) || input;
-        promotion = input.slice(-1).toLowerCase();
-      }
-
-      if (legalUcis.includes(uci.toLowerCase()))
-        ctrl.socket.send(
-          'move',
-          {
-            u: uci + promotion,
-          },
-          { ackable: true }
-        );
-      else notify(d.player.color === d.game.player ? `Invalid move: ${input}` : 'Not your turn');
+      if (usi)
+        ctrl.sendUsiData({
+          u: usi,
+        });
+      else notify(d.player.color === d.game.player ? `Invalid move/drop: ${input}` : 'Not your turn');
     }
     $input.val('');
     return false;
   };
 }
 
-const shortCommands = ['c', 'clock', 'l', 'last', 'abort', 'resign', 'draw', 'takeback', 'p', 'scan', 'o', 'opponent'];
+const shortCommands = ['c', 'clock', 'l', 'last', 'abort', 'resign', 'draw', 'takeback', 'p', 's', 'o', 'opponent'];
 
 function isShortCommand(input: string): boolean {
   return shortCommands.includes(input.split(' ')[0].toLowerCase());
@@ -225,8 +233,11 @@ function onCommand(ctrl: RoundController, notify: (txt: string) => void, c: stri
   else if (lowered == 'takeback') $('.nvui button.takeback-yes').click();
   else if (lowered == 'o' || lowered == 'opponent') notify(playerText(ctrl, ctrl.data.opponent));
   else {
-    const pieces = ctrl.shogiground.state.pieces;
-    notify(commands.piece.apply(c, pieces, style) || commands.scan.apply(c, pieces, style) || `Invalid command: ${c}`);
+    const pieces = ctrl.shogiground.state.pieces,
+      hands = ctrl.shogiground.state.hands.handMap;
+    notify(
+      commands.piece.apply(c, pieces, hands, style) || commands.scan.apply(c, pieces, style) || `Invalid command: ${c}`
+    );
   }
 }
 
@@ -240,40 +251,18 @@ function anyClock(ctrl: RoundController, position: Position) {
   );
 }
 
-function destsToUcis(dests: Dests) {
-  const ucis: string[] = [];
-  for (const [orig, d] of dests) {
-    if (d)
-      d.forEach(function (dest) {
-        ucis.push(orig + dest);
-      });
-  }
-  return ucis;
-}
-
-function sanToUci(san: string, sans: Sans): Uci | undefined {
-  if (san in sans) return sans[san];
-  const lowered = san.toLowerCase();
-  for (let i in sans) if (i.toLowerCase() === lowered) return sans[i];
-  return;
-}
-
-function renderMoves(steps: Step[], style: Style) {
+function renderMoves(steps: Step[], variant: VariantKey, style: Style) {
   const res: Array<string | VNode> = [];
   steps.forEach(s => {
     if (s.ply & 1) res.push(Math.ceil(s.ply / 2) + ' ');
-    res.push(renderSan(s.san, s.uci, style) + ', ');
+    res.push(renderMove(s.usi, s.sfen, variant, style) + ', ');
     if (s.ply % 2 === 0) res.push(h('br'));
   });
   return res;
 }
 
-function renderAi(ctrl: RoundController, level: number): string {
-  return ctrl.trans('aiNameLevelAiLevel', 'Engine', level);
-}
-
 function playerHtml(ctrl: RoundController, player: game.Player) {
-  if (player.ai) return renderAi(ctrl, player.ai);
+  if (player.ai) return engineNameFromCode(player.aiCode, player.ai, ctrl.trans);
   const d = ctrl.data,
     user = player.user,
     perf = user ? user.perfs[d.game.perf] : null,
@@ -296,7 +285,7 @@ function playerHtml(ctrl: RoundController, player: game.Player) {
 }
 
 function playerText(ctrl: RoundController, player: game.Player) {
-  if (player.ai) return renderAi(ctrl, player.ai);
+  if (player.ai) return engineNameFromCode(player.aiCode, player.ai, ctrl.trans);
   const d = ctrl.data,
     user = player.user,
     perf = user ? user.perfs[d.game.perf] : null,

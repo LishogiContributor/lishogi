@@ -3,10 +3,18 @@
   "version": "2.0.0",
   "private": true,
   "description": "lishogi.org non-visual user interface",
-  "main": "dist/main.js",
-  "types": "dist/main",
+  "exports": {
+    "./*": "./dist/*.js"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "dist/*"
+      ]
+    }
+  },
   "keywords": [
-    "chess",
+    "shogi",
     "lishogi",
     "non-visual",
     "blind",
@@ -21,9 +29,12 @@
   },
   "devDependencies": {
     "@types/lishogi": "2.0.0",
-    "typescript": "^4.1.3"
+    "typescript": "^5"
   },
   "dependencies": {
-    "snabbdom": "^0.7.4"
+    "keyboardMove": "^1.0.0",
+    "shogiground": "^0.8.6",
+    "shogiops": "^0.16.3",
+    "snabbdom": "^3.5.1"
   }
 }

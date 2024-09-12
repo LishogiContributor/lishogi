@@ -21,13 +21,13 @@ final class Simul(
 
   val home = Open { implicit ctx =>
     pageHit
-    fetchSimuls(ctx.me) flatMap { case pending ~ created ~ started ~ finished =>
+    fetchSimuls(ctx.me) flatMap { case (((pending, created), started), finished) =>
       Ok(html.simul.home(pending, created, started, finished)).fuccess
     }
   }
 
   val apiList = Action.async {
-    fetchSimuls(none) flatMap { case pending ~ created ~ started ~ finished =>
+    fetchSimuls(none) flatMap { case (((pending, created), started), finished) =>
       env.simul.jsonView.apiAll(pending, created, started, finished) map { json =>
         Ok(json) as JSON
       }
@@ -35,7 +35,7 @@ final class Simul(
   }
 
   val homeReload = Open { implicit ctx =>
-    fetchSimuls(ctx.me) map { case pending ~ created ~ started ~ finished =>
+    fetchSimuls(ctx.me) map { case (((pending, created), started), finished) =>
       Ok(html.simul.homeInner(pending, created, started, finished))
     }
   }
@@ -74,12 +74,12 @@ final class Simul(
             stream <- env.streamer.liveStreamApi one sim.hostId
           } yield html.simul.show(sim, version, json, chat, stream, team)
         }
-      } map NoCache
+      } dmap (_.noCache)
     }
 
   private[controllers] def canHaveChat(implicit ctx: Context): Boolean =
-    !ctx.kid &&           // no public chats for kids
-      ctx.me.fold(true) { // anon can see public chats
+    !ctx.kid &&                                   // no public chats for kids
+      ctx.me.fold(HTTPRequest.isHuman(ctx.req)) { // anon can see public chats
         env.chat.panic.allowed
       }
 
@@ -135,7 +135,7 @@ final class Simul(
     Auth { implicit ctx => me =>
       NoLameOrBot {
         apiC.teamsIBelongTo(me) map { teams =>
-          Ok(html.simul.form(forms.create(me), teams))
+          Ok(html.simul.form.create(forms.create(me), teams))
         }
       }
     }
@@ -150,7 +150,7 @@ final class Simul(
           .fold(
             err =>
               apiC.teamsIBelongTo(me) map { teams =>
-                BadRequest(html.simul.form(err, teams))
+                BadRequest(html.simul.form.create(err, teams))
               },
             setup =>
               env.simul.api.create(setup, me) map { simul =>
@@ -178,10 +178,44 @@ final class Simul(
       }
     }
 
+  def edit(id: String) =
+    Auth { implicit ctx => me =>
+      WithEditableSimul(id) { simul =>
+        apiC.teamsIBelongTo(me) map { teams =>
+          Ok(html.simul.form.edit(forms.edit(me, simul), teams, simul))
+        }
+      }
+    }
+
+  def update(id: String) =
+    AuthBody { implicit ctx => me =>
+      WithEditableSimul(id) { simul =>
+        implicit val req = ctx.body
+        forms
+          .edit(me, simul)
+          .bindFromRequest()
+          .fold(
+            err =>
+              apiC.teamsIBelongTo(me) map { teams =>
+                BadRequest(html.simul.form.edit(err, teams, simul))
+              },
+            data => env.simul.api.update(simul, data) inject Redirect(routes.Simul.show(id))
+          )
+      }
+    }
+
   private def AsHost(simulId: Sim.ID)(f: Sim => Fu[Result])(implicit ctx: Context): Fu[Result] =
     env.simul.repo.find(simulId) flatMap {
-      case None                                              => notFound
-      case Some(simul) if ctx.userId.exists(simul.hostId ==) => f(simul)
-      case _                                                 => fuccess(Unauthorized)
+      case None                                                                    => notFound
+      case Some(simul) if ctx.userId.has(simul.hostId) || isGranted(_.ManageSimul) => f(simul)
+      case _                                                                       => fuccess(Unauthorized)
+    }
+
+  private def WithEditableSimul(id: String)(
+      f: Sim => Fu[Result]
+  )(implicit ctx: Context): Fu[Result] =
+    AsHost(id) { sim =>
+      if (sim.isStarted) Redirect(routes.Simul.show(sim.id)).fuccess
+      else f(sim)
     }
 }

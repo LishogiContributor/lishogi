@@ -15,9 +15,7 @@ trait StringHelper { self: NumberHelper =>
 
   def showNumber(n: Int): String = if (n > 0) s"+$n" else n.toString
 
-  def urlencode(str: String): String = java.net.URLEncoder.encode(str, "US-ASCII")
-
-  def when(cond: Boolean, str: String) = cond ?? str
+  val urlencode = lila.common.String.urlencode _
 
   private val NumberFirstRegex = """(\d++)\s(.+)""".r
   private val NumberLastRegex  = """\s(\d++)$""".r.unanchored
@@ -31,7 +29,7 @@ trait StringHelper { self: NumberHelper =>
           br,
           raw(html)
         )
-      case NumberLastRegex(n) if rendered.length > n.length + 1 =>
+      case NumberLastRegex(n) if rendered.lengthIs > n.length + 1 =>
         frag(
           raw(rendered.dropRight(n.length + 1)),
           br,
@@ -41,7 +39,7 @@ trait StringHelper { self: NumberHelper =>
     }
   }
 
-  def encodeFen(fen: String) = lila.common.String.base64.encode(fen).reverse
+  def encodeSfen(sfen: String) = lila.common.String.base64.encode(sfen).reverse
 
   def addQueryParameter(url: String, key: String, value: Any) =
     if (url contains "?") s"$url&$key=$value" else s"$url?$key=$value"

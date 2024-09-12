@@ -1,9 +1,8 @@
 package lila.tournament
 
 import shogi.{ Color, Gote, Sente }
-import scala.util.chaining._
 
-import lila.game.{ Game, Player => GamePlayer, GameRepo, Source }
+import lila.game.{ Game, GameRepo, Player => GamePlayer, Source }
 import lila.user.User
 
 final class AutoPairing(
@@ -24,25 +23,18 @@ final class AutoPairing(
     val clock   = tour.clock.toClock
     val game = Game
       .make(
-        shogi = shogi.Game(
-          variantOption = Some {
-            if (tour.position.initial) tour.variant
-            else shogi.variant.FromPosition
-          },
-          fen = tour.position.some.filterNot(_.initial).map(_.fen)
-        ) pipe { g =>
-          val turns = g.player.fold(0, 1)
-          g.copy(
-            clock = clock.some,
-            turns = turns,
-            startedAtTurn = turns
+        shogi = shogi
+          .Game(
+            tour.position,
+            tour.variant
           )
-        },
+          .copy(clock = clock.some),
+        initialSfen = tour.position,
         sentePlayer = makePlayer(Sente, player1),
         gotePlayer = makePlayer(Gote, player2),
         mode = tour.mode,
         source = Source.Tournament,
-        pgnImport = None
+        notationImport = None
       )
       .withId(pairing.gameId)
       .withTournamentId(tour.id)
@@ -60,7 +52,7 @@ final class AutoPairing(
   }
 
   private def makePlayer(color: Color, player: Player) =
-    GamePlayer.make(color, player.userId, player.rating, player.provisional)
+    GamePlayer.make(color, player.userId, player.rating, provisional = player.provisional, isBot = false)
 
   private def usernameOf(userId: User.ID) =
     lightUserApi.sync(userId).fold(userId)(_.name)

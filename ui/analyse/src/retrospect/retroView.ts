@@ -1,9 +1,12 @@
+import { transWithColorName } from 'common/colorName';
+import { bind, dataIcon } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import { isHandicap } from 'shogiops/handicaps';
+import { VNode, h } from 'snabbdom';
+import AnalyseCtrl from '../ctrl';
 import { renderIndexAndMove } from '../moveView';
 import { RetroCtrl } from './retroCtrl';
-import AnalyseCtrl from '../ctrl';
-import { bind, dataIcon, spinner } from '../util';
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { opposite } from 'shogiops/util';
 
 function skipOrViewSolution(ctrl: RetroCtrl) {
   return h('div.choices', [
@@ -64,17 +67,26 @@ const feedback = {
                 'move',
                 renderIndexAndMove(
                   {
+                    variant: ctrl.variant,
                     withDots: true,
                     showGlyphs: true,
                     showEval: false,
+                    offset: ctrl.offset,
                   },
-                  ctrl.current().fault.node,
-                  ctrl.notation
+                  ctrl.current().fault.node
                 )!
               )
             )
           ),
-          h('em', ctrl.noarg(ctrl.color === 'sente' ? 'findBetterMoveForBlack' : 'findBetterMoveForWhite')),
+          h(
+            'em',
+            transWithColorName(
+              ctrl.trans,
+              'findBetterMoveForX',
+              ctrl.color,
+              isHandicap({ rules: ctrl.variant, sfen: ctrl.initialSfen })
+            )
+          ),
           skipOrViewSolution(ctrl),
         ]),
       ]),
@@ -106,7 +118,15 @@ const feedback = {
         h('div.icon', '✗'),
         h('div.instruction', [
           h('strong', ctrl.noarg('youCanDoBetter')),
-          h('em', ctrl.noarg(ctrl.color === 'sente' ? 'tryAnotherMoveForBlack' : 'tryAnotherMoveForWhite')),
+          h(
+            'em',
+            transWithColorName(
+              ctrl.trans,
+              'tryAnotherMoveForX',
+              ctrl.color,
+              isHandicap({ rules: ctrl.variant, sfen: ctrl.initialSfen })
+            )
+          ),
           skipOrViewSolution(ctrl),
         ]),
       ]),
@@ -137,11 +157,12 @@ const feedback = {
                   'strong',
                   renderIndexAndMove(
                     {
+                      variant: ctrl.variant,
                       withDots: true,
                       showEval: false,
+                      offset: ctrl.offset,
                     },
-                    ctrl.current().solution.node,
-                    0
+                    ctrl.current().solution.node
                   )!
                 )
               )
@@ -170,7 +191,8 @@ const feedback = {
           h('div.player', [h('div.icon', spinner()), h('div.instruction', ctrl.noarg('waitingForAnalysis'))])
         ),
       ];
-    const nothing = !ctrl.completion()[1];
+    const nothing = !ctrl.completion()[1],
+      handicap = isHandicap({ rules: ctrl.variant, sfen: ctrl.initialSfen });
     return [
       h('div.player', [
         h('div.no-square', h('piece.king.' + ctrl.color)),
@@ -178,8 +200,8 @@ const feedback = {
           h(
             'em',
             nothing
-              ? ctrl.noarg(ctrl.color === 'sente' ? 'noMistakesFoundForBlack' : 'noMistakesFoundForWhite')
-              : ctrl.noarg(ctrl.color === 'sente' ? 'doneReviewingBlackMistakes' : 'doneReviewingWhiteMistakes')
+              ? transWithColorName(ctrl.trans, 'noMistakesFoundForX', ctrl.color, handicap)
+              : transWithColorName(ctrl.trans, 'doneReviewingXMistakes', ctrl.color, handicap)
           ),
           h('div.choices.end', [
             nothing
@@ -194,9 +216,9 @@ const feedback = {
             h(
               'a',
               {
-                hook: bind('click', () => ctrl.flip()),
+                hook: bind('click', ctrl.flip),
               },
-              ctrl.noarg(ctrl.color === 'sente' ? 'reviewWhiteMistakes' : 'reviewBlackMistakes')
+              transWithColorName(ctrl.trans, 'reviewXMistakes', opposite(ctrl.color), handicap)
             ),
           ]),
         ]),

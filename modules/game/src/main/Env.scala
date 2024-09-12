@@ -50,9 +50,7 @@ final class Env(
 
   lazy val paginator = wire[PaginatorBuilder]
 
-  lazy val uciMemo = wire[UciMemo]
-
-  lazy val pgnDump = wire[PgnDump]
+  lazy val notationDump = wire[NotationDump]
 
   lazy val crosstableApi = new CrosstableApi(
     coll = db(config.crosstableColl),

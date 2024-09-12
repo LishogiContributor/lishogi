@@ -49,7 +49,7 @@ class ReportContext:
         self.path = path
         self.el = el
         self.name = name
-        self.text = text
+        self.text = text if text else ""
 
     def lang(self):
         return self.path.stem
@@ -60,8 +60,7 @@ class ReportContext:
         elif level == "warning":
             self.report.warnings += 1
         lang = short_lang(self.lang())
-        url = f"https://crowdin.com/translate/lishogi/all/en-{lang}#q={crowdin_q(self.text)}"
-        print(f"::{level} file={self.path},line={self.el.line},col={self.el.col}::{message} ({self.name}): {self.text!r} @ {url}")
+        print(f"::{level} file={self.path},line={self.el.line},col={self.el.col}::{message} ({self.name}): {self.text!r}")
 
     def error(self, message):
         self.log("error", message)
@@ -81,6 +80,9 @@ def lint(report, path):
     for el in root:
         name = el.attrib["name"]
         ctx = ReportContext(report, path, el, name, el.text)
+        if not el.text:
+            ctx.error("missing text")
+            continue
         if "'" in name or " " in name:
             ctx.error(f"bad {el.tag} name")
             continue
@@ -127,30 +129,30 @@ def lint_string(ctx, dest, source, allow_missing=0):
         if source.count(placeholder) < 1:
             ctx.error(f"unexpected {placeholder}")
 
-    for pattern in ["O-O", "SAN", "FEN", "PGN", "K, Q, R, B, N"]:
+    for pattern in ["SFEN", "CSA", "USI"]:
         m_source = source if pattern.isupper() else source.lower()
         m_dest = dest if pattern.isupper() else dest.lower()
         if pattern in m_source and pattern not in m_dest:
-            ctx.notice(f"missing {pattern}")
+            ctx.error(f"missing {pattern}")
+
+    if "lichess" in dest.lower() and not "lichess" in source.lower():
+        ctx.error("lichess in dest while not in source")
+
+    if "lishogi" in source.lower() and "lishogi" not in dest.lower():
+        ctx.warning("missing lishogi")
 
     if "%%" in source and "%%" not in dest:
         ctx.warning("missing %%")
 
-    if "PGN" in source and "PNG" in dest:
-        ctx.warning("PNG instead of PGN")
-
-    if "\n" not in source and "\n" in dest:
+    if "\n" not in source and "\n" in dest and len(source) < 32:
         ctx.notice("expected single line string")
 
-    if western_punctuation(ctx.lang()) and source.rstrip().endswith(".") and not dest.rstrip().endswith("."):
-        ctx.warning("translation does not end with dot")
-
-    if re.match(r"\n", dest):
+    if re.match(r"\n", dest) and not re.match(r"\n", source):
         ctx.error("has leading newlines")
-    elif re.match(r"\s+", dest):
+    elif re.match(r"\s+", dest) and not re.match(r"\s+", source):
         ctx.warning("has leading spaces")
 
-    if re.search(r"\s+$", dest):
+    if re.search(r"\s+$", dest) and not re.search(r"\s+$", source):
         ctx.warning("has trailing spaces")
 
     if re.search(r"\t", dest):

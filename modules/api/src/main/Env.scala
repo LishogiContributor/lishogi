@@ -7,6 +7,7 @@ import play.api.{ Configuration, Mode }
 import scala.concurrent.duration._
 
 import lila.common.config._
+import lila.user.User
 
 @Module
 final class Env(
@@ -17,7 +18,6 @@ final class Env(
     forumSearchEnv: lila.forumSearch.Env,
     teamEnv: lila.team.Env,
     puzzleEnv: lila.puzzle.Env,
-    explorerEnv: lila.explorer.Env,
     fishnetEnv: lila.fishnet.Env,
     studyEnv: lila.study.Env,
     studySearchEnv: lila.studySearch.Env,
@@ -36,10 +36,11 @@ final class Env(
     lobbyEnv: lila.lobby.Env,
     simulEnv: lila.simul.Env,
     tourEnv: lila.tournament.Env,
-    swissEnv: lila.swiss.Env,
     onlineApiUsers: lila.bot.OnlineApiUsers,
     challengeEnv: lila.challenge.Env,
+    socketEnv: lila.socket.Env,
     msgEnv: lila.msg.Env,
+    timelineEnv: lila.timeline.Env,
     cacheApi: lila.memo.CacheApi,
     ws: WSClient,
     val mode: Mode
@@ -50,8 +51,9 @@ final class Env(
 
   val config = ApiConfig loadFrom appConfig
   import config.apiToken
+  import net.baseUrl
 
-  lazy val pgnDump: PgnDump = wire[PgnDump]
+  lazy val notationDump: NotationDump = wire[NotationDump]
 
   lazy val userApi = wire[UserApi]
 
@@ -69,6 +71,8 @@ final class Env(
 
   lazy val eventStream = wire[EventStream]
 
+  lazy val referrerRedirect = wire[ReferrerRedirect]
+
   lazy val cli = wire[Cli]
 
   lazy val influxEvent = new InfluxEvent(
@@ -76,9 +80,11 @@ final class Env(
     endpoint = config.influxEventEndpoint,
     env = config.influxEventEnv
   )
-  if (mode == Mode.Prod && false) system.scheduler.scheduleOnce(5 seconds)(influxEvent.start()) // yep...
+  // if (mode == Mode.Prod) system.scheduler.scheduleOnce(5 seconds)(influxEvent.start())
 
-  system.scheduler.scheduleWithFixedDelay(20 seconds, 10 seconds) { () =>
+  system.scheduler.scheduleWithFixedDelay(1 minute, 1 minute) { () =>
     lila.mon.bus.classifiers.update(lila.common.Bus.size)
+    socketEnv.remoteSocket.onlineUserIds.getAndUpdate(_ + User.lishogiId)
+    userEnv.repo.setSeenAt(User.lishogiId)
   }
 }

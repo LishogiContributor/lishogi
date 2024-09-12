@@ -1,25 +1,21 @@
 package views.html.user
 
-import play.api.i18n.Lang
-
+import controllers.routes
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
 import lila.evaluation.Display
-import lila.security.{ Permission, UserSpy }
 import lila.playban.RageSit
+import lila.security.{ Permission, UserSpy }
 import lila.user.User
-
-import controllers.routes
+import play.api.i18n.Lang
 
 object mod {
-
   private def mzSection(key: String) = div(id := s"mz_$key", cls := "mz-section")
 
   def menu =
     mzSection("menu")(
       a(href := "#mz_actions")("Overview"),
-      a(href := "#mz_irwin")("Irwin"),
       a(href := "#mz_assessments")("Evaluation"),
       a(href := "#mz_mod_log")("Mod log"),
       a(href := "#mz_reports")("Reports"),
@@ -34,28 +30,25 @@ object mod {
         ),
         postForm(
           action := routes.Mod.refreshUserAssess(u.username),
-          title := "Collect data and ask irwin",
-          cls := "xhr"
+          title  := "Collect data",
+          cls    := "xhr"
         )(
           submitButton(cls := "btn-rack__btn")("Evaluate")
         ),
         isGranted(_.Shadowban) option {
           a(
-            cls := "btn-rack__btn",
-            href := routes.Mod.communicationPublic(u.id),
+            cls   := "btn-rack__btn",
+            href  := routes.Mod.communicationPublic(u.id),
             title := "View communications"
           )("Comms")
-        },
-        postForm(action := routes.Mod.notifySlack(u.id), title := "Notify #tavern", cls := "xhr")(
-          submitButton(cls := "btn-rack__btn")("Slack")
-        )
+        }
       ),
       div(cls := "btn-rack")(
         isGranted(_.CloseAccount) option {
           postForm(
             action := routes.Mod.alt(u.username, !u.marks.alt),
-            title := "Preemptively close unauthorized alt.",
-            cls := "xhr"
+            title  := "Preemptively close unauthorized alt.",
+            cls    := "xhr"
           )(
             submitButton(cls := List("btn-rack__btn" -> true, "active" -> u.marks.alt))("Alt")
           )
@@ -63,8 +56,8 @@ object mod {
         isGranted(_.MarkEngine) option {
           postForm(
             action := routes.Mod.engine(u.username, !u.marks.engine),
-            title := "This user is clearly cheating.",
-            cls := "xhr"
+            title  := "This user is clearly cheating.",
+            cls    := "xhr"
           )(
             submitButton(cls := List("btn-rack__btn" -> true, "active" -> u.marks.engine))("Engine")
           )
@@ -72,8 +65,8 @@ object mod {
         isGranted(_.MarkBooster) option {
           postForm(
             action := routes.Mod.booster(u.username, !u.marks.boost),
-            title := "Marks the user as a booster or sandbagger.",
-            cls := "xhr"
+            title  := "Marks the user as a booster or sandbagger.",
+            cls    := "xhr"
           )(
             submitButton(cls := List("btn-rack__btn" -> true, "active" -> u.marks.boost))("Booster")
           )
@@ -81,8 +74,8 @@ object mod {
         isGranted(_.Shadowban) option {
           postForm(
             action := routes.Mod.troll(u.username, !u.marks.troll),
-            title := "Enable/disable communication features for this user.",
-            cls := "xhr"
+            title  := "Enable/disable communication features for this user.",
+            cls    := "xhr"
           )(
             submitButton(cls := List("btn-rack__btn" -> true, "active" -> u.marks.troll))("Shadowban")
           )
@@ -90,17 +83,26 @@ object mod {
         (u.marks.troll && isGranted(_.Shadowban)) option {
           postForm(
             action := routes.Mod.deletePmsAndChats(u.username),
-            title := "Delete all PMs and public chat messages",
-            cls := "xhr"
+            title  := "Delete all PMs and public chat messages",
+            cls    := "xhr"
           )(
             submitButton(cls := "btn-rack__btn confirm")("Clear PMs & chats")
+          )
+        },
+        isGranted(_.SetKidMode) option {
+          postForm(
+            action := routes.Mod.kid(u.username),
+            title  := "Activate kid mode if not already the case",
+            cls    := "xhr"
+          )(
+            submitButton(cls := "btn-rack__btn confirm")("Kid")
           )
         },
         isGranted(_.RemoveRanking) option {
           postForm(
             action := routes.Mod.rankban(u.username, !u.marks.rankban),
-            title := "Include/exclude this user from the rankings.",
-            cls := "xhr"
+            title  := "Include/exclude this user from the rankings.",
+            cls    := "xhr"
           )(
             submitButton(cls := List("btn-rack__btn" -> true, "active" -> u.marks.rankban))("Rankban")
           )
@@ -108,8 +110,8 @@ object mod {
         isGranted(_.ReportBan) option {
           postForm(
             action := routes.Mod.reportban(u.username, !u.marks.reportban),
-            title := "Enable/disable the report feature for this user.",
-            cls := "xhr"
+            title  := "Enable/disable the report feature for this user.",
+            cls    := "xhr"
           )(
             submitButton(cls := List("btn-rack__btn" -> true, "active" -> u.marks.reportban))("Reportban")
           )
@@ -120,8 +122,8 @@ object mod {
           isGranted(_.CloseAccount) option {
             postForm(
               action := routes.Mod.closeAccount(u.username),
-              title := "Disables this account.",
-              cls := "xhr"
+              title  := "Disables this account.",
+              cls    := "xhr"
             )(
               submitButton(cls := "btn-rack__btn")("Close")
             )
@@ -132,8 +134,8 @@ object mod {
           isGranted(_.CloseAccount) option {
             postForm(
               action := routes.Mod.reopenAccount(u.username),
-              title := "Re-activates this account.",
-              cls := "xhr"
+              title  := "Re-activates this account.",
+              cls    := "xhr"
             )(
               submitButton(cls := "btn-rack__btn active")("Closed")
             )
@@ -144,8 +146,8 @@ object mod {
         (u.totpSecret.isDefined && isGranted(_.DisableTwoFactor)) option {
           postForm(
             action := routes.Mod.disableTwoFactor(u.username),
-            title := "Disables two-factor authentication for this account.",
-            cls := "xhr"
+            title  := "Disables two-factor authentication for this account.",
+            cls    := "xhr"
           )(
             submitButton(cls := "btn-rack__btn confirm")("Disable 2FA")
           )
@@ -168,9 +170,9 @@ object mod {
       (isGranted(_.Doxing) && isGranted(_.SetEmail)) ?? frag(
         postForm(cls := "email", action := routes.Mod.setEmail(u.username))(
           st.input(
-            tpe := "email",
-            value := emails.current.??(_.value),
-            name := "email",
+            tpe         := "email",
+            value       := emails.current.??(_.value),
+            name        := "email",
             placeholder := "Email address"
           ),
           submitButton(cls := "button", dataIcon := "E")
@@ -184,7 +186,7 @@ object mod {
   def prefs(u: User)(pref: lila.pref.Pref)(implicit ctx: Context) =
     frag(
       canViewRoles(u) option mzSection("roles")(
-        (if (isGranted(_.ChangePermission)) a(href := routes.Mod.permissions(u.username)) else span)(
+        (if (isGranted(_.ChangePermission)) a(href := routes.Mod.permissions(u.username)) else span) (
           strong(cls := "text inline", dataIcon := " ")("Permissions: "),
           if (u.roles.isEmpty) "Add some" else Permission(u.roles).map(_.name).mkString(", ")
         )
@@ -192,17 +194,7 @@ object mod {
       mzSection("preferences")(
         strong(cls := "text inline", dataIcon := "%")("Notable preferences:"),
         ul(
-          (pref.keyboardMove != lila.pref.Pref.KeyboardMove.NO) option li("keyboard moves"),
-          pref.botCompatible option li(
-            strong(
-              a(
-                cls := "text",
-                dataIcon := "j",
-                href := lila.common.String.base64
-                  .decode("aHR0cDovL2NoZXNzLWNoZWF0LmNvbS9ob3dfdG9fY2hlYXRfYXRfbGljaGVzcy5odG1s")
-              )("BOT-COMPATIBLE SETTINGS")
-            )
-          )
+          (pref.keyboardMove != lila.pref.Pref.KeyboardMove.NO) option li("keyboard moves")
         )
       )
     )
@@ -238,28 +230,45 @@ object mod {
       )
     }
 
-  def modLog(history: List[lila.mod.Modlog])(implicit lang: Lang) =
+  def modLog(history: List[lila.mod.Modlog], appeal: Option[lila.appeal.Appeal])(implicit lang: Lang) =
     mzSection("mod_log")(
-      strong(cls := "text", dataIcon := "!")(
-        "Moderation history",
-        history.isEmpty option ": nothing to show"
-      ),
-      history.nonEmpty ?? frag(
-        ul(
-          history.map { e =>
-            li(
-              userIdLink(e.mod.some, withTitle = false),
-              " ",
-              b(e.showAction),
-              " ",
-              e.details,
-              " ",
-              momentFromNowServer(e.date)
-            )
-          }
+      div(cls := "mod_log mod_log--history")(
+        strong(cls := "text", dataIcon := "!")(
+          "Moderation history",
+          history.isEmpty option ": nothing to show"
         ),
-        br
-      )
+        history.nonEmpty ?? frag(
+          ul(
+            history.map { e =>
+              li(
+                userIdLink(e.mod.some, withTitle = false),
+                " ",
+                b(e.showAction),
+                " ",
+                e.details,
+                " ",
+                momentFromNowServer(e.date)
+              )
+            }
+          ),
+          br
+        )
+      ),
+      appeal map { a =>
+        frag(
+          div(cls := "mod_log mod_log--appeal")(
+            st.a(href := routes.Appeal.show(a.id))(
+              strong(cls := "text", dataIcon := "!")(
+                "Appeal status: ",
+                a.status.toString
+              )
+            ),
+            br,
+            a.msgs.map(_.text).map(shorten(_, 140)).map(p(_)),
+            a.msgs.sizeIs > 1 option frag("and", pluralize("more message", a.msgs.size - 1))
+          )
+        )
+      }
     )
 
   def reportLog(u: User)(reports: lila.report.Report.ByAndAbout)(implicit lang: Lang) =
@@ -477,12 +486,12 @@ object mod {
             th("Email"),
             sortNumberTh("Same"),
             th("Games"),
-            sortNumberTh(playban)(cls := "i", title := "Playban"),
-            sortNumberTh(alt)(cls := "i", title := "Alt"),
+            sortNumberTh(playban)(cls   := "i", title := "Playban"),
+            sortNumberTh(alt)(cls       := "i", title := "Alt"),
             sortNumberTh(shadowban)(cls := "i", title := "Shadowban"),
-            sortNumberTh(boosting)(cls := "i", title := "Boosting"),
-            sortNumberTh(engine)(cls := "i", title := "Engine"),
-            sortNumberTh(closed)(cls := "i", title := "Closed"),
+            sortNumberTh(boosting)(cls  := "i", title := "Boosting"),
+            sortNumberTh(engine)(cls    := "i", title := "Engine"),
+            sortNumberTh(closed)(cls    := "i", title := "Closed"),
             sortNumberTh(reportban)(cls := "i", title := "Reportban"),
             sortNumberTh(notesText)(cls := "i", title := "Notes"),
             sortNumberTh("Created"),
@@ -497,7 +506,7 @@ object mod {
               notes.filter(n => n.to == o.id && (ctx.me.exists(n.isFrom) || isGranted(_.Doxing)))
             tr(
               dataTags := s"${other.ips.mkString(" ")} ${other.fps.mkString(" ")}",
-              cls := (o == u) option "same"
+              cls      := (o == u) option "same"
             )(
               if (dox || o == u) td(dataSort := o.id)(userLink(o, withBestRating = true, params = "?mod"))
               else td,
@@ -526,7 +535,7 @@ object mod {
                   a(href := s"${routes.User.show(o.username)}?notes")(
                     notesText(
                       title := s"Notes from ${userNotes.map(_.from).map(usernameOrId).mkString(", ")}",
-                      cls := "is-green"
+                      cls   := "is-green"
                     ),
                     userNotes.size
                   )
@@ -536,7 +545,7 @@ object mod {
               td(dataSort := o.seenAt.map(_.getMillis.toString))(o.seenAt.map(momentFromNowServer)),
               isGranted(_.CloseAccount) option td(
                 o.enabled option button(
-                  cls := "button button-empty button-thin button-red mark-alt",
+                  cls  := "button button-empty button-thin button-red mark-alt",
                   href := routes.Mod.alt(o.id, !o.marks.alt)
                 )("ALT")
               )
@@ -544,7 +553,7 @@ object mod {
           }
         )
       ),
-      (max < 1000 && max <= othersWithEmail.size) option button(cls := "button more-others")(
+      (max < 1000 && othersWithEmail.others.sizeIs >= max) option button(cls := "button more-others")(
         "Load more users"
       )
     )

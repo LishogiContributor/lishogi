@@ -3,9 +3,44 @@ package lila.study
 import play.api.data._
 import play.api.data.Forms._
 
-import lila.common.Form.clean
+import lila.common.Form.cleanNonEmptyText
+import shogi.format.forsyth.Sfen
 
 object StudyForm {
+
+  object importFree {
+
+    lazy val form = Form(
+      mapping(
+        "notation" -> nonEmptyText
+      )(Data.apply)(Data.unapply)
+    )
+
+    case class Data(
+        notation: String
+    )
+
+  }
+
+  object postGameStudy {
+
+    lazy val form = Form(
+      mapping(
+        "gameId"      -> nonEmptyText,
+        "orientation" -> optional(nonEmptyText),
+        "invited"     -> optional(nonEmptyText)
+      )(Data.apply)(Data.unapply)
+    )
+
+    case class Data(
+        gameId: String,
+        orientationStr: Option[String],
+        invitedUsername: Option[String]
+    ) {
+      def orientation = orientationStr.flatMap(shogi.Color.fromName) | shogi.Sente
+    }
+
+  }
 
   object importGame {
 
@@ -13,23 +48,31 @@ object StudyForm {
       mapping(
         "gameId"      -> optional(nonEmptyText),
         "orientation" -> optional(nonEmptyText),
-        "fen"         -> optional(nonEmptyText),
-        "pgn"         -> optional(nonEmptyText),
+        "sfen"        -> optional(lila.common.Form.sfen.clean),
+        "notation"    -> optional(nonEmptyText),
         "variant"     -> optional(nonEmptyText),
         "as"          -> optional(nonEmptyText)
       )(Data.apply)(Data.unapply)
+        .verifying("Invalid SFEN", _.validSfen)
     )
 
     case class Data(
         gameId: Option[String] = None,
         orientationStr: Option[String] = None,
-        fenStr: Option[String] = None,
-        pgnStr: Option[String] = None,
+        sfen: Option[Sfen] = None,
+        notationStr: Option[String] = None,
         variantStr: Option[String] = None,
         asStr: Option[String] = None
     ) {
 
-      def orientation = orientationStr.flatMap(shogi.Color.apply) | shogi.Sente
+      def orientation = orientationStr.flatMap(shogi.Color.fromName) | shogi.Sente
+
+      def variant = (variantStr flatMap shogi.variant.Variant.apply) | shogi.variant.Standard
+
+      def validSfen =
+        sfen.fold(true) { sf =>
+          sf.toSituation(variant).exists(_.playable(strict = false, withImpasse = false))
+        }
 
       def as: As =
         asStr match {
@@ -42,8 +85,8 @@ object StudyForm {
           name = Chapter.Name(""),
           game = gameId,
           variant = variantStr,
-          fen = fenStr,
-          pgn = pgnStr,
+          sfen = sfen,
+          notation = notationStr,
           orientation = orientation.name,
           mode = ChapterMaker.Mode.Normal.key,
           initial = false
@@ -55,17 +98,17 @@ object StudyForm {
     case class AsChapterOf(studyId: Study.Id) extends As
   }
 
-  object importPgn {
+  object importNotation {
 
     lazy val form = Form(
       mapping(
-        "name"        -> clean(text),
+        "name"        -> cleanNonEmptyText,
         "orientation" -> optional(nonEmptyText),
         "variant"     -> optional(nonEmptyText),
         "mode"        -> nonEmptyText.verifying(ChapterMaker.Mode(_).isDefined),
         "initial"     -> boolean,
         "sticky"      -> boolean,
-        "pgn"         -> nonEmptyText
+        "notation"    -> nonEmptyText
       )(Data.apply)(Data.unapply)
     )
 
@@ -76,18 +119,18 @@ object StudyForm {
         mode: String,
         initial: Boolean,
         sticky: Boolean,
-        pgn: String
+        notation: String
     ) {
 
-      def orientation = orientationStr.flatMap(shogi.Color.apply) | shogi.Sente
+      def orientation = orientationStr.flatMap(shogi.Color.fromName) | shogi.Sente
 
       def toChapterDatas =
-        MultiPgn.split(pgn, max = 20).value.zipWithIndex map { case (onePgn, index) =>
+        MultiNotation.split(notation, max = 20).value.zipWithIndex map { case (oneNotation, index) =>
           ChapterMaker.Data(
             // only the first chapter can be named
             name = Chapter.Name((index == 0) ?? name),
             variant = variantStr,
-            pgn = onePgn.some,
+            notation = oneNotation.some,
             orientation = orientation.name,
             mode = mode,
             initial = initial && index == 0

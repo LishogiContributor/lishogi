@@ -1,70 +1,59 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { parseFen } from 'shogiops/fen';
-import * as shogiground from './ground';
-//import { bind, onInsert, dataIcon, spinner, bindMobileMousedown } from "./util";
-import { bind, onInsert, spinner, bindMobileMousedown } from './util';
-import { defined } from 'common';
-import changeColorHandle from 'common/coordsColor';
-import { getPlayer, playable } from 'game';
+import { view as cevalView } from 'ceval';
+import { transWithColorName } from 'common/colorName';
+import { defined } from 'common/common';
+import { bindMobileMousedown } from 'common/mobile';
+import { bind, bindNonPassive, dataIcon, MaybeVNode, onInsert } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import stepwiseScroll from 'common/wheel';
+import { playable } from 'game';
 import * as router from 'game/router';
 import statusView from 'game/view/status';
+import { isHandicap } from 'shogiops/handicaps';
+import { parseSfen } from 'shogiops/sfen';
+import { VNode, h } from 'snabbdom';
 import { path as treePath } from 'tree';
-import { render as renderTreeView } from './treeView/treeView';
-import * as control from './control';
+import { render as acplView } from './acpl';
 import { view as actionMenu } from './actionMenu';
-import { view as renderPromotion } from './promotion';
 import renderClocks from './clocks';
-//import * as pgnExport from "./pgnExport";
+import * as control from './control';
+import AnalyseCtrl from './ctrl';
 import forecastView from './forecast/forecastView';
-import { view as cevalView } from 'ceval';
-import crazyView from './crazy/crazyView';
+import { view as forkView } from './fork';
+import * as gridHacks from './gridHacks';
+import * as shogiground from './ground';
+import { ConcealOf } from './interfaces';
 import { view as keyboardView } from './keyboard';
-import explorerView from './explorer/explorerView';
-import retroView from './retrospect/retroView';
+import * as notationExport from './notationExport';
 import practiceView from './practice/practiceView';
+import retroView from './retrospect/retroView';
+import serverSideUnderboard from './serverSideUnderboard';
 import * as gbEdit from './study/gamebook/gamebookEdit';
 import * as gbPlay from './study/gamebook/gamebookPlayView';
 import { StudyCtrl } from './study/interfaces';
-import * as studyView from './study/studyView';
-import * as studyPracticeView from './study/practice/studyPracticeView';
-import { view as forkView } from './fork';
-import { render as acplView } from './acpl';
-import AnalyseCtrl from './ctrl';
-import { ConcealOf } from './interfaces';
-import relayManager from './study/relay/relayManagerView';
-import relayIntro from './study/relay/relayIntroView';
 import renderPlayerBars from './study/playerBars';
-import serverSideUnderboard from './serverSideUnderboard';
-import * as gridHacks from './gridHacks';
+import * as studyPracticeView from './study/practice/studyPracticeView';
+import * as studyView from './study/studyView';
+import { render as renderTreeView } from './treeView/treeView';
+import { studyAdvancedButton, studyModal } from './studyModal';
 
 const li = window.lishogi;
 
-function renderResult(ctrl: AnalyseCtrl): VNode[] {
-  let result: string | undefined;
-  if (ctrl.data.game.status.id >= 30)
-    switch (ctrl.data.game.winner) {
-      case 'sente':
-        result = '1-0';
-        break;
-      case 'gote':
-        result = '0-1';
-        break;
-      default:
-        result = '½-½';
-    }
-  const tags: VNode[] = [];
-  if (result) {
-    tags.push(h('div.result', result));
-    const winner = getPlayer(ctrl.data, ctrl.data.game.winner!);
-    tags.push(
-      h('div.status', [
-        statusView(ctrl),
-        winner ? ', ' + ctrl.trans(winner.color == 'sente' ? 'blackIsVictorious' : 'whiteIsVictorious') : null,
-      ])
+function renderResult(ctrl: AnalyseCtrl): MaybeVNode {
+  const handicap = isHandicap({ rules: ctrl.data.game.variant.key, sfen: ctrl.data.game.initialSfen });
+  const render = (status: String, winner?: Color) =>
+    h('div.status', [status, winner ? ', ' + transWithColorName(ctrl.trans, 'xIsVictorious', winner, handicap) : null]);
+  if (ctrl.data.game.status.id >= 30) {
+    const status = statusView(ctrl.trans, ctrl.data.game.status, ctrl.data.game.winner, handicap);
+    return render(status, ctrl.data.game.winner);
+  } else if (ctrl.study && ctrl.study.data.chapter.setup.endStatus) {
+    const status = statusView(
+      ctrl.trans,
+      ctrl.study.data.chapter.setup.endStatus.status,
+      ctrl.study.data.chapter.setup.endStatus.winner,
+      handicap
     );
-  }
-  return tags;
+    return render(status, ctrl.study.data.chapter.setup.endStatus.winner);
+  } else return null;
 }
 
 function makeConcealOf(ctrl: AnalyseCtrl): ConcealOf | undefined {
@@ -87,23 +76,11 @@ function makeConcealOf(ctrl: AnalyseCtrl): ConcealOf | undefined {
 }
 
 function renderAnalyse(ctrl: AnalyseCtrl, concealOf?: ConcealOf) {
-  return h(
-    'div.analyse__moves.areplay',
-    [
-      ctrl.embed && ctrl.study ? h('div.chapter-name', ctrl.study.currentChapter().name) : null,
-      renderTreeView(ctrl, concealOf),
-    ].concat(renderResult(ctrl))
-  );
-}
-
-function wheel(ctrl: AnalyseCtrl, e: WheelEvent) {
-  const target = e.target as HTMLElement;
-  if (target.tagName !== 'PIECE' && target.tagName !== 'SQUARE' && target.tagName !== 'CG-BOARD') return;
-  e.preventDefault();
-  if (e.deltaY > 0) control.next(ctrl);
-  else if (e.deltaY < 0) control.prev(ctrl);
-  ctrl.redraw();
-  return false;
+  return h('div.analyse__moves.areplay', [
+    ctrl.embed && ctrl.study ? h('div.chapter-name', ctrl.study.currentChapter().name) : null,
+    renderTreeView(ctrl, concealOf),
+    renderResult(ctrl),
+  ]);
 }
 
 function inputs(ctrl: AnalyseCtrl): VNode | undefined {
@@ -112,74 +89,110 @@ function inputs(ctrl: AnalyseCtrl): VNode | undefined {
   return h('div.copyables', [
     h('div.pair', [
       h('label.name', 'SFEN'),
-      h('input.copyable.autoselect.analyse__underboard__fen', {
+      h('input.copyable.autoselect.analyse__underboard__sfen', {
         attrs: { spellCheck: false },
         hook: {
           insert: vnode => {
             const el = vnode.elm as HTMLInputElement;
-            el.value = defined(ctrl.fenInput) ? ctrl.fenInput : ctrl.node.fen;
+            el.value = defined(ctrl.sfenInput) ? ctrl.sfenInput : ctrl.node.sfen;
             el.addEventListener('change', _ => {
-              if (el.value !== ctrl.node.fen && el.reportValidity()) ctrl.changeFen(el.value.trim());
+              if (el.value !== ctrl.node.sfen && el.reportValidity()) ctrl.changeSfen(el.value.trim());
             });
             el.addEventListener('input', _ => {
-              ctrl.fenInput = el.value;
+              ctrl.sfenInput = el.value;
               el.addEventListener('input', _ => {
-                ctrl.fenInput = el.value;
-                el.setCustomValidity(parseFen(el.value.trim()).isOk ? '' : 'Invalid SFEN');
+                ctrl.sfenInput = el.value;
+                const position = parseSfen(ctrl.data.game.variant.key, el.value.trim());
+                el.setCustomValidity(position.isOk ? '' : 'Invalid SFEN');
               });
             });
           },
           postpatch: (_, vnode) => {
             const el = vnode.elm as HTMLInputElement;
-            if (!defined(ctrl.fenInput)) {
-              el.value = ctrl.node.fen;
+            if (!defined(ctrl.sfenInput)) {
+              el.value = ctrl.node.sfen;
               el.setCustomValidity('');
-            } else if (el.value != ctrl.fenInput) {
-              el.value = ctrl.fenInput;
+            } else if (el.value != ctrl.sfenInput) {
+              el.value = ctrl.sfenInput;
             }
           },
         },
       }),
     ]),
-    //h("div.pgn", [
-    //  h("div.pair", [
-    //    h("label.name", "PGN"),
-    //    h("textarea.copyable.autoselect", {
-    //      attrs: { spellCheck: false },
-    //      hook: {
-    //        ...onInsert((el) => {
-    //          (el as HTMLTextAreaElement).value = defined(ctrl.pgnInput)
-    //            ? ctrl.pgnInput
-    //            : pgnExport.renderFullTxt(ctrl);
-    //          el.addEventListener(
-    //            "input",
-    //            (e) => (ctrl.pgnInput = (e.target as HTMLTextAreaElement).value)
-    //          );
-    //        }),
-    //        postpatch: (_, vnode) => {
-    //          (vnode.elm as HTMLTextAreaElement).value = defined(ctrl.pgnInput)
-    //            ? ctrl.pgnInput
-    //            : pgnExport.renderFullTxt(ctrl);
-    //        },
-    //      },
-    //    }),
-    //    h(
-    //      "button.button.button-thin.action.text",
-    //      {
-    //        attrs: dataIcon("G"),
-    //        hook: bind(
-    //          "click",
-    //          (_) => {
-    //            const pgn = $(".copyables .pgn textarea").val();
-    //            if (pgn !== pgnExport.renderFullTxt(ctrl)) ctrl.changePgn(pgn);
-    //          },
-    //          ctrl.redraw
-    //        ),
-    //      },
-    //      ctrl.trans.noarg("importPgn")
-    //    ),
-    //  ]),
-    //]),
+    h('div.kif', [
+      h('div.pair', [
+        h('label.name', 'KIF'),
+        h('textarea.copyable.autoselect', {
+          attrs: { spellCheck: false },
+          hook: {
+            ...onInsert(el => {
+              (el as HTMLTextAreaElement).value = defined(ctrl.kifInput)
+                ? ctrl.kifInput
+                : notationExport.renderFullKif(ctrl);
+              el.addEventListener('input', e => (ctrl.kifInput = (e.target as HTMLTextAreaElement).value));
+            }),
+            postpatch: (_, vnode) => {
+              (vnode.elm as HTMLTextAreaElement).value = defined(ctrl.kifInput)
+                ? ctrl.kifInput
+                : notationExport.renderFullKif(ctrl);
+            },
+          },
+        }),
+        h(
+          'button.button.button-thin.action.text',
+          {
+            attrs: dataIcon('G'),
+            hook: bind(
+              'click',
+              _ => {
+                const kif = $('.copyables .kif textarea').val();
+                if (kif !== notationExport.renderFullKif(ctrl)) ctrl.changeNotation(kif);
+              },
+              ctrl.redraw
+            ),
+          },
+          ctrl.trans.noarg('importKif')
+        ),
+      ]),
+    ]),
+    ['standard'].includes(ctrl.data.game.variant.key)
+      ? h('div.csa', [
+          h('div.pair', [
+            h('label.name', 'CSA'),
+            h('textarea.copyable.autoselect', {
+              attrs: { spellCheck: false },
+              hook: {
+                ...onInsert(el => {
+                  (el as HTMLTextAreaElement).value = defined(ctrl.csaInput)
+                    ? ctrl.csaInput
+                    : notationExport.renderFullCsa(ctrl);
+                  el.addEventListener('input', e => (ctrl.csaInput = (e.target as HTMLTextAreaElement).value));
+                }),
+                postpatch: (_, vnode) => {
+                  (vnode.elm as HTMLTextAreaElement).value = defined(ctrl.csaInput)
+                    ? ctrl.csaInput
+                    : notationExport.renderFullCsa(ctrl);
+                },
+              },
+            }),
+            h(
+              'button.button.button-thin.action.text',
+              {
+                attrs: dataIcon('G'),
+                hook: bind(
+                  'click',
+                  _ => {
+                    const csa = $('.copyables .csa textarea').val();
+                    if (csa !== notationExport.renderFullCsa(ctrl)) ctrl.changeNotation(csa);
+                  },
+                  ctrl.redraw
+                ),
+              },
+              ctrl.trans.noarg('importCsa')
+            ),
+          ]),
+        ])
+      : null,
   ]);
 }
 
@@ -227,7 +240,6 @@ function controls(ctrl: AnalyseCtrl) {
             if (action === 'prev' || action === 'next') repeater(ctrl, action, e);
             else if (action === 'first') control.first(ctrl);
             else if (action === 'last') control.last(ctrl);
-            else if (action === 'explorer') ctrl.toggleExplorer();
             else if (action === 'practice') ctrl.togglePractice();
             else if (action === 'menu') ctrl.actionMenu.toggle();
           },
@@ -236,10 +248,10 @@ function controls(ctrl: AnalyseCtrl) {
       }),
     },
     [
-      ctrl.embed
+      ctrl.embed || ctrl.forecast
         ? null
         : h(
-            'div.features',
+            'div.features' + (!ctrl.synthetic ? '.from-game' : ''),
             ctrl.studyPractice
               ? [
                   h('a.fbt', {
@@ -252,31 +264,19 @@ function controls(ctrl: AnalyseCtrl) {
                   }),
                 ]
               : [
-                  //h("button.fbt", {
-                  //  attrs: {
-                  //    title: noarg("openingExplorerAndTablebase"),
-                  //    "data-act": "explorer",
-                  //    "data-icon": "]",
-                  //  },
-                  //  class: {
-                  //    hidden:
-                  //      menuIsOpen || !ctrl.explorer.allowed() || !!ctrl.retro,
-                  //    active: ctrl.explorer.enabled(),
-                  //  },
-                  //}),
-                  ctrl.ceval.possible && ctrl.ceval.allowed() && !ctrl.isGamebook()
-                    ? h('button.fbt', {
-                        attrs: {
-                          title: noarg('practiceWithComputer'),
-                          'data-act': 'practice',
-                          'data-icon': '',
-                        },
-                        class: {
-                          hidden: menuIsOpen || !!ctrl.retro,
-                          active: !!ctrl.practice,
-                        },
-                      })
-                    : null,
+                  !ctrl.synthetic ? studyAdvancedButton(ctrl, menuIsOpen) : null,
+                  h('button.fbt', {
+                    attrs: {
+                      title: noarg('practiceWithComputer'),
+                      'data-act': 'practice',
+                      'data-icon': '',
+                      hidden: menuIsOpen || !!ctrl.retro,
+                      disabled: !(ctrl.ceval.possible && ctrl.ceval.allowed() && !ctrl.isGamebook()),
+                    },
+                    class: {
+                      active: !!ctrl.practice,
+                    },
+                  }),
                 ]
           ),
       h('div.jumps', [
@@ -302,7 +302,6 @@ function controls(ctrl: AnalyseCtrl) {
 function forceInnerCoords(ctrl: AnalyseCtrl, v: boolean) {
   if (ctrl.data.pref.coords == 2) {
     $('body').toggleClass('coords-in', v).toggleClass('coords-out', !v);
-    changeColorHandle();
   }
 }
 
@@ -320,12 +319,11 @@ export default function (ctrl: AnalyseCtrl): VNode {
     gamebookPlayView = gamebookPlay && gbPlay.render(gamebookPlay),
     gamebookEditView = gbEdit.running(ctrl) ? gbEdit.render(ctrl) : undefined,
     playerBars = renderPlayerBars(ctrl),
-    clocks = !playerBars && renderClocks(ctrl),
+    clocks = !playerBars && renderClocks(ctrl, true),
     gaugeOn = ctrl.showEvalGauge(),
-    needsInnerCoords = !!gaugeOn || !!playerBars,
-    intro = relayIntro(ctrl);
+    needsInnerCoords = !!playerBars;
   return h(
-    'main.analyse.variant-' + ctrl.data.game.variant.key,
+    'main.sb-insert.analyse.main-v-' + ctrl.data.game.variant.key, // sb-insert - to force snabbdom to call insert
     {
       hook: {
         insert: vn => {
@@ -350,50 +348,56 @@ export default function (ctrl: AnalyseCtrl): VNode {
         'comp-off': !ctrl.showComputer(),
         'gauge-on': gaugeOn,
         'has-players': !!playerBars,
+        'post-game': !!ctrl.study?.data.postGameStudy,
         'has-clocks': !!clocks,
-        'has-intro': !!intro,
-        'analyse-hunter': ctrl.opts.hunter,
       },
     },
     [
       ctrl.keyboardHelp ? keyboardView(ctrl) : null,
+      ctrl.studyModal() ? studyModal(ctrl) : null,
       study ? studyView.overboard(study) : null,
-      intro ||
-        h(
-          addChapterId(study, 'div.analyse__board.main-board'),
-          {
-            hook:
-              window.lishogi.hasTouchEvents || ctrl.gamebookPlay()
-                ? undefined
-                : bind('wheel', (e: WheelEvent) => wheel(ctrl, e)),
-          },
-          [
-            ...(clocks || []),
-            playerBars ? playerBars[ctrl.bottomIsSente() ? 1 : 0] : null,
-            shogiground.render(ctrl),
-            playerBars ? playerBars[ctrl.bottomIsSente() ? 0 : 1] : null,
-            renderPromotion(ctrl),
-          ]
-        ),
-      gaugeOn && !intro ? cevalView.renderGauge(ctrl) : null,
-      menuIsOpen || intro ? null : crazyView(ctrl, ctrl.topColor(), 'top'),
+
+      h(
+        addChapterId(study, 'div.analyse__board.main-board.v-' + ctrl.data.game.variant.key),
+        {
+          hook:
+            window.lishogi.hasTouchEvents || ctrl.gamebookPlay() || window.lishogi.storage.get('scrollMoves') == '0'
+              ? undefined
+              : bindNonPassive(
+                  'wheel',
+                  stepwiseScroll((e: WheelEvent, scroll: boolean) => {
+                    if (ctrl.gamebookPlay()) return;
+                    const target = e.target as HTMLElement;
+                    if (target.tagName !== 'SG-PIECES') return;
+                    e.preventDefault();
+                    if (e.deltaY > 0 && scroll) control.next(ctrl);
+                    else if (e.deltaY < 0 && scroll) control.prev(ctrl);
+                    ctrl.redraw();
+                  })
+                ),
+        },
+        [
+          ...(clocks || []),
+          playerBars ? playerBars[ctrl.bottomIsSente() ? 1 : 0] : null,
+          shogiground.renderBoard(ctrl),
+          playerBars ? playerBars[ctrl.bottomIsSente() ? 0 : 1] : null,
+        ]
+      ),
+      gaugeOn ? cevalView.renderGauge(ctrl) : null,
       gamebookPlayView ||
-        (intro
-          ? null
-          : h(addChapterId(study, 'div.analyse__tools'), [
-              ...(menuIsOpen
-                ? [actionMenu(ctrl)]
-                : [
-                    cevalView.renderCeval(ctrl),
-                    showCevalPvs ? cevalView.renderPvs(ctrl) : null,
-                    renderAnalyse(ctrl, concealOf),
-                    gamebookEditView || forkView(ctrl, concealOf),
-                    retroView(ctrl) || practiceView(ctrl) || explorerView(ctrl),
-                  ]),
-            ])),
-      menuIsOpen || intro ? null : crazyView(ctrl, ctrl.bottomColor(), 'bottom'),
-      gamebookPlayView || intro ? null : controls(ctrl),
-      ctrl.embed || intro
+        h(addChapterId(study, 'div.analyse__tools'), [
+          ...(menuIsOpen
+            ? [actionMenu(ctrl)]
+            : [
+                cevalView.renderCeval(ctrl),
+                showCevalPvs ? cevalView.renderPvs(ctrl) : null,
+                renderAnalyse(ctrl, concealOf),
+                gamebookEditView || forkView(ctrl, concealOf),
+                retroView(ctrl) || practiceView(ctrl),
+              ]),
+        ]),
+      gamebookPlayView ? null : controls(ctrl),
+      ctrl.embed
         ? null
         : h(
             'div.analyse__underboard',
@@ -403,43 +407,42 @@ export default function (ctrl: AnalyseCtrl): VNode {
             },
             study ? studyView.underboard(ctrl) : [inputs(ctrl)]
           ),
-      intro ? null : acplView(ctrl),
+      acplView(ctrl),
       ctrl.embed
         ? null
         : ctrl.studyPractice
-        ? studyPracticeView.side(study!)
-        : h(
-            'aside.analyse__side',
-            {
-              hook: onInsert(elm => {
-                ctrl.opts.$side && ctrl.opts.$side.length && $(elm).replaceWith(ctrl.opts.$side);
-                $(elm).append($('.streamers').clone().removeClass('none'));
-              }),
-            },
-            ctrl.studyPractice
-              ? [studyPracticeView.side(study!)]
-              : study
-              ? [studyView.side(study)]
-              : [
-                  ctrl.forecast ? forecastView(ctrl, ctrl.forecast) : null,
-                  !ctrl.synthetic && playable(ctrl.data)
-                    ? h(
-                        'div.back-to-game',
-                        h(
-                          'a.button.button-empty.text',
-                          {
-                            attrs: {
-                              href: router.game(ctrl.data, ctrl.data.player.color),
-                              'data-icon': 'i',
-                            },
-                          },
-                          ctrl.trans.noarg('backToGame')
-                        )
-                      )
-                    : null,
-                ]
-          ),
-      study && study.relay && relayManager(study.relay),
+          ? studyPracticeView.side(study!)
+          : h(
+              'aside.analyse__side',
+              {
+                hook: onInsert(elm => {
+                  ctrl.opts.$side && ctrl.opts.$side.length && $(elm).replaceWith(ctrl.opts.$side);
+                  $(elm).append($('.streamers').clone().removeClass('none'));
+                }),
+              },
+              ctrl.studyPractice
+                ? [studyPracticeView.side(study!)]
+                : study
+                  ? [studyView.side(study)]
+                  : [
+                      ctrl.forecast ? forecastView(ctrl, ctrl.forecast) : null,
+                      !ctrl.synthetic && playable(ctrl.data)
+                        ? h(
+                            'div.back-to-game',
+                            h(
+                              'a.button.button-empty.text',
+                              {
+                                attrs: {
+                                  href: router.game(ctrl.data, ctrl.data.player.color),
+                                  'data-icon': 'i',
+                                },
+                              },
+                              ctrl.trans.noarg('backToGame')
+                            )
+                          )
+                        : null,
+                    ]
+            ),
       ctrl.opts.chat &&
         h('section.mchat', {
           hook: onInsert(_ => {

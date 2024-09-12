@@ -30,11 +30,11 @@ final private class ReportScore(
 
     def autoScore(candidate: Report.Candidate) = candidate.isAutomatic ?? 25d
 
-    // https://github.com/ornicar/lila/issues/4093
-    // https://github.com/ornicar/lila/issues/4587
+    // https://github.com/lichess-org/lila/issues/4093
+    // https://github.com/lichess-org/lila/issues/4587
     def fixedAutoCommPrintScore(c: Report.Candidate)(score: Double): Double =
       if (c.isAutoComm) baseScore
-      else if (c.isPrint || c.isCoachReview || c.isPlaybans) baseScoreAboveThreshold
+      else if (c.isPrint || c.isPlaybans) baseScoreAboveThreshold
       else score
 
     def commFlagScore(c: Report.Candidate)(score: Double): Double =

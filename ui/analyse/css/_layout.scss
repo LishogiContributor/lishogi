@@ -1,12 +1,19 @@
-body {
-  /* prevents scroll bar flicker on page height changes */
-  overflow-y: scroll;
-}
-
 #main-wrap {
-  --main-max-width: calc(100vh - #{$site-header-outer-height} - #{$col1-uniboard-controls});
-  @include breakpoint($mq-col2) {
-    --main-max-width: auto;
+  --main-max-width: auto;
+  @include breakpoint($mq-col1) {
+    --main-max-width: calc(
+      (100vh - #{$site-header-outer-height} - #{$col1-uniboard-controls} - #{$hands-gap}) / 12 * 9
+    );
+    &:has(.main-v-minishogi, .main-v-kyotoshogi) {
+      --main-max-width: calc(
+        (100vh - #{$site-header-outer-height} - #{$col1-uniboard-controls} - #{$hands-gap}) / 7 * 5 / 12 * 11
+      );
+    }
+    &:has(.main-v-chushogi) {
+      --main-max-width: calc(
+        (100vh - #{$site-header-outer-height} - #{$col1-uniboard-controls} - #{$hands-gap}) / 12 * 11
+      );
+    }
   }
 }
 
@@ -31,7 +38,7 @@ body {
   }
   &__underboard {
     grid-area: under;
-    @include breakpoint($mq-col1-uniboard) {
+    @include breakpoint($mq-col1) {
       overflow: hidden; // helps truncating long study names
     }
   }
@@ -47,9 +54,6 @@ body {
   }
 
   --meta-height: auto;
-  @include proper-grid {
-    --meta-height: max-content;
-  }
 
   grid-template-rows: auto auto minmax(20em, 30vh);
   grid-template-areas:
@@ -63,8 +67,9 @@ body {
     'uchat';
 
   @include breakpoint($mq-col2) {
-    grid-template-columns: $col2-uniboard-width var(--gauge-gap) $col2-uniboard-table;
-    grid-template-rows: fit-content(0);
+    grid-template-columns: var(--col2-uniboard-main-size) $block-gap $col2-uniboard-table;
+
+    grid-template-rows: fit-content(0) $col2-uniboard-controls;
     grid-template-areas:
       'board      gauge tools'
       'under      .     controls'
@@ -81,7 +86,7 @@ body {
     }
 
     &__underboard {
-      margin-top: $block-gap;
+      margin-top: #{$block-gap + 1};
     }
 
     .eval-gauge {
@@ -89,15 +94,11 @@ body {
     }
   }
 
-  @include breakpoint($mq-col2-uniboard-squeeze) {
-    grid-template-columns: $col2-uniboard-squeeze-width var(--gauge-gap) $col2-uniboard-squeeze-table;
-  }
-
   @include breakpoint($mq-col3) {
     grid-template-columns:
-      $col3-uniboard-side $block-gap $col3-uniboard-width var(--gauge-gap)
+      $col3-uniboard-side $block-gap var(--col3-uniboard-main-size) $block-gap
       $col3-uniboard-table;
-    grid-template-rows: $meta-height $chat-height 2.5em auto;
+    grid-template-rows: $meta-height $chat-height $col3-uniboard-controls auto;
     grid-template-areas:
       'side    . board gauge tools'
       'chat    . board gauge tools'
@@ -112,5 +113,16 @@ body {
     }
 
     @include crosstable-large;
+  }
+
+  &.main-v-chushogi {
+    @include breakpoint($mq-col2) {
+      grid-template-columns: var(--col2-uniboard-main-size-no-hands) $big-block-gap $col2-uniboard-table;
+    }
+    @include breakpoint($mq-col3) {
+      grid-template-columns:
+        $col3-uniboard-side $big-block-gap var(--col3-uniboard-main-size-no-hands) $big-block-gap
+        $col3-uniboard-table;
+    }
   }
 }

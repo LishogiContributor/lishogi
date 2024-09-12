@@ -1,10 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { currentComments } from './studyComments';
-import { nodeFullName, bind } from '../util';
-import { prop, Prop } from 'common';
+import { Prop, prop } from 'common/common';
+import { bind } from 'common/snabbdom';
 import throttle from 'common/throttle';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
+import { nodeFullName } from '../util';
+import { currentComments } from './studyComments';
 
 interface Current {
   chapterId: string;
@@ -114,7 +114,7 @@ export function view(root: AnalyseCtrl): VNode {
               {
                 hook: bind('mousedown', () => ctrl.root.userJump(current.path), ctrl.redraw),
               },
-              nodeFullName(current.node, root.data.pref.pieceNotation ?? 0)
+              nodeFullName(current.node)
             ),
           ])
         : null,

@@ -1,5 +1,4 @@
 .action-menu {
-  @extend %border-bottom-active;
   flex: 1 1 0; // 0 size forces vertical scrollbar
   display: flex;
   flex-flow: column;
@@ -68,7 +67,8 @@
     margin-top: 6px;
     .button {
       display: inline-block;
-      padding: 0 8px;
+      padding: 4px 8px;
+      background: $c-bad;
     }
     .button::before {
       font-size: 1.2em;
@@ -88,6 +88,9 @@
       padding: 0 1em;
       height: 1.6em;
       width: 100%;
+    }
+    &[min='0'] {
+      padding: 0;
     }
     .range_value {
       flex: 0 0 auto;

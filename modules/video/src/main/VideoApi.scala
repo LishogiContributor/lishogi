@@ -16,7 +16,6 @@ final private[video] class VideoApi(
     cacheApi: lila.memo.CacheApi
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
-  import lila.db.BSON.BSONJodaDateTimeHandler
   import reactivemongo.api.bson.Macros
   implicit private val YoutubeBSONHandler = {
     import Youtube.Metadata
@@ -76,8 +75,8 @@ final private[video] class VideoApi(
         )
         .void
 
-    def removeNotIn(ids: List[Video.ID]) =
-      videoColl.delete.one($doc("_id" $nin ids)).void
+    def removeNotIn(ids: List[Video.ID]): Fu[Int] =
+      videoColl.delete.one($doc("_id" $nin ids)).map(_.n)
 
     def setMetadata(id: Video.ID, metadata: Youtube.Metadata) =
       videoColl.update

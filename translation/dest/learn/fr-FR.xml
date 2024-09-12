@@ -11,26 +11,33 @@
 	<string name="theIntroduction">Introduction</string>
 	<string name="introBasics">Apprenons les bases.</string>
 	<string name="introIntro">Votre parcours commence ici.</string>
+	<string name="clickHereAfterYouveChosen">Cliquez ici après avoir choisi le type de pièces que vous aimez.</string>
+	<string name="tellYourPiecesApart">It\'s important that you can tell your pieces apart, so make sure you choose the right piece set.</string>
+	<string name="howToSelectPieceSet">How to select your piece set?</string>
 	<string name="choosePieceDesign">Il est important que vous puissiez distinguer vos pièces, alors assurez-vous de choisir le jeu de pièces convenable pour vous. \n Pour le faire, cliquez sur la roue dentée ou sur votre nom d\'utilisateur (en haut à droite) puis cliquez sur \"Jeu de pièces\".</string>
 	<string name="promotionZone">Lorsque certaines de vos pièces atteignent ou quittent les trois premières rangées du territoire de votre adversaire, vous avez l\'option de promouvoir cette pièce et la rendre plus forte.</string>
 	<string name="senteGoesFirst">Dans le jeu de shogi, le joueur qui joue le premier coup s\'appelle sente et l\'autre, gote. Sente est parfois représenté par la couleur noire et gote par la couleur blanche. Jouez un coup pour sente pour continuer.</string>
 	<string name="introComplete">Vous connaissez maintenant quelques bases. Cette partie du tutoriel est encore en cours de développement. Pour l\'instant, apprenons comment les pièces se déplacent.</string>
+	<string name="introCompleteTwo">Vous connaissez maintenant les bases ! Maintenant, apprenez comment chaque pièce se déplace.</string>
 	<string name="theRook">La Tour</string>
 	<string name="itMovesInStraightLines">Elle se déplace sur une ligne droite</string>
 	<string name="rookIntro">La Tour est une pièce puissante. Es-tu prêt à la manoeuvrer ?</string>
 	<string name="rookGoal">Cliquer sur la tour et la déplacer jusqu\'à l\'étoile!</string>
+	<string name="grabAllTheStarsRemember">Collectez toutes les étoiles ! Rappelez-vous, regardez à l\'extérieur du plateau.</string>
 	<string name="rookPromotion">La tour se promeut en dragon. N\'oubliez pas qu\'une pièce peut se promouvoir en quittant la zone de promotion.</string>
 	<string name="rookSummary">La tour peut se déplacer devant, derrière, à gauche ou à droite autant de cases qu\'elle veut.</string>
 	<string name="dragonSummary">Le dragon peut se déplacer comme sa forme non-promue, et gagne aussi le déplacement d\'une case en diagonale, ce qui le rend beaucoup plus puissant.</string>
+	<string name="dragonSummaryTwo">Le dragon peut se déplacer comme la tour non promue, et gagne aussi un déplacement d\'une case en diagonale, ce qui le rend beaucoup plus puissant.</string>
 	<string name="grabAllTheStars">Collectez toutes les étoiles !</string>
 	<string name="theFewerMoves">Moins vous effectuez de déplacements, plus vous gagnez de points !</string>
 	<string name="rookComplete">Félicitations ! Vous maîtrisez les déplacements de la Tour.</string>
 	<string name="theBishop">Le Fou</string>
 	<string name="itMovesDiagonally">Il se déplace en diagonale</string>
 	<string name="bishopIntro">Maintenant, nous allons apprendre à déplacer le Fou !</string>
+	<string name="ehThereIsNoPiece">Hein ? Il n\'y a pas de pièce sur le plateau. Mais regardez à l\'extérieur du plateau, un fou ! Cette zone est l\'endroit où vont les pièces que vous avez capturées. Vous pouvez placer la pièce sur le plateau. Collectez toutes les étoiles comme d\'habitude.</string>
 	<string name="bishopPromotion">Quand le fou se promeut, il deviendra un cheval-dragon, une pièce plus forte.</string>
 	<string name="bishopSummary">Le fou se déplace diagonalement autant de cases qu\'il veut.</string>
-	<string name="horseSummary">Le fou promu (cheval-dragon) se déplace comme le fou, mais il pet aussi se déplace d\'une case orthogonalement.</string>
+	<string name="horseSummary">Le fou promu (cheval-dragon) se déplace comme le fou, mais il peut aussi se déplacer d\'une case orthogonalement.</string>
 	<string name="bishopComplete">Félicitations ! Vous maîtrisez les déplacements du Fou.</string>
 	<string name="theKing">Le Roi</string>
 	<string name="theMostImportantPiece">La pièce la plus importante</string>
@@ -62,6 +69,7 @@
 	<string name="lancePromotion">Après que la lance se promeuve, elle se déplace de manière différente, mais vous l\'avez déjà vu - c\'est la même manière que le général d\'or.</string>
 	<string name="lanceSummary">Elle avance, c\'est vraiment simple.</string>
 	<string name="planceSummary">Pareil que le général d\'or.</string>
+	<string name="planceSummaryTwo">La lance promue se déplace de la même façon que le général d\'or.</string>
 	<string name="lanceComplete">Beau travail !</string>
 	<string name="theGold">Le général d\'or</string>
 	<string name="itMovesInAnyDirectionExceptDiagonallyBack">Le général d\'or se déplace d\'une case dans n\'importe quelle direction SAUF les diagonales en arrière.</string>
@@ -84,15 +92,23 @@
 	<string name="capture">Capturer</string>
 	<string name="takeTheEnemyPieces">Prenez les pièces adverses</string>
 	<string name="captureIntro">Identifiez les pièces non défendues de l\'adversaire, et capturez-les !</string>
-	<string name="takeTheBlackPieces">Prenez les pièces noires !</string>
-	<string name="takeTheBlackPiecesAndDontLoseYours">Prenez les pièces noires ! Et ne perdez pas les vôtres.</string>
+	<string name="takeTheEnemyPiecesAndDontLoseYours">Prenez les pièces adverses ! Et ne perdez pas les vôtres.</string>
 	<string name="captureComplete">Félicitations ! Vous savez maintenant comment vous battre avec les pièces de shogi !</string>
+	<string name="pieceDrops">Parachutages de pièces</string>
+	<string name="reuseCapturedPieces">Réutilisez les pièces capturées !</string>
+	<string name="dropIntro">Encore une fois, capturez toutes les pièces de l\'adversaire, sans perdre les vôtres !</string>
+	<string name="capturedPiecesCanBeDropped">Vous pouvez parchuter les pièces capturées sur le plateau à votre tour de jeu !</string>
+	<string name="dropLimitations">Vous ne pouvez pas parachuter une pièce sur une autre pièce, ni la lâcher là où elle ne peut pas avoir de déplacements légaux. Parachuter une pièce dans la zone de promotion ne donne pas de promotion.
+Prenez les pièces ennemies !</string>
+	<string name="youCannotHaveTwoUnpromotedPawns">Vous ne pouvez pas avoir deux pions non promus sur la même colonne.</string>
 	<string name="protection">Protéger</string>
 	<string name="keepYourPiecesSafe">Assurez la sécurité de vos pièces</string>
 	<string name="protectionIntro">Identifiez vos pièces attaquées par l\'adversaire, et défendez-les !</string>
 	<string name="protectionComplete">Félicitations ! Une pièce que vous ne perdez pas est une pièce que vous gagnez !</string>
 	<string name="escape">Vous êtes attaqué ! Fuyez la menace !</string>
 	<string name="noEscape">Il n\'y a pas d\'échappatoire, mais vous pouvez vous défendre !</string>
+	<string name="makeSureAllSafe">Assurez-vous que toutes vos pièces sont en sécurité !</string>
+	<string name="dontForgetYouCanDropToDefend">N\'oubliez pas que vous pouvez parachuter des pièces pour défendre !</string>
 	<string name="dontLetThemTakeAnyUndefendedPiece">Ne laissez pas l\'adversaire prendre une pièce non défendue !</string>
 	<string name="combat">Combat</string>
 	<string name="captureAndDefendPieces">Capturez et défendez les pièces</string>
@@ -106,17 +122,25 @@
 	<string name="outOfCheck">Parer un échec</string>
 	<string name="defendYourKing">Défendez votre Roi</string>
 	<string name="outOfCheckIntro">Vous êtes en échec ! Vous devez fuir ou contrer l\'attaque.</string>
+	<string name="ifYourKingIsAttacked">Si votre roi est attaqué, vous devez faire face à l\'attaque.</string>
 	<string name="escapeWithTheKing">Faites fuir votre Roi !</string>
 	<string name="theKingCannotEscapeButBlock">Le Roi ne peut pas s\'échapper, mais vous pouvez parer l\'attaque !</string>
 	<string name="youCanGetOutOfCheckByTaking">Vous pouvez parer l\'échec en prenant la pièce attaquante.</string>
 	<string name="thisKnightIsCheckingThroughYourDefenses">Ce Cavalier donne un échec à travers vos défenses !</string>
+	<string name="getOutOfCheck">Sortez de l\'échec !</string>
+	<string name="watchOutForYourOpponentsReply">Faites attention à la réponse de votre adversaire !</string>
 	<string name="escapeOrBlock">Fuyez avec le Roi
 ou bloquez l\'attaque !</string>
 	<string name="outOfCheckComplete">Félicitations ! Votre Roi est sain et sauf. Assurez-vous de toujours pouvoir vous défendre contre un échec !</string>
 	<string name="mateInOne">Mat en un coup</string>
 	<string name="defeatTheOpponentsKing">Matez le Roi adverse</string>
 	<string name="mateInOneIntro">Vous gagnez lorsque votre adversaire ne peut pas parer un échec.</string>
+	<string name="toWinInShogi">Pour gagner au shogi, mettez le roi de votre adversaire en échec de telle sorte qu\'il ne peut pas se défendre. C\'est mat, ou tsume.</string>
+	<string name="dropsCommonDeliverMate">Il est très courant de parachuter pour mater.</string>
 	<string name="attackYourOpponentsKing">Attaquez le Roi de votre adversaire de manière qu\'il ne puisse pas être défendu !</string>
+	<string name="chooseYourPieceCarefully">Choisissez votre pièce avec soin !</string>
+	<string name="mateWithADroppedPawnIs">Mater avec un parachutage de pion est illégal - dans une vraie partie, vous auriez perdu !</string>
+	<string name="mateWithAPushedPawnIs">Mater avec un pion poussé est autorisé.</string>
 	<string name="mateInOneComplete">Félicitations ! Vous savez comment gagner des parties de shogi !</string>
 	<string name="intermediate">Intermédiaire</string>
 	<string name="boardSetup">Position de départ</string>
@@ -125,46 +149,45 @@ ou bloquez l\'attaque !</string>
 	<string name="thisIsTheInitialPosition">Voici la position initiale
 de toute partie de shogi!
 Faites un coup pour continuer.</string>
-	<string name="firstPlaceTheRooks">Placez tout d\'abord les Tours !
-Elles se placent dans les coins.</string>
-	<string name="thenPlaceTheKnights">Placez ensuite les Cavaliers !
-Ils se placent à côté des Tours.</string>
-	<string name="placeTheBishops">Placez les Fous !
-Ils se placent à côté des Cavaliers.</string>
-	<string name="placeTheQueen">Placez la Dame !
-Elle se place sur sa propre couleur.</string>
-	<string name="placeTheKing">Placez le Roi !
-Il se place à côté de sa Dame.</string>
-	<string name="pawnsFormTheFrontLine">Les pions forment la ligne de front. Jouez un coup pour continuer.</string>
+	<string name="firstPlaceTheKing">Il y a deux manières traditionnelles de placer les pièces sur le plateau avant une partie. Nous allons voir le style Oohashi (大橋), le plus couramment utilisé par les professionnels. Le roi est placé en premier. Placez le roi au centre sur la dernière rangée.</string>
+	<string name="dropAGold">Parachutez un or sur le côté gauche du roi, puis placez un autre or sur la droite.</string>
+	<string name="thenPlaceASilver">Placez ensuite l\'argent à côté de l\'or à gauche, et un argent à côté de l\'or à droite.</string>
+	<string name="dropTheKnights">Posez les cavaliers de la même manière que vous avez posé les argents. Votre adversaire fera à la manière Itou (伊藤).</string>
+	<string name="dropTheLances">Posez les lances. Votre adversaire commencera à placer des pions de gauche à droite avant les lances. C\'est le style Itou.</string>
+	<string name="placeTheBishopThenRook">Placez le fou au-dessus du cavalier gauche, puis la tour au-dessus du cavalier droit. Bien sûr, dans les vraies parties, il n\'est pas nécessaire d\'être synchronisé avec votre adversaire lors de l\'installation.</string>
+	<string name="placeThePawns">Enfin, sur la 3ème rangée, posez les pions de la même façon que vous avez posé les pièces de la rangée du fond. Le cercle sera votre guide.</string>
+	<string name="pushingThe3rdPawn">Pousser le 3ᵉ pion pour ouvrir la diagonale du fou est le premier coup le plus habituel. Faites ce coup pour continuer.</string>
 	<string name="boardSetupComplete">Félicitations ! Vous savez maintenant la mise en place du jeu de shogi.</string>
-	<string name="stalemate">Pat</string>
-	<string name="theGameIsADraw">La partie est nulle</string>
-	<string name="stalemateIntro">Lorsqu\'un joueur n\'est pas en échec et n\'a pas de coup légal, il est en situation de pat. La partie est alors déclarée nulle.</string>
-	<string name="stalemateGoal">Le pat noir :
-- Les Noirs ne peuvent jouer aucun coup
-- Les Noirs ne sont pas en échec.</string>
-	<string name="stalemateComplete">Félicitations ! Mieux vaut être pat qu\'échec et mat !</string>
+	<string name="repetition">Répétition</string>
+	<string name="fourfoldRepetitionIsADrawExcept">Répéter quatre fois une position est une nulle, SAUF...</string>
+	<string name="repetitionIntro">Répéter quatre fois une position est une nulle Un échec perpétuel est une défaite.</string>
+	<string name="ifTheSamePositionOccurs">Si la même position se produit 4 fois au Shogi, c\'est une nulle automatiquement. On appelle cela sennichite (千日手). Faites le seul coup légal.</string>
+	<string name="perpetualCheckIsALoss">Mais, un échec perpétuel du roi adverse est une défaite pour le camp qui fait échec. Malheureusement pour votre adversaire, il ne le sait pas ! Faites le seul coup légal.</string>
+	<string name="boardFlippedFindBestMove">Le plateau vient juste d\'être retourné. Quel est le meilleur coup ici ?</string>
+	<string name="repetitionComplete">L\'idée de faire de l\'échec perpétuel une défaite est d\'empêcher quiconque de forcer la nulle.</string>
 	<string name="advanced">Avancé</string>
 	<string name="pieceValue">Valeur des pièces</string>
 	<string name="evaluatePieceStrength">Évaluer la valeur des pièces</string>
-	<string name="pieceValueIntro">Les pièces ayant une grande mobilité ont une valeur plus importante :
-Dame = 9
-Tour = 5
-Fou = 3
-Cavalier = 3
-Pion = 1
-Le Roi est irremplaçable ! Le perdre signifie perdre la partie.</string>
+	<string name="pieceValueIntroNew">Les pièces avec plus de déplacements ont une valeur plus élevée.
+Le roi est inestimable ! Le perdre signifie perdre la partie.</string>
 	<string name="queenOverBishop">Prenez la pièce avec
 la valeur la plus élevée !
 Dame &gt; Fou</string>
+	<string name="pawnsAreTheLeastValuable">Les pions sont les pièces les moins précieuses, suivis par les lances. Les cavaliers sont un peu plus précieux que les lances.
+Prenez la pièce la plus précieuse.</string>
+	<string name="knightSilverGold">Cavalier &lt; Argent &lt; Or
+Prenez la pièce la plus précieuse sans perdre la vôtre.</string>
+	<string name="goldBishopRook">Or &lt; Fou &lt; Tour
+Prenez la pièce la plus précieuse.</string>
+	<string name="takeAllThePiecesStartingFromTheMost">Prenez toutes les pièces dans l\'ordre, de la plus précieuse à la moins précieuse !</string>
+	<string name="anExchangeIs">On parle d\'échange quand vous capturez une pièce, et en perdez une autre. Qu\'est-ce qui est un échange rentable ? Argent pour tour, ou or pour cavalier ?</string>
+	<string name="theOpponentJustGaveAway">L\'adversaire vient de donner gratuitement sa précieuse tour ! Allez-vous la prendre ?</string>
+	<string name="yourKingsValueIsInfinite">La valeur du roi est infinie par rapport à une tour. Quel est le meilleur coup ici ?</string>
+	<string name="twoGeneralsAreBetter">Deux généraux peuvent valoir plus qu\'une pièce majeure. Un cavalier et une lance peuvent être mieux qu\'un général. Trouvez un moyen de sacrifier le fou et de gagner deux généraux.</string>
+	<string name="rememberWhichPieceIsTheMostValuable">Vous rappelez-vous quelle pièce est la plus précieuse ?</string>
 	<string name="takeThePieceWithTheHighestValue">Prenez la pièce avec
 la valeur la plus élevée !</string>
-	<string name="pieceValueComplete">Félicitations ! Vous connaissez la valeur des pièces !
-Dame = 9
-Tour = 5
-Fou = 3
-Cavalier = 3
-Pion = 1</string>
+	<string name="rememberTheKingIsMoreValuableThanEveryOtherPieceCombined">Le roi est plus précieux que toutes les autres pièces réunies. Il est possible de sacrifier des pièces pour attaquer le roi ennemi. Mais n\'oubliez pas non plus la sécurité de votre propre roi !</string>
 	<string name="checkInTwo">Échec en deux coups</string>
 	<string name="twoMovesToGiveCheck">Donnez un échec en deux coups</string>
 	<string name="checkInTwoIntro">Trouvez la bonne combinaison en deux coups qui met le Roi de l\'adversaire en échec !</string>
@@ -172,17 +195,17 @@ Pion = 1</string>
 en deux coups !</string>
 	<string name="checkInTwoComplete">Félicitations ! Vous avec mis votre adversaire en échec, l\'obligeant à défendre son Roi !</string>
 	<string name="whatNext">Que faire ensuite ?</string>
-	<string name="youKnowHowToPlayChess">Vous savez comment jouer au shogi, félicitations ! Voulez-vous devenir un joueur plus fort ?</string>
+	<string name="youKnowHowToPlayShogi">Vous savez comment jouer au shogi, félicitations ! Voulez-vous devenir un joueur plus fort ?</string>
 	<string name="register">S\'inscrire</string>
 	<string name="getAFreeLishogiAccount">Créer un compte Lishogi gratuit</string>
 	<string name="practice">S\'entraîner</string>
-	<string name="learnCommonChessPositions">Apprenez des positions courantes au shogi</string>
+	<string name="learnCommonShogiPositions">Apprenez des positions courantes au shogi</string>
 	<string name="puzzles">Problèmes</string>
 	<string name="exerciseYourTacticalSkills">Exercez vos compétences tactiques</string>
 	<string name="shogiResources">Ressources pour le shogi</string>
 	<string name="curatedShogiResources">Voir notre liste de ressources pour le shogi</string>
 	<string name="videos">Vidéos</string>
-	<string name="watchInstructiveChessVideos">Regardez des vidéos de shogi instructives</string>
+	<string name="watchInstructiveShogiVideos">Regardez des vidéos de shogi instructives</string>
 	<string name="playPeople">Jouer contre des gens</string>
 	<string name="opponentsFromAroundTheWorld">Des adversaires du monde entier</string>
 	<string name="playMachine">Jouer contre l\'ordinateur</string>

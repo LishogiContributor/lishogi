@@ -1,3 +1,5 @@
+import { EngineCode } from 'common/engineName';
+
 export interface GameData {
   game: Game;
   player: Player;
@@ -5,7 +7,6 @@ export interface GameData {
   spectator?: boolean;
   tournament?: Tournament;
   simul?: Simul;
-  swiss?: Swiss;
   takebackable: boolean;
   moretimeable: boolean;
   clock?: Clock;
@@ -16,18 +17,19 @@ export interface Game {
   id: string;
   status: Status;
   player: Color;
-  turns: number;
-  startedAtTurn?: number;
+  plies: number;
+  startedAtPly?: number;
+  startedAtStep?: number;
   source: Source;
   speed: Speed;
   variant: Variant;
   winner?: Color;
   moveCentis?: number[];
-  initialFen?: string;
+  initialSfen?: string;
   importedBy?: string;
-  threefold?: boolean;
   boosted?: boolean;
   rematch?: string;
+  postGameStudy?: string;
   rated?: boolean;
   perf: string;
 }
@@ -39,18 +41,24 @@ export interface Status {
 
 export type StatusName =
   | 'started'
+  | 'paused'
   | 'aborted'
   | 'mate'
   | 'resign'
   | 'stalemate'
-  | 'impasse'
+  | 'tryRule'
+  | 'impasse27'
   | 'perpetualCheck'
+  | 'repetition'
+  | 'royalsLost'
+  | 'bareKing'
+  | 'specialVariantEnd'
   | 'timeout'
   | 'draw'
   | 'outoftime'
   | 'noStart'
   | 'cheat'
-  | 'variantEnd';
+  | 'unknownFinish';
 
 export type StatusId = number;
 
@@ -63,13 +71,16 @@ export interface Player {
   proposingTakeback?: boolean;
   offeringRematch?: boolean;
   offeringDraw?: boolean;
+  offeringPause?: boolean;
+  offeringResume?: boolean;
+  sealedUsi?: Usi; // only for the player who played it
   ai: number | null;
+  aiCode?: EngineCode;
   onGame: boolean;
   gone: number | boolean;
   blurs?: Blurs;
   hold?: Hold;
   ratingDiff?: number;
-  checks?: number;
   rating?: number;
   provisional?: string;
   engine?: boolean;
@@ -111,16 +122,11 @@ export interface Simul {
   nbPlaying: number;
 }
 
-export interface Swiss {
-  id: string;
-  running?: boolean;
-  ranks?: TournamentRanks;
-}
-
 export interface Clock {
   running: boolean;
   initial: number;
   increment: number;
+  byoyomi: number;
 }
 export interface CorrespondenceClock {
   daysPerTurn: number;
@@ -129,7 +135,7 @@ export interface CorrespondenceClock {
   gote: number;
 }
 
-export type Source = 'import' | 'lobby' | 'pool' | 'friend';
+export type Source = 'import' | 'lobby' | 'friend' | 'ai' | 'tournament' | 'api';
 
 export interface PlayerUser {
   id: string;

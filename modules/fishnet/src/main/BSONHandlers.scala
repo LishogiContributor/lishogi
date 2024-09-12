@@ -1,7 +1,6 @@
 package lila.fishnet
 
 import lila.db.dsl._
-import lila.game.BSONHandlers.FENBSONHandler
 import reactivemongo.api.bson._
 
 import shogi.variant.Variant
@@ -13,12 +12,8 @@ private object BSONHandlers {
   implicit val ClientPythonBSONHandler  = stringAnyValHandler[Client.Python](_.value, Client.Python.apply)
   implicit val ClientUserIdBSONHandler  = stringAnyValHandler[Client.UserId](_.value, Client.UserId.apply)
 
-  implicit val ClientSkillBSONHandler = tryHandler[Client.Skill](
-    { case BSONString(v) => Client.Skill byKey v toTry s"Invalid client skill $v" },
-    x => BSONString(x.key)
-  )
-  implicit val ClientEvaluationBSONHandler = tryHandler[Client.Evaluation](
-    { case BSONString(v) => Client.Evaluation byKey v toTry s"Invalid client evaluation $v" },
+  implicit val ClientSkillBSONHandler = quickHandler[Client.Skill](
+    { case BSONString(v) => Client.Skill.byKey(v).getOrElse(Client.Skill.Analysis) },
     x => BSONString(x.key)
   )
 
@@ -31,8 +26,8 @@ private object BSONHandlers {
 
   implicit val ClientBSONHandler = Macros.handler[Client]
 
-  implicit val VariantBSONHandler = tryHandler[Variant](
-    { case BSONInteger(v) => Variant(v) toTry s"Invalid variant $v" },
+  implicit val VariantBSONHandler = quickHandler[Variant](
+    { case BSONInteger(v) => Variant.orDefault(v) },
     x => BSONInteger(x.id)
   )
 
@@ -45,8 +40,18 @@ private object BSONHandlers {
   implicit val GameHandler = Macros.handler[Game]
   import Work.Move
   implicit val MoveHandler = Macros.handler[Move]
+  import lila.analyse.Analysis.PostGameStudy
+  implicit val PostGameStudyHandler = Macros.handler[PostGameStudy]
   import Work.Sender
   implicit val SenderHandler = Macros.handler[Sender]
   import Work.Analysis
   implicit val AnalysisHandler = Macros.handler[Analysis]
+  import Work.Puzzle.Source.FromGame
+  implicit val SourceGameHandler = Macros.handler[FromGame]
+  import Work.Puzzle.Source.FromUser
+  implicit val SourceUserHandler = Macros.handler[FromUser]
+  import Work.Puzzle.Source
+  implicit val SourceHandler = Macros.handler[Source]
+  import Work.Puzzle
+  implicit val PuzzleHandler = Macros.handler[Puzzle]
 }

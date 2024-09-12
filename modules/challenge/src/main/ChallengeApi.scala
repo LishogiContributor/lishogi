@@ -48,7 +48,7 @@ final class ChallengeApi(
 
   def onlineByIdFor(id: Challenge.ID, dest: User) = repo.byIdFor(id, dest).dmap(_.filter(_.online))
 
-  val countInFor = cacheApi[User.ID, Int](65536, "challenge.countInFor") {
+  val countInFor = cacheApi[User.ID, Int](2048, "challenge.countInFor") {
     _.expireAfterAccess(20 minutes)
       .buildAsyncFuture(repo.countCreatedByDestId)
   }
@@ -154,6 +154,6 @@ final class ChallengeApi(
     )
 
   // work around circular dependency
-  private var socket: Option[ChallengeSocket] = None
+  private var socket: Option[ChallengeSocket]               = None
   private[challenge] def registerSocket(s: ChallengeSocket) = { socket = s.some }
 }

@@ -1,7 +1,6 @@
 package views.html
 
 import controllers.routes
-import play.api.i18n.Lang
 import play.api.libs.json._
 
 import lila.api.Context
@@ -18,22 +17,23 @@ object storm {
     views.html.base.layout(
       moreCss = frag(cssTag("storm")),
       moreJs = frag(
-        jsModule("lishogi.storm"),
+        jsModule("storm"),
         embedJsUnsafe(s"""$$(function() {
           LishogiStorm.start(${safeJsonValue(
-          Json.obj(
-            "data" -> data,
-            "pref" -> pref,
-            "i18n" -> i18nJsObject(i18nKeys)
-          )
-        )})})""")
+            Json.obj(
+              "data" -> data,
+              "pref" -> pref,
+              "i18n" -> i18nJsObject(i18nKeys)
+            )
+          )})})""")
       ),
       title = "Tsume Storm",
       zoomable = true,
-      shogiground = false
+      shogiground = false,
+      withHrefLangs = lila.i18n.LangList.All.some
     ) {
       main(
-        div(cls := "storm storm-app storm--play")(
+        div(cls   := "storm storm-app storm--play")(
           div(cls := "storm__board main-board"),
           div(cls := "storm__side")
         ),
@@ -49,12 +49,12 @@ object storm {
           )
         },
         div(cls := "storm__about__link")(
-          a(href := routes.Page.loneBookmark("storm"))("About Tsume Storm")
+          a(href := routes.Page.storm)("About Tsume Storm")
         )
       )
     }
 
-  private def renderHigh(high: StormHigh)(implicit lang: Lang) =
+  private def renderHigh(high: StormHigh) =
     frag(
       List(
         (high.allTime, "All-time"),
@@ -82,9 +82,9 @@ object storm {
           h1(
             !ctx.is(user) option frag(
               userLink(user),
-              " • "
+              " - "
             ),
-            "Tsume Storm • ",
+            "Tsume Storm - ",
             trans.storm.highscores()
           ),
           div(cls := "storm-dashboard__high__periods highlight-alltime")(

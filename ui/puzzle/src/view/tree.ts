@@ -1,12 +1,11 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { Classes } from 'snabbdom/modules/class';
-import { defined } from 'common';
-import throttle from 'common/throttle';
 import { renderEval as normalizeEval } from 'ceval';
+import { defined } from 'common/common';
+import { notationsWithColor } from 'common/notation';
+import { MaybeVNode, MaybeVNodes } from 'common/snabbdom';
+import throttle from 'common/throttle';
+import { Classes, VNode, h } from 'snabbdom';
 import { path as treePath } from 'tree';
-import { Controller, MaybeVNode, MaybeVNodes } from '../interfaces';
-import { notationStyle } from 'common/notation';
+import { Controller } from '../interfaces';
 
 interface Ctx {
   ctrl: Controller;
@@ -15,7 +14,6 @@ interface Ctx {
 interface RenderOpts {
   parentPath: string;
   isMainline: boolean;
-  withIndex?: boolean;
 }
 
 interface Glyph {
@@ -32,10 +30,6 @@ const autoScroll = throttle(150, (ctrl: Controller, el) => {
   }
   cont.scrollTop = target.offsetTop - cont.offsetHeight / 2 + target.offsetHeight;
 });
-
-function pathContains(ctx: Ctx, path: Tree.Path): boolean {
-  return treePath.contains(ctx.ctrl.vm.path, path);
-}
 
 export function renderIndex(ply: number, withDots: boolean): VNode {
   return h('index', ply + (withDots ? '.' : ''));
@@ -90,7 +84,6 @@ function renderLines(ctx: Ctx, nodes: Tree.Node[], opts: RenderOpts): VNode {
         renderMoveAndChildrenOf(ctx, n, {
           parentPath: opts.parentPath,
           isMainline: false,
-          withIndex: true,
         })
       );
     })
@@ -139,13 +132,8 @@ function puzzleGlyph(ctx: Ctx, node: Tree.Node): MaybeVNode {
       });
     case 'fail':
       return renderGlyph({
-        name: ctx.ctrl.trans.noarg('puzzleFailed'),
+        name: ctx.ctrl.trans.noarg('mistake'),
         symbol: '✗',
-      });
-    case 'retry':
-      return renderGlyph({
-        name: ctx.ctrl.trans.noarg('goodMove'),
-        symbol: '?!',
       });
     default:
       return;
@@ -155,14 +143,10 @@ function puzzleGlyph(ctx: Ctx, node: Tree.Node): MaybeVNode {
 export function renderMove(ctx: Ctx, node: Tree.Node): MaybeVNodes {
   const ev = node.eval || node.ceval;
   return [
-    notationStyle(ctx.ctrl.pref.pieceNotation ?? 0)({
-      san: node.san!,
-      uci: node.uci!,
-      fen: node.fen,
-    }),
+    renderNotation(node),
+    puzzleGlyph(ctx, node),
     ev &&
       (defined(ev.cp) ? renderEval(normalizeEval(ev.cp)) : defined(ev.mate) ? renderEval('#' + ev.mate) : undefined),
-    puzzleGlyph(ctx, node),
   ];
 }
 
@@ -171,7 +155,6 @@ function renderVariationMoveOf(ctx: Ctx, node: Tree.Node, opts: RenderOpts): VNo
   const active = path === ctx.ctrl.vm.path;
   const classes: Classes = {
     active,
-    parent: !active && pathContains(ctx, path),
   };
   if (node.puzzle) classes[node.puzzle] = true;
   return h(
@@ -180,16 +163,13 @@ function renderVariationMoveOf(ctx: Ctx, node: Tree.Node, opts: RenderOpts): VNo
       attrs: { p: path },
       class: classes,
     },
-    [
-      renderIndex(node.ply, true),
-      notationStyle(ctx.ctrl.pref.pieceNotation ?? 0)({
-        san: node.san!,
-        uci: node.uci!,
-        fen: node.fen,
-      }),
-      puzzleGlyph(ctx, node),
-    ]
+    [renderIndex(node.ply, true), renderNotation(node), puzzleGlyph(ctx, node)]
   );
+}
+
+function renderNotation(node: Tree.Node): VNode {
+  const colorIcon = notationsWithColor() ? '.color-icon.' + (node.ply % 2 ? 'sente' : 'gote') : '';
+  return h('span' + colorIcon, node.notation);
 }
 
 function renderMoveAndChildrenOf(ctx: Ctx, node: Tree.Node, opts: RenderOpts): MaybeVNodes {
@@ -244,7 +224,6 @@ export function render(ctrl: Controller): VNode {
       },
     },
     [
-      //...(root.ply % 2 === 1 ? [renderIndex(root.ply, false), emptyMove()] : []),
       ...renderChildrenOf(ctx, root, {
         parentPath: '',
         isMainline: true,

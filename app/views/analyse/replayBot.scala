@@ -9,33 +9,32 @@ object replayBot {
 
   def apply(
       pov: Pov,
-      initialFen: Option[shogi.format.FEN],
-      pgn: String,
+      kif: String,
       simul: Option[lila.simul.Simul],
       cross: Option[lila.game.Crosstable.WithMatchup]
   )(implicit ctx: Context) = {
-
     views.html.analyse.bits.layout(
       title = replay titleOf pov,
-      //moreCss = cssTag("analyse.round"),
-      moreCss = frag(cssTag("analyse.round"), cssTag("analyse.zh")),
+      moreCss = cssTag("analyse.round"),
       openGraph = povOpenGraph(pov).some
     ) {
-      main(cls := "analyse")(
+      main(cls := s"analyse ${mainVariantClass(pov.game.variant)}")(
         st.aside(cls := "analyse__side")(
-          views.html.game.side(pov, initialFen, none, simul = simul, bookmarked = false)
+          views.html.game.side(pov, none, simul = simul, bookmarked = false)
         ),
-        div(cls := "analyse__board main-board")(shogigroundBoard),
+        div(cls := s"analyse__board main-board ${variantClass(pov.game.variant)}")(
+          shogigroundEmpty(pov.game.variant, pov.color)
+        ),
         div(cls := "analyse__tools")(div(cls := "ceval")),
         div(cls := "analyse__controls"),
         div(cls := "analyse__underboard")(
           div(cls := "analyse__underboard__panels")(
-            div(cls := "fen-pgn active")(
+            div(cls := "sfen-notation active")(
               div(
                 strong("SFEN"),
-                input(readonly, spellcheck := false, cls := "copyable autoselect analyse__underboard__fen")
+                input(readonly, spellcheck := false, cls := "copyable autoselect analyse__underboard__sfen")
               ),
-              div(cls := "pgn")(pgn)
+              div(cls := "kif")(kif)
             ),
             cross.map { c =>
               div(cls := "ctable active")(
@@ -43,7 +42,8 @@ object replayBot {
               )
             }
           )
-        )
+        ),
+        div(cls := "analyse__acpl")
       )
     }
   }

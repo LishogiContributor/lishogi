@@ -3,6 +3,8 @@ package lila.clas
 import play.api.data._
 import play.api.data.Forms._
 import scala.concurrent.duration._
+
+import lila.common.Form.{ cleanNonEmptyText, cleanText }
 import lila.user.User
 
 final class ClasForm(
@@ -17,13 +19,13 @@ final class ClasForm(
 
     val form = Form(
       mapping(
-        "name" -> text(minLength = 3, maxLength = 100),
-        "desc" -> text(minLength = 0, maxLength = 2000),
+        "name" -> cleanText(minLength = 3, maxLength = 100),
+        "desc" -> cleanText(minLength = 0, maxLength = 2000),
         "teachers" -> nonEmptyText.verifying(
           "Invalid teacher list",
           str => {
             val ids = readTeacherIds(str)
-            ids.nonEmpty && ids.size <= 10 && ids.forall { id =>
+            ids.nonEmpty && ids.sizeIs <= 10 && ids.forall { id =>
               blockingFetchUser(id).isDefined
             }
           }
@@ -51,7 +53,7 @@ final class ClasForm(
       Form(
         mapping(
           "create-username" -> securityForms.signup.username,
-          "create-realName" -> nonEmptyText(maxLength = 100)
+          "create-realName" -> cleanNonEmptyText(maxLength = 100)
         )(NewStudent.apply)(NewStudent.unapply)
       )
 
@@ -70,14 +72,14 @@ final class ClasForm(
           "username" -> lila.user.DataForm.historicalUsernameField
             .verifying("Unknown username", { blockingFetchUser(_).isDefined })
             .verifying("This is a teacher", u => !c.teachers.toList.exists(_ == u.toLowerCase)),
-          "realName" -> nonEmptyText
+          "realName" -> cleanNonEmptyText
         )(NewStudent.apply)(NewStudent.unapply)
       )
 
     def edit(s: Student) =
       Form(
         mapping(
-          "realName" -> nonEmptyText,
+          "realName" -> cleanNonEmptyText,
           "notes"    -> text(maxLength = 20000)
         )(StudentData.apply)(StudentData.unapply)
       ) fill StudentData(s.realName, s.notes)

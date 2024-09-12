@@ -1,6 +1,6 @@
 package lila.tournament
 
-import shogi.StartingPosition
+import shogi.format.forsyth.Sfen
 import shogi.variant.Variant
 import org.joda.time.DateTime
 import play.api.i18n.Lang
@@ -11,7 +11,7 @@ case class Schedule(
     freq: Schedule.Freq,
     speed: Schedule.Speed,
     variant: Variant,
-    position: StartingPosition,
+    position: Option[Sfen],
     at: DateTime,
     conditions: Condition.All = Condition.All.empty
 ) {
@@ -20,7 +20,7 @@ case class Schedule(
     import Schedule.Freq._
     import Schedule.Speed._
     import lila.i18n.I18nKeys.tourname._
-    if (variant.standard && position.initial)
+    if (variant.standard && position.isEmpty)
       (conditions.minRating, conditions.maxRating) match {
         case (None, None) =>
           (freq, speed) match {
@@ -73,7 +73,9 @@ case class Schedule(
         case (_, Some(max))         => s"<${max.rating} ${speed.name}"
       }
     else if (variant.standard) {
-      val n = s"${position.shortName} ${speed.name}"
+      val n = position.flatMap(sfen => Thematic.bySfen(sfen, variant)).fold(speed.name) { pos =>
+        s"${pos.fullName} ${speed.name}"
+      }
       if (full) xArena.txt(n) else n
     } else
       freq match {
@@ -202,8 +204,8 @@ object Schedule {
     val all: List[Speed] =
       List(UltraBullet, HyperBullet, Bullet, SuperBlitz, Blitz, HyperRapid, Rapid, Classical)
     val mostPopular: List[Speed] = List(Bullet, Blitz, Rapid, Classical)
-    def apply(key: String)       = all.find(_.key == key) orElse all.find(_.key.toLowerCase == key.toLowerCase)
-    def byId(id: Int)            = all find (_.id == id)
+    def apply(key: String) = all.find(_.key == key) orElse all.find(_.key.toLowerCase == key.toLowerCase)
+    def byId(id: Int)      = all find (_.id == id)
     def similar(s1: Speed, s2: Speed) =
       (s1, s2) match {
         // Similar speed tournaments should not be simultaneously scheduled
@@ -258,6 +260,7 @@ object Schedule {
       case (Daily | Eastern, _, Rapid | Classical) => 180
       case (Daily | Eastern, _, _)                 => 75
 
+      case (Weekly, Minishogi | Kyotoshogi, _)             => 60
       case (Weekly, _, UltraBullet | HyperBullet | Bullet) => 60 * 1 + 30
       case (Weekly, _, SuperBlitz | Blitz)                 => 60 * 2
       case (Weekly, _, HyperRapid | Rapid)                 => 60 * 3
@@ -269,12 +272,13 @@ object Schedule {
       case (Weekend, _, Rapid)                              => 60 * 3
       case (Weekend, _, Classical)                          => 60 * 4
 
-      case (Monthly, _, UltraBullet)          => 60 * 2
-      case (Monthly, _, HyperBullet | Bullet) => 60 * 3
-      case (Monthly, _, SuperBlitz | Blitz)   => 60 * 3 + 30
-      case (Monthly, _, HyperRapid)           => 60 * 4
-      case (Monthly, _, Rapid)                => 60 * 5
-      case (Monthly, _, Classical)            => 60 * 6
+      case (Monthly, Minishogi | Kyotoshogi, _) => 60 * 2
+      case (Monthly, _, UltraBullet)            => 60 * 2
+      case (Monthly, _, HyperBullet | Bullet)   => 60 * 3
+      case (Monthly, _, SuperBlitz | Blitz)     => 60 * 3 + 30
+      case (Monthly, _, HyperRapid)             => 60 * 4
+      case (Monthly, _, Rapid)                  => 60 * 5
+      case (Monthly, _, Classical)              => 60 * 6
 
       case (Shield, _, UltraBullet)          => 60 * 1 + 30
       case (Shield, _, HyperBullet | Bullet) => 60 * 2
@@ -283,6 +287,7 @@ object Schedule {
       case (Shield, _, Rapid)                => 60 * 6
       case (Shield, _, Classical)            => 60 * 8
 
+      case (Yearly, Minishogi | Kyotoshogi, _)             => 60 * 2
       case (Yearly, _, UltraBullet | HyperBullet | Bullet) => 60 * 2
       case (Yearly, _, SuperBlitz | Blitz)                 => 60 * 3
       case (Yearly, _, HyperRapid)                         => 60 * 4
@@ -310,16 +315,16 @@ object Schedule {
       // Special cases.
       case (Hourly, Standard, Blitz) if standardInc(s) => TC(3 * 60, 2, 0, 1)
 
-      case (Shield, variant, Blitz) if variant.exotic => TC(3 * 60, 2, 0, 1)
+      case (Shield, variant, Blitz) if !variant.standard => TC(5 * 60, 0, 10, 1)
 
-      case (_, _, UltraBullet) => TC(30, 0, 0, 1)       // 30
-      case (_, _, HyperBullet) => TC(60, 1, 0, 1)       // 2 * 60
-      case (_, _, Bullet)      => TC(2 * 60, 2, 0, 1)   // 4 * 60
-      case (_, _, SuperBlitz)  => TC(3 * 60, 3, 0, 1)   // 6 * 60
-      case (_, _, Blitz)       => TC(8 * 60, 0, 0, 1)   // 8 * 60
-      case (_, _, HyperRapid)  => TC(10 * 60, 0, 0, 1)  // 10 * 60
-      case (_, _, Rapid)       => TC(10 * 60, 0, 10, 1) // 10 * 60 + 10 * 25
-      case (_, _, Classical)   => TC(20 * 60, 10, 0, 1) // 30 * 60
+      case (_, _, UltraBullet) => TC(30, 0, 0, 1)       //      30
+      case (_, _, HyperBullet) => TC(0, 0, 5, 1)        //            5 * 25
+      case (_, _, Bullet)      => TC(0, 0, 10, 1)       //           10 * 25
+      case (_, _, SuperBlitz)  => TC(3 * 60, 0, 10, 1)  //  3 * 60 + 10 * 25
+      case (_, _, Blitz)       => TC(5 * 60, 0, 10, 1)  //  5 * 60 + 10 * 25
+      case (_, _, HyperRapid)  => TC(5 * 60, 0, 15, 1)  //  5 * 60 + 15 * 25
+      case (_, _, Rapid)       => TC(10 * 60, 0, 15, 1) // 10 * 60 + 15 * 25
+      case (_, _, Classical)   => TC(15 * 60, 0, 30, 1) // 15 * 60 + 30 * 25
     }
   }
   private[tournament] def addCondition(s: Schedule) =
@@ -336,9 +341,11 @@ object Schedule {
         case (Hourly | Daily | Eastern, SuperBlitz | Blitz)   => 0
         case (Hourly | Daily | Eastern, HyperRapid | Rapid)   => 0
 
-        case (Weekly | Weekend | Monthly | Shield, HyperBullet | Bullet) => 1
-        case (Weekly | Weekend | Monthly | Shield, SuperBlitz | Blitz)   => 1
-        case (Weekly | Weekend | Monthly | Shield, HyperRapid | Rapid)   => 1
+        case (Weekly | Weekend | Monthly, HyperBullet | Bullet) => 1
+        case (Weekly | Weekend | Monthly, SuperBlitz | Blitz)   => 1
+        case (Weekly | Weekend | Monthly, HyperRapid | Rapid)   => 1
+
+        case (Shield, _) => 3
 
         case _ => 0
       }

@@ -1,17 +1,18 @@
 package lila.user
 
+import cats.implicits._
 import org.joda.time.DateTime
+import reactivemongo.akkastream.{ cursorProducer, AkkaStreamCursor }
 import reactivemongo.api._
 import reactivemongo.api.bson._
 
-import lila.common.{ ApiVersion, EmailAddress, NormalizedEmailAddress, ThreadLocalRandom }
-import lila.db.BSON.BSONJodaDateTimeHandler
+import lila.common.{ ApiVersion, EmailAddress, NormalizedEmailAddress }
 import lila.db.dsl._
 import lila.rating.{ Perf, PerfType }
 
 final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionContext) {
 
-  import User.{ userBSONHandler, ID, BSONFields => F }
+  import User.{ userBSONHandler, BSONFields => F, ID }
   import Title.titleBsonHandler
   import UserMark.markBsonHandler
 
@@ -20,7 +21,7 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
   val normalize = User normalize _
 
   def topNbGame(nb: Int): Fu[List[User]] =
-    coll.ext.find(enabledSelect).sort($sort desc "count.game").cursor[User]().list(nb)
+    coll.ext.find(enabledNoBotSelect).sort($sort desc "count.game").cursor[User]().list(nb)
 
   def byId(id: ID): Fu[Option[User]] = coll.byId[User](id)
 
@@ -38,17 +39,6 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
 
   def idByEmail(email: NormalizedEmailAddress): Fu[Option[String]] =
     coll.primitiveOne[String]($doc(F.email -> email), "_id")
-
-  def idCursor(
-      selector: Bdoc,
-      batchSize: Int = 0,
-      readPreference: ReadPreference = ReadPreference.secondaryPreferred
-  )(implicit cp: CursorProducer[Bdoc]): cp.ProducedCursor = {
-    coll.ext
-      .find(selector)
-      .batchSize(batchSize)
-      .cursor[Bdoc](readPreference)
-  }
 
   def countRecentByPrevEmail(
       email: NormalizedEmailAddress,
@@ -107,8 +97,11 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       .cursor[User](ReadPreference.secondaryPreferred)
       .list(nb)
 
+  def botsByIdsCursor(ids: Iterable[ID]): AkkaStreamCursor[User] =
+    coll.find($inIds(ids) ++ botSelect(true)).cursor[User](ReadPreference.secondaryPreferred)
+
   def botsByIds(ids: Iterable[ID]): Fu[List[User]] =
-    coll.ext.list[User]($inIds(ids) ++ botSelect(true), ReadPreference.secondaryPreferred)
+    botsByIdsCursor(ids).list()
 
   def usernameById(id: ID) =
     coll.primitiveOne[User.ID]($id(id), F.username)
@@ -157,9 +150,7 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       }
 
   def firstGetsSente(u1O: Option[User.ID], u2O: Option[User.ID]): Fu[Boolean] =
-    (u1O |@| u2O).tupled.fold(fuccess(scala.util.Random.nextBoolean())) { case (u1, u2) =>
-      firstGetsSente(u1, u2)
-    }
+    (u1O, u2O).mapN(firstGetsSente) | fuccess(lila.common.ThreadLocalRandom.nextBoolean())
 
   def incColor(userId: User.ID, value: Int): Unit =
     coll
@@ -168,11 +159,9 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
         $id(userId) ++ (value < 0).??($doc(F.colorIt $gt -3)),
         $inc(F.colorIt -> value)
       )
+      .unit
 
   def lishogi = byId(User.lishogiId)
-
-  val irwinId = "irwin"
-  def irwin   = byId(irwinId)
 
   def setPerfs(user: User, perfs: Perfs, prev: Perfs) = {
     val diff = PerfType.all flatMap { pt =>
@@ -216,6 +205,14 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
       )
       .void
 
+  def setPerfAiLevel(userId: User.ID, variant: shogi.variant.Variant, level: Int): Funit =
+    coll.update
+      .one(
+        $id(userId),
+        $set(s"perfs.ai.${variant.key}" -> level)
+      )
+      .void
+
   def setProfile(id: ID, profile: Profile): Funit =
     coll.update
       .one(
@@ -253,8 +250,9 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
   def markSelect(mark: UserMark)(v: Boolean): Bdoc =
     if (v) $doc(F.marks -> mark.key)
     else F.marks $ne (mark.key)
-  def engineSelect = markSelect(UserMark.Engine) _
-  def trollSelect  = markSelect(UserMark.Troll) _
+  def engineSelect       = markSelect(UserMark.Engine) _
+  def trollSelect        = markSelect(UserMark.Troll) _
+  val enabledNoBotSelect = enabledSelect ++ $doc(F.title $ne Title.BOT)
   def stablePerfSelect(perf: String) =
     $doc(s"perfs.$perf.gl.d" -> $lt(lila.rating.Glicko.provisionalDeviation))
   val patronSelect = $doc(s"${F.plan}.active" -> true)
@@ -319,8 +317,10 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
 
   /** Filters out invalid usernames and returns the IDs for those usernames
     *
-    * @param usernames Usernames to filter out the non-existent usernames from, and return the IDs for
-    * @return A list of IDs for the usernames that were given that were valid
+    * @param usernames
+    *   Usernames to filter out the non-existent usernames from, and return the IDs for
+    * @return
+    *   A list of IDs for the usernames that were given that were valid
     */
   def existingUsernameIds(usernames: Set[String]): Fu[List[User.ID]] =
     coll.primitive[String]($inIds(usernames.map(normalize)), F.id)
@@ -389,10 +389,10 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
         .void
         .recover(lila.db.recoverDuplicateKey(_ => ()))
 
-  def disable(user: User, keepEmail: Boolean): Funit =
+  def disable(userId: User.ID, keepEmail: Boolean): Funit =
     coll.update
       .one(
-        $id(user.id),
+        $id(userId),
         $set(F.enabled -> false) ++ $unset(F.roles) ++ {
           if (keepEmail) $unset(F.mustConfirmEmail)
           else $doc("$rename" -> $doc(F.email -> F.prevEmail))
@@ -553,19 +553,6 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
   def setSeenAt(id: ID): Unit =
     coll.updateFieldUnchecked($id(id), F.seenAt, DateTime.now)
 
-  def recentlySeenNotKidIdsCursor(since: DateTime)(implicit cp: CursorProducer[Bdoc]) =
-    coll.ext
-      .find(
-        $doc(
-          F.enabled -> true,
-          F.seenAt $gt since,
-          "count.game" $gt 9,
-          "kid" $ne true
-        ),
-        $id(true)
-      )
-      .cursor[Bdoc](readPreference = ReadPreference.secondary)
-
   def setLang(user: User, lang: play.api.i18n.Lang) =
     coll.updateField($id(user.id), "lang", lang.code).void
 
@@ -655,7 +642,6 @@ final class UserRepo(val coll: Coll)(implicit ec: scala.concurrent.ExecutionCont
   ) = {
 
     implicit def countHandler = Count.countBSONHandler
-    import lila.db.BSON.BSONJodaDateTimeHandler
 
     val normalizedEmail = email.normalize
     $doc(

@@ -1,6 +1,6 @@
 package lila.api
 
-import shogi.format.pgn.{ Pgn, Tag, Tags }
+import shogi.format.{ Notation, Tag, Tags }
 import play.api.libs.ws.WSClient
 import scala.concurrent.duration._
 
@@ -42,15 +42,16 @@ final class RealPlayerApi(
                 .map(RealPlayers)
             }
           }
+          .nevermind
       }
   }
 }
 
 case class RealPlayers(players: Map[User.ID, RealPlayer]) {
 
-  def update(game: lila.game.Game, pgn: Pgn) =
-    pgn.copy(
-      tags = pgn.tags ++ Tags {
+  def update(game: lila.game.Game, notation: Notation) =
+    notation withTags (
+      notation.tags ++ Tags {
         game.players.flatMap { player =>
           player.userId.flatMap(players.get) ?? { rp =>
             List(

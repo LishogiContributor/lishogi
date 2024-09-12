@@ -1,10 +1,9 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { Ctrl, Tab } from './interfaces';
+import { bind } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import discussionView from './discussion';
-import { noteView } from './note';
+import { Ctrl, Tab } from './interfaces';
 import { moderationView } from './moderation';
-import { bind } from './util';
+import { noteView } from './note';
 
 export default function (ctrl: Ctrl): VNode {
   const mod = ctrl.moderation();
@@ -63,8 +62,8 @@ function normalView(ctrl: Ctrl) {
       active === 'note' && ctrl.note
         ? [noteView(ctrl.note)]
         : ctrl.plugin && active === ctrl.plugin.tab.key
-        ? [ctrl.plugin.view()]
-        : discussionView(ctrl)
+          ? [ctrl.plugin.view()]
+          : discussionView(ctrl)
     ),
   ];
 }

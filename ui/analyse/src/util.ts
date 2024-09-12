@@ -1,53 +1,11 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { Hooks } from 'snabbdom/hooks';
-import { Attrs } from 'snabbdom/modules/attributes';
-import { notationStyle } from 'common/notation';
+import { notationsWithColor } from 'common/notation';
+import { dataIcon } from 'common/snabbdom';
+import { Hooks, h } from 'snabbdom';
 
 export const emptyRedButton = 'button.button.button-red.button-empty';
 
 export function plyColor(ply: number): Color {
   return ply % 2 === 0 ? 'sente' : 'gote';
-}
-
-export function bindMobileMousedown(el: HTMLElement, f: (e: Event) => any, redraw?: () => void) {
-  for (const mousedownEvent of ['touchstart', 'mousedown']) {
-    el.addEventListener(mousedownEvent, e => {
-      f(e);
-      e.preventDefault();
-      if (redraw) redraw();
-    });
-  }
-}
-
-function listenTo(el: HTMLElement, eventName: string, f: (e: Event) => any, redraw?: () => void) {
-  el.addEventListener(eventName, e => {
-    const res = f(e);
-    if (res === false) e.preventDefault();
-    if (redraw) redraw();
-    return res;
-  });
-}
-
-export function bind(eventName: string, f: (e: Event) => any, redraw?: () => void): Hooks {
-  return onInsert(el => listenTo(el, eventName, f, redraw));
-}
-
-export function bindSubmit(f: (e: Event) => any, redraw?: () => void): Hooks {
-  return bind(
-    'submit',
-    e => {
-      e.preventDefault();
-      return f(e);
-    },
-    redraw
-  );
-}
-
-export function onInsert<A extends HTMLElement>(f: (element: A) => void): Hooks {
-  return {
-    insert: vnode => f(vnode.elm as A),
-  };
 }
 
 export function readOnlyProp<A>(value: A): () => A {
@@ -56,33 +14,17 @@ export function readOnlyProp<A>(value: A): () => A {
   };
 }
 
-export function dataIcon(icon: string): Attrs {
-  return {
-    'data-icon': icon,
-  };
-}
-
 export function iconTag(icon: string) {
   return h('i', { attrs: dataIcon(icon) });
 }
 
-export function plyToTurn(ply: number): number {
-  return Math.floor((ply - 1) / 2) + 1;
-}
-
-export function nodeFullName(node: Tree.Node, notation: number) {
-  if (node.san)
-    return (
-      node.ply +
-      '.' +
-      ' ' +
-      notationStyle(notation)({
-        san: node.san,
-        fen: node.fen,
-        uci: node.uci!,
-      })
-    );
-  return 'Initial position';
+export function nodeFullName(node: Tree.Node) {
+  if (node.notation)
+    return h('span', [
+      node.ply + '. ',
+      h('span' + (notationsWithColor() ? '.color-icon.' + (node.ply % 2 ? 'sente' : 'gote') : ''), node.notation),
+    ]);
+  return h('span', 'Initial position');
 }
 
 export function plural(noun: string, nb: number): string {
@@ -92,16 +34,6 @@ export function plural(noun: string, nb: number): string {
 export function titleNameToId(titleName: string): string {
   const split = titleName.split(' ');
   return (split.length === 1 ? split[0] : split[1]).toLowerCase();
-}
-
-export function spinner(): VNode {
-  return h('div.spinner', [
-    h('svg', { attrs: { viewBox: '0 0 40 40' } }, [
-      h('circle', {
-        attrs: { cx: 20, cy: 20, r: 18, fill: 'none' },
-      }),
-    ]),
-  ]);
 }
 
 export function innerHTML<A>(a: A, toHtml: (a: A) => string): Hooks {
@@ -169,17 +101,9 @@ function toTwitchEmbedUrl(url: string) {
   return undefined;
 }
 
-const commentYoutubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:.*?(?:[?&]v=)|v\/)|youtu\.be\/)(?:[^"&?\/ ]{11})\b/i;
-const commentTwitchRegex = /(?:https?:\/\/)?(?:www\.)?(?:twitch.tv)\/([^"&?/ ]+)(?:\?|&|)(\S*)/i;
-const imgurRegex = /https?:\/\/(?:i\.)?imgur\.com\/(\w+)(?:\.jpe?g|\.png|\.gif)/i;
 const newLineRegex = /\n/g;
 
 function toLink(url: string) {
-  if (!window.crossOriginIsolated) {
-    if (commentYoutubeRegex.test(url)) return toYouTubeEmbed(url) || url;
-    if (commentTwitchRegex.test(url)) return toTwitchEmbed(url) || url;
-    if (imgurRegex.test(url)) return `<img src="${url}" class="embed"/>`;
-  }
   const show = url.replace(/https?:\/\//, '');
   return `<a target="_blank" rel="nofollow noopener noreferrer" href="${url}">${show}</a>`;
 }
@@ -191,7 +115,8 @@ export function enrichText(text: string, allowNewlines: boolean = true): string 
 }
 
 // from https://github.com/bryanwoods/autolink-js/blob/master/autolink.js
-const linkRegex = /(^|[\s\n]|<[A-Za-z]*\/?>)((?:https?|ftp):\/\/[\-A-Z0-9+\u0026\u2019@#\/%?=()~_|!:,.;]*[\-A-Z0-9+\u0026@#\/%=~()_|])/gi;
+const linkRegex =
+  /(^|[\s\n]|<[A-Za-z]*\/?>)((?:https?|ftp):\/\/[\-A-Z0-9+\u0026\u2019@#\/%?=()~_|!:,.;]*[\-A-Z0-9+\u0026@#\/%=~()_|])/gi;
 
 export function autolink(str: string, callback: (str: string) => string): string {
   return str.replace(linkRegex, (_, space, url) => space + callback(url));

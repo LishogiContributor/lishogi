@@ -1,16 +1,10 @@
-import { VNode } from 'snabbdom/vnode';
-import { Player, Status, Source, Clock } from 'game';
-import * as cg from 'shogiground/types';
-import { ForecastData } from './forecast/interfaces';
-import { StudyPracticeData, Goal as PracticeGoal } from './study/practice/interfaces';
-import { RelayData } from './study/relay/interfaces';
+import { Clock, Player, Source, Status } from 'game';
+import { VNode } from 'snabbdom';
 import AnalyseController from './ctrl';
+import { ForecastData } from './forecast/interfaces';
+import { Goal as PracticeGoal, StudyPracticeData } from './study/practice/interfaces';
 
-export type MaybeVNode = VNode | string | null | undefined;
-export type MaybeVNodes = MaybeVNode[];
 export type Seconds = number;
-
-export { Key, Piece } from 'shogiground/types';
 
 export interface NvuiPlugin {
   render(ctrl: AnalyseController): VNode;
@@ -38,6 +32,7 @@ export interface AnalyseData {
   evalPut?: boolean;
   practiceGoal?: PracticeGoal;
   clock?: Clock;
+  tags?: string[][];
   pref: any;
   url: {
     socket: string;
@@ -59,24 +54,24 @@ export interface Game {
   id: string;
   status: Status;
   player: Color;
-  turns: number;
-  startedAtTurn: number;
+  plies: number;
+  startedAtPly: number;
+  startedAtStep: number;
   source: Source;
   speed: Speed;
   variant: Variant;
   winner?: Color;
   moveCentis?: number[];
-  initialFen?: string;
+  initialSfen?: string;
   importedBy?: string;
   division?: Division;
-  opening?: Opening;
   perf: string;
   rated?: boolean;
 }
 
 export interface Opening {
-  name: string;
-  eco: string;
+  english: string;
+  japanese: string;
   ply: number;
 }
 
@@ -106,21 +101,15 @@ export interface AnalyseOpts {
   userId: string | null;
   hunter: boolean;
   embed: boolean;
-  explorer: boolean;
   socketSend: SocketSend;
   trans: Trans;
   study?: any;
   tagTypes?: string;
   practice?: StudyPracticeData;
-  relay?: RelayData;
   $side?: JQuery;
   $underboard?: JQuery;
   i18n: any;
   chat: any;
-}
-
-export interface JustCaptured extends cg.Piece {
-  promoted?: boolean;
 }
 
 export type Conceal = boolean | 'conceal' | 'hide' | null;

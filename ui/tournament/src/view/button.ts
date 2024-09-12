@@ -1,8 +1,8 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { isIn } from '../tournament';
-import { spinner, bind, dataIcon } from './util';
+import { bind, dataIcon } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import { VNode, h } from 'snabbdom';
 import TournamentController from '../ctrl';
+import { isIn } from '../tournament';
 
 function orJoinSpinner(ctrl: TournamentController, f: () => VNode): VNode {
   return ctrl.joinSpinner ? spinner() : f();
@@ -25,7 +25,7 @@ export function withdraw(ctrl: TournamentController): VNode {
 export function join(ctrl: TournamentController): VNode {
   return orJoinSpinner(ctrl, () => {
     const delay = ctrl.data.me && ctrl.data.me.pauseDelay;
-    const joinable = ctrl.data.verdicts.accepted && !delay;
+    const joinable = ctrl.data.verdicts.accepted && !delay && !ctrl.data.isBot;
     const button = h(
       'button.fbt.text' + (joinable ? '.highlight' : ''),
       {
@@ -87,7 +87,7 @@ export function joinWithdraw(ctrl: TournamentController): VNode | undefined {
           'data-icon': 'G',
         },
       },
-      ctrl.trans('signIn')
+      ctrl.trans.noarg('signIn')
     );
   if (!ctrl.data.isFinished) return isIn(ctrl) ? withdraw(ctrl) : join(ctrl);
 }

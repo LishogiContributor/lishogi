@@ -35,8 +35,8 @@ final class ActivityWriteApi(
           _ <-
             (!setters.isEmpty) ?? coll.update
               .one($id(a.id), $set(setters), upsert = true)
-              .recover(ignoreDuplicateKey)
               .void
+              .recover(ignoreDuplicateKey)
         } yield ()
       }
       .sequenceFu
@@ -82,11 +82,6 @@ final class ActivityWriteApi(
           upsert = true
         )
         .void
-    }
-
-  def learn(userId: User.ID, stage: String) =
-    update(userId) { a =>
-      a.copy(learn = Some(~a.learn + Learn.Stage(stage))).some
     }
 
   def practice(prog: lila.practice.PracticeProgress.OnComplete) =

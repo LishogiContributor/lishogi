@@ -8,6 +8,7 @@ import lila.game.{ Game, Pov }
 import lila.playban.TempBan
 import lila.simul.{ Simul, SimulIsFeaturable }
 import lila.streamer.LiveStreams
+import lila.study.Study.MiniStudy
 import lila.timeline.Entry
 import lila.tournament.{ Tournament, Winner }
 import lila.tv.Tv
@@ -24,6 +25,7 @@ final class Preload(
     liveStreamApi: lila.streamer.LiveStreamApi,
     dailyPuzzle: lila.puzzle.DailyPuzzle.Try,
     lobbyApi: lila.api.LobbyApi,
+    lobbySocket: lila.lobby.LobbySocket,
     playbanApi: lila.playban.PlaybanApi,
     lightUserApi: LightUserApi,
     roundProxy: lila.round.GameProxyRepo,
@@ -38,6 +40,7 @@ final class Preload(
       tours: Fu[List[Tournament]],
       events: Fu[List[Event]],
       simuls: Fu[List[Simul]],
+      studies: Fu[List[MiniStudy]],
       streamerSpots: Int
   )(implicit ctx: Context): Fu[Homepage] =
     lobbyApi(ctx).mon(_.lobby segment "lobbyApi") zip
@@ -45,20 +48,20 @@ final class Preload(
       tours.mon(_.lobby segment "tours") zip
       events.mon(_.lobby segment "events") zip
       simuls.mon(_.lobby segment "simuls") zip
+      studies.mon(_.lobby segment "studies") zip
       tv.getBestGame.mon(_.lobby segment "tvBestGame") zip
-      (ctx.userId ?? timelineApi.userEntriesWithLang(ctx.lang.code)).mon(_.lobby segment "timeline") zip
+      (ctx.userId ?? timelineApi.userEntries).mon(_.lobby segment "timeline") zip
       userCached.topWeek.mon(_.lobby segment "userTopWeek") zip
       tourWinners.all.dmap(_.top).mon(_.lobby segment "tourWinners") zip
       (ctx.noBot ?? dailyPuzzle()).mon(_.lobby segment "puzzle") zip
       (ctx.noKid ?? liveStreamApi.all
-        .dmap(_.homepage(streamerSpots, ctx.req, ctx.me) withTitles lightUserApi)
+        .dmap(_.homepage(streamerSpots) withTitles lightUserApi)
         .mon(_.lobby segment "streams")) zip
       (ctx.userId ?? playbanApi.currentBan).mon(_.lobby segment "playban") zip
       (ctx.blind ?? ctx.me ?? roundProxy.urgentGames) flatMap {
-        case (
-              data,
-              povs
-            ) ~ posts ~ tours ~ events ~ simuls ~ feat ~ entries ~ lead ~ tWinners ~ puzzle ~ streams ~ playban ~ blindGames =>
+        // format: off
+        case ((((((((((((((data, povs), posts), tours), events), simuls), studies), feat), entries), lead), tWinners), puzzle), streams), playban), blindGames) =>
+        // format: on
           (ctx.me ?? currentGameMyTurn(povs, lightUserApi.sync) _)
             .mon(_.lobby segment "currentGame") zip
             lightUserApi
@@ -73,16 +76,18 @@ final class Preload(
                 tours,
                 events,
                 simuls,
+                studies,
                 feat,
                 lead,
                 tWinners,
                 puzzle,
                 streams.excludeUsers(events.flatMap(_.hostedBy)),
-                lastPostCache.apply,
+                lastPostCache.apply(ctx.lang),
                 playban,
                 currentGame,
                 simulIsFeaturable,
-                blindGames
+                blindGames,
+                lobbySocket.counters
               )
             }
       }
@@ -123,16 +128,18 @@ object Preload {
       tours: List[Tournament],
       events: List[Event],
       simuls: List[Simul],
+      studies: List[MiniStudy],
       featured: Option[Game],
       leaderboard: List[User.LightPerf],
       tournamentWinners: List[Winner],
-      puzzle: Option[lila.puzzle.DailyPuzzle.Html],
+      puzzle: Option[lila.puzzle.DailyPuzzle.WithHtml],
       streams: LiveStreams.WithTitles,
       lastPost: List[lila.blog.MiniPost],
       playban: Option[TempBan],
       currentGame: Option[Preload.CurrentGame],
       isFeaturable: Simul => Boolean,
-      blindGames: List[Pov]
+      blindGames: List[Pov],
+      counters: lila.lobby.LobbyCounters
   )
 
   case class CurrentGame(pov: Pov, json: JsObject, opponent: String)

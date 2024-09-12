@@ -1,9 +1,10 @@
 package lila.evalCache
 
-import shogi.format.{ FEN, Forsyth, Uci }
+import shogi.format.forsyth.Sfen
+import shogi.format.usi.Usi
 import shogi.variant.Variant
 import org.joda.time.DateTime
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 import lila.tree.Eval.Score
 import lila.user.User
@@ -56,7 +57,7 @@ object EvalCacheEntry {
 
     def bestPv: Pv = pvs.head
 
-    def bestMove: Uci = bestPv.moves.value.head
+    def bestMove: Usi = bestPv.moves.value.head
 
     def looksValid =
       pvs.toList.forall(_.looksValid) && {
@@ -67,7 +68,7 @@ object EvalCacheEntry {
 
     def takePvs(multiPv: Int) =
       copy(
-        pvs = NonEmptyList.nel(pvs.head, pvs.tail.take(multiPv - 1))
+        pvs = NonEmptyList(pvs.head, pvs.tail.take(multiPv - 1))
       )
 
     def depthAboveMin = (depth - MIN_DEPTH) atLeast 0
@@ -94,9 +95,9 @@ object EvalCacheEntry {
     def truncate = copy(moves = moves.truncate)
   }
 
-  case class Moves(value: NonEmptyList[Uci]) extends AnyVal {
+  case class Moves(value: NonEmptyList[Usi]) extends AnyVal {
 
-    def truncate = copy(value = NonEmptyList.nel(value.head, value.tail.take(MAX_PV_SIZE - 1)))
+    def truncate = copy(value = NonEmptyList(value.head, value.tail.take(MAX_PV_SIZE - 1)))
   }
 
   case class Trust(value: Double) extends AnyVal {
@@ -106,29 +107,25 @@ object EvalCacheEntry {
 
   case class TrustedUser(trust: Trust, user: User)
 
-  final class SmallFen private (val value: String) extends AnyVal with StringValue
+  final class SmallSfen private (val value: String) extends AnyVal with StringValue
 
-  object SmallFen {
-    private[evalCache] def raw(str: String) = new SmallFen(str)
-    def make(variant: Variant, fen: FEN): SmallFen = {
-      val base = fen.value.split(' ').take(3).mkString("").filter { c =>
-        c != '/' && c != '-' && c != 'b'
-      }
-      new SmallFen(base)
-    }
-    def validate(variant: Variant, fen: FEN): Option[SmallFen] =
-      Forsyth.<<@(variant, fen.value).exists(_ playable false) option make(variant, fen)
+  object SmallSfen {
+    private[evalCache] def raw(str: String) = new SmallSfen(str)
+    def make(sfen: Sfen): SmallSfen =
+      new SmallSfen(sfen.truncate.value.filterNot(_ == '/'))
+    def validate(variant: Variant, sfen: Sfen): Option[SmallSfen] =
+      sfen.toSituation(variant).exists(_.playable(false, false)) option make(sfen)
   }
 
-  case class Id(variant: Variant, smallFen: SmallFen)
+  case class Id(variant: Variant, smallSfen: SmallSfen)
 
-  case class Input(id: Id, fen: FEN, eval: Eval)
+  case class Input(id: Id, sfen: Sfen, eval: Eval)
 
   object Input {
-    case class Candidate(variant: Variant, fen: String, eval: Eval) {
+    case class Candidate(variant: Variant, sfen: String, eval: Eval) {
       def input =
-        SmallFen.validate(variant, FEN(fen)) ifTrue eval.looksValid map { smallFen =>
-          Input(Id(variant, smallFen), FEN(fen), eval.truncatePvs)
+        SmallSfen.validate(variant, Sfen(sfen)) ifTrue eval.looksValid map { smallSfen =>
+          Input(Id(variant, smallSfen), Sfen(sfen), eval.truncatePvs)
         }
     }
   }

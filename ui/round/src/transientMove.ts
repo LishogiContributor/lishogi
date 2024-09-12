@@ -1,4 +1,3 @@
-// import RoundController from './ctrl';
 import { RoundSocket } from './socket';
 
 /* Tracks moves that were played on the board,
@@ -13,10 +12,12 @@ import { RoundSocket } from './socket';
 export default class TransientMove {
   constructor(readonly socket: RoundSocket) {}
 
+  defaultTimeout = 7500;
   current: number | undefined = undefined;
 
-  register = () => {
-    this.current = setTimeout(this.expire, 10000);
+  register = (remaining: number | undefined) => {
+    const toTrigger = remaining && remaining <= this.defaultTimeout + 1000 ? 3500 : this.defaultTimeout;
+    this.current = setTimeout(this.expire, toTrigger);
   };
 
   clear = () => {
@@ -24,7 +25,7 @@ export default class TransientMove {
   };
 
   expire = () => {
-    $.post('/statlog?e=roundTransientExpire');
+    console.log('Server did not ack your move, we will try reloading the game.');
     this.socket.reload({});
   };
 }

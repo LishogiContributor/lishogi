@@ -1,10 +1,9 @@
-import makeSocket from './socket';
-import xhr from './xhr';
+import { Pages, PlayerInfo, Standing, TeamInfo, TournamentData, TournamentOpts } from './interfaces';
 import { myPage, players } from './pagination';
+import makeSocket, { TournamentSocket } from './socket';
 import * as sound from './sound';
 import * as tour from './tournament';
-import { TournamentData, TournamentOpts, Pages, PlayerInfo, TeamInfo, Standing } from './interfaces';
-import { TournamentSocket } from './socket';
+import xhr from './xhr';
 
 interface CtrlTeamInfo {
   requested?: string;
@@ -27,6 +26,7 @@ export default class TournamentController {
   searching: boolean = false;
   joinWithTeamSelector: boolean = false;
   redraw: () => void;
+  nbWatchers: number = 0;
 
   private watchingGameId: string;
   private lastStorage = window.lishogi.storage.make('last-redirect');
@@ -44,7 +44,11 @@ export default class TournamentController {
     this.scrollToMe();
     sound.end(this.data);
     sound.countDown(this.data);
+    this.recountTeams();
     this.redirectToMyGame();
+    window.lishogi.pubsub.on('socket.in.crowd', data => {
+      this.nbWatchers = data.nb;
+    });
     if (this.data.featured) this.startWatching(this.data.featured.id);
   }
 
@@ -65,10 +69,16 @@ export default class TournamentController {
     sound.end(data);
     sound.countDown(data);
     this.joinSpinner = false;
+    this.recountTeams();
     this.redirectToMyGame();
   };
 
   myGameId = () => this.data.me?.gameId;
+
+  private recountTeams() {
+    if (this.data.teamBattle)
+      this.data.teamBattle.hasMoreThanTenTeams = Object.keys(this.data.teamBattle.teams).length > 10;
+  }
 
   private redirectToMyGame() {
     const gameId = this.myGameId();
@@ -155,6 +165,7 @@ export default class TournamentController {
   };
 
   showPlayerInfo = player => {
+    if (this.data.secondsToStart) return;
     const userId = player.name.toLowerCase();
     this.teamInfo.requested = undefined;
     this.playerInfo = {
@@ -182,5 +193,7 @@ export default class TournamentController {
     if (teamInfo.id === this.teamInfo.requested) this.teamInfo.loaded = teamInfo;
   };
 
-  toggleSearch = () => (this.searching = !this.searching);
+  toggleSearch = () => {
+    this.searching = !this.searching;
+  };
 }

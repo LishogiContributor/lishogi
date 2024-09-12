@@ -97,7 +97,7 @@ final class ChatApi(
               }
             }
             publish(chatId, actorApi.ChatLine(chatId, line), busChan)
-            lila.mon.chat.message(publicSource.fold("player")(_.parentName), line.troll).increment()
+            lila.mon.chat.message(publicSource.fold("player")(_.parentName), line.troll).increment().unit
           }
         }
       }
@@ -105,7 +105,7 @@ final class ChatApi(
     def clear(chatId: Chat.Id) = coll.delete.one($id(chatId)).void
 
     def system(chatId: Chat.Id, text: String, busChan: BusChan.Select): Funit = {
-      val line = UserLine(systemUserId, None, text, troll = false, deleted = false)
+      val line = UserLine(systemUserId, none, text, troll = false, deleted = false)
       pushLine(chatId, line) >>- {
         cached.invalidate(chatId)
         publish(chatId, actorApi.ChatLine(chatId, line), busChan)
@@ -114,12 +114,9 @@ final class ChatApi(
 
     // like system, but not persisted.
     def volatile(chatId: Chat.Id, text: String, busChan: BusChan.Select): Unit = {
-      val line = UserLine(systemUserId, None, text, troll = false, deleted = false)
+      val line = UserLine(systemUserId, none, text, troll = false, deleted = false)
       publish(chatId, actorApi.ChatLine(chatId, line), busChan)
     }
-
-    def service(chatId: Chat.Id, text: String, busChan: BusChan.Select, isVolatile: Boolean): Unit =
-      (if (isVolatile) volatile _ else system _)(chatId, text, busChan)
 
     def timeout(
         chatId: Chat.Id,
@@ -131,9 +128,9 @@ final class ChatApi(
         busChan: BusChan.Select
     ): Funit =
       coll.byId[UserChat](chatId.value) zip userRepo.byId(modId) zip userRepo.byId(userId) flatMap {
-        case Some(chat) ~ Some(mod) ~ Some(user) if isMod(mod) || scope == ChatTimeout.Scope.Local =>
+        case ((Some(chat), Some(mod)), Some(user)) if isMod(mod) || scope == ChatTimeout.Scope.Local =>
           doTimeout(chat, mod, user, reason, scope, text, busChan)
-        case _ => fuccess(none)
+        case _ => funit
       }
 
     def userModInfo(username: String): Fu[Option[UserModInfo]] =
@@ -234,7 +231,7 @@ final class ChatApi(
       makeLine(chatId, color, text) ?? { line =>
         pushLine(chatId, line) >>- {
           publish(chatId, actorApi.ChatLine(chatId, line), busChan)
-          lila.mon.chat.message("anonPlayer", false).increment()
+          lila.mon.chat.message("anonPlayer", false).increment().unit
         }
       }
 
@@ -278,8 +275,8 @@ final class ChatApi(
 
     def cut(text: String) = Some(text.trim take Line.textMaxSize) filter (_.nonEmpty)
 
-    private val gameUrlRegex                      = (Pattern.quote(netDomain.value) + """\b/(\w{8})\w{4}\b""").r
-    private val gameUrlReplace                    = Matcher.quoteReplacement(netDomain.value) + "/$1";
+    private val gameUrlRegex   = (Pattern.quote(netDomain.value) + """\b/(\w{8})\w{4}\b""").r
+    private val gameUrlReplace = Matcher.quoteReplacement(netDomain.value) + "/$1";
     private def noPrivateUrl(str: String): String = gameUrlRegex.replaceAllIn(str, gameUrlReplace)
     private val multilineRegex                    = """\n\n{2,}+""".r
     private def multiline(str: String)            = multilineRegex.replaceAllIn(str, """\n\n""")

@@ -1,13 +1,15 @@
 package lila.tournament
 
+import cats.implicits._
+import shogi.format.forsyth.Sfen
+import shogi.Mode
 import org.joda.time.DateTime
 import play.api.data._
 import play.api.data.Forms._
 import play.api.data.validation
 import play.api.data.validation.{ Constraint, Constraints }
+import scala.util.chaining._
 
-import shogi.Mode
-import shogi.StartingPosition
 import lila.common.Form._
 import lila.hub.LightTeam._
 import lila.user.User
@@ -17,7 +19,7 @@ final class DataForm {
   import DataForm._
 
   def create(user: User, teamBattleId: Option[TeamID] = None) =
-    form(user) fill TournamentSetup(
+    form(user, none) fill TournamentSetup(
       name = teamBattleId.isEmpty option user.titleUsername,
       clockTime = clockTimeDefault,
       clockIncrement = clockIncrementDefault,
@@ -27,7 +29,7 @@ final class DataForm {
       waitMinutes = waitMinuteDefault.some,
       startDate = none,
       variant = shogi.variant.Standard.id.toString.some,
-      position = StartingPosition.initial.fen.some,
+      position = None,
       password = None,
       mode = none,
       rated = true.some,
@@ -40,17 +42,17 @@ final class DataForm {
     )
 
   def edit(user: User, tour: Tournament) =
-    form(user) fill TournamentSetup(
+    form(user, tour.some) fill TournamentSetup(
       name = tour.name.some,
       clockTime = tour.clock.limitInMinutes,
       clockIncrement = tour.clock.incrementSeconds,
       clockByoyomi = tour.clock.byoyomiSeconds,
-      periods = tour.clock.periods,
+      periods = tour.clock.periodsTotal,
       minutes = tour.minutes,
       waitMinutes = none,
       startDate = tour.startsAt.some,
       variant = tour.variant.id.toString.some,
-      position = tour.position.fen.some,
+      position = tour.position,
       mode = none,
       rated = tour.mode.rated.some,
       password = tour.password,
@@ -62,7 +64,7 @@ final class DataForm {
       hasChat = tour.hasChat.some
     )
 
-  private val nameType = clean(text).verifying(
+  private val nameType = cleanText.verifying(
     Constraints minLength 2,
     Constraints maxLength 30,
     Constraints.pattern(
@@ -76,37 +78,53 @@ final class DataForm {
     }
   )
 
-  private def form(user: User) =
-    Form(
-      mapping(
-        "name"           -> optional(nameType),
-        "clockTime"      -> numberInDouble(clockTimeChoices),
-        "clockIncrement" -> numberIn(clockIncrementChoices),
-        "clockByoyomi"   -> numberIn(clockByoyomiChoices),
-        "periods"        -> numberIn(periodsChoices),
-        "minutes" -> {
-          if (lila.security.Granter(_.ManageTournament)(user)) number
-          else numberIn(minuteChoices)
-        },
-        "waitMinutes"      -> optional(numberIn(waitMinuteChoices)),
-        "startDate"        -> optional(inTheFuture(ISODateTimeOrTimestamp.isoDateTimeOrTimestamp)),
-        "variant"          -> optional(text.verifying(v => guessVariant(v).isDefined)),
-        "position"         -> optional(nonEmptyText),
-        "mode"             -> optional(number.verifying(Mode.all map (_.id) contains _)), // deprecated, use rated
-        "rated"            -> optional(boolean),
-        "password"         -> optional(nonEmptyText),
-        "conditions"       -> Condition.DataForm.all,
-        "teamBattleByTeam" -> optional(nonEmptyText),
-        "berserkable"      -> optional(boolean),
-        "streakable"       -> optional(boolean),
-        "description"      -> optional(clean(nonEmptyText)),
-        "hasChat"          -> optional(boolean)
-      )(TournamentSetup.apply)(TournamentSetup.unapply)
-        .verifying("Invalid clock", _.validClock)
-        .verifying("15s variant games cannot be rated", _.validRatedUltraBulletVariant)
-        .verifying("Increase tournament duration, or decrease game clock", _.sufficientDuration)
-        .verifying("Reduce tournament duration, or increase game clock", _.excessiveDuration)
-    )
+  private def form(user: User, prev: Option[Tournament]) =
+    Form {
+      makeMapping(user) pipe { m =>
+        prev.fold(m) { tour =>
+          m
+            .verifying(
+              "Can't change variant after players have joined",
+              _.realVariant == tour.variant || tour.nbPlayers == 0
+            )
+            .verifying(
+              "Can't change time control after players have joined",
+              _.speed == tour.speed || tour.nbPlayers == 0
+            )
+        }
+      }
+    }
+
+  private def makeMapping(user: User) =
+    mapping(
+      "name"           -> optional(nameType),
+      "clockTime"      -> numberInDouble(clockTimeChoices),
+      "clockIncrement" -> numberIn(clockIncrementChoices),
+      "clockByoyomi"   -> numberIn(clockByoyomiChoices),
+      "periods"        -> numberIn(periodsChoices),
+      "minutes" -> {
+        if (lila.security.Granter(_.ManageTournament)(user)) number
+        else numberIn(minuteChoices)
+      },
+      "waitMinutes" -> optional(numberIn(waitMinuteChoices)),
+      "startDate"   -> optional(inTheFuture(ISODateTimeOrTimestamp.isoDateTimeOrTimestamp)),
+      "variant"     -> optional(text.verifying(v => guessVariant(v).isDefined)),
+      "position"    -> optional(lila.common.Form.sfen.clean),
+      "mode"        -> optional(number.verifying(Mode.all.map(_.id) contains _)), // deprecated, use rated
+      "rated"       -> optional(boolean),
+      "password"    -> optional(nonEmptyText),
+      "conditions"  -> Condition.DataForm.all,
+      "teamBattleByTeam" -> optional(nonEmptyText),
+      "berserkable"      -> optional(boolean),
+      "streakable"       -> optional(boolean),
+      "description"      -> optional(cleanNonEmptyText),
+      "hasChat"          -> optional(boolean)
+    )(TournamentSetup.apply)(TournamentSetup.unapply)
+      .verifying("Invalid clock", _.validClock)
+      .verifying("Invalid starting position", _.validPosition)
+      .verifying("Games with this time control cannot be rated", _.validRatedVariant)
+      .verifying("Increase tournament duration, or decrease game clock", _.sufficientDuration)
+      .verifying("Reduce tournament duration, or increase game clock", _.excessiveDuration)
 }
 
 object DataForm {
@@ -143,22 +161,13 @@ object DataForm {
   val waitMinuteChoices = options(waitMinutes, "%d minute{s}")
   val waitMinuteDefault = 5
 
-  val positions = StartingPosition.allWithInitial.map(_.fen)
-  val positionChoices = StartingPosition.allWithInitial.map { p =>
-    p.fen -> p.fullName
-  }
-  val positionDefault = StartingPosition.initial.fen
-
   val validVariants =
-    List(Standard)
+    List(Standard, Minishogi, Chushogi, Annanshogi, Kyotoshogi, Checkshogi)
 
   def guessVariant(from: String): Option[Variant] =
     validVariants.find { v =>
       v.key == from || from.toIntOption.exists(v.id ==)
     }
-
-  def startingPosition(fen: String, variant: Variant): StartingPosition =
-    Thematic.byFen(fen).ifTrue(variant.standard) | StartingPosition.initial
 }
 
 private[tournament] case class TournamentSetup(
@@ -171,7 +180,7 @@ private[tournament] case class TournamentSetup(
     waitMinutes: Option[Int],
     startDate: Option[DateTime],
     variant: Option[String],
-    position: Option[String],
+    position: Option[Sfen],
     mode: Option[Int], // deprecated, use rated
     rated: Option[Boolean],
     password: Option[String],
@@ -185,15 +194,23 @@ private[tournament] case class TournamentSetup(
 
   def validClock = (clockTime + clockIncrement) > 0 || (clockTime + clockByoyomi) > 0
 
-  def realMode = Mode(rated.orElse(mode.map(Mode.Rated.id ==)) | true)
+  def validPosition = position.fold(true) { sfen =>
+    sfen.toSituation(realVariant).exists(_.playable(strict = true, withImpasse = true))
+  }
+
+  def realMode =
+    if (position.filterNot(_.initialOf(realVariant)).isDefined) Mode.Casual
+    else Mode(rated.orElse(mode.map(Mode.Rated.id ===)) | true)
 
   def realVariant = variant.flatMap(DataForm.guessVariant) | shogi.variant.Standard
 
   def clockConfig = shogi.Clock.Config((clockTime * 60).toInt, clockIncrement, clockByoyomi, periods)
 
-  def validRatedUltraBulletVariant =
+  def speed = shogi.Speed(clockConfig)
+
+  def validRatedVariant =
     realMode == Mode.Casual ||
-      lila.game.Game.allowRated(realVariant, clockConfig.some)
+      lila.game.Game.allowRated(position, clockConfig.some, realVariant)
 
   def sufficientDuration = estimateNumberOfGamesOneCanPlay >= 3
   def excessiveDuration  = estimateNumberOfGamesOneCanPlay <= 150

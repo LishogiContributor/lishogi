@@ -1,15 +1,7 @@
 export default function boot(cfg, element) {
-  cfg.pools = [
-    // mirrors modules/pool/src/main/PoolList.scala
-    //{ id: "1+0", lim: 1, inc: 0, perf: "Bullet" }
-  ];
   let lobby;
-  const nbRoundSpread = spreadNumber(document.querySelector('#nb_games_in_play > strong'), 8, function () {
-      return window.lishogi.socket.pingInterval();
-    }),
-    nbUserSpread = spreadNumber(document.querySelector('#nb_connected_players > strong'), 10, function () {
-      return window.lishogi.socket.pingInterval();
-    }),
+  const nbRoundSpread = spreadNumber('#nb_games_in_play > strong', 8),
+    nbUserSpread = spreadNumber('#nb_connected_players > strong', 10),
     getParameterByName = name => {
       var match = RegExp('[?&]' + name + '=([^&]*)').exec(location.search);
       return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
@@ -18,7 +10,7 @@ export default function boot(cfg, element) {
       var gameId = getParameterByName('hook_like');
       if (!gameId) return;
       $.post(`/setup/hook/${window.lishogi.sri}/like/${gameId}?rr=${lobby.setup.ratingRange() || ''}`);
-      lobby.setTab('real_time');
+      lobby.setTab('real_time', false);
       history.replaceState(null, '', '/');
     };
   window.lishogi.socket = window.lishogi.StrongSocket('/lobby/socket/v4', false, {
@@ -46,7 +38,6 @@ export default function boot(cfg, element) {
         window.lishogi.pubsub.emit('content_loaded');
       },
       redirect: function (e) {
-        lobby.leavePool();
         lobby.setRedirecting();
         window.lishogi.redirect(e);
       },
@@ -54,15 +45,8 @@ export default function boot(cfg, element) {
         $('#enterable_tournaments').html(data);
         window.lishogi.pubsub.emit('content_loaded');
       },
-      simuls: function (data) {
-        $('#enterable_simuls')
-          .html(data)
-          .parent()
-          .toggle($('#enterable_simuls tr').length > 0);
-        window.lishogi.pubsub.emit('content_loaded');
-      },
-      fen: function (e) {
-        window.lishogi.StrongSocket.defaults.events.fen(e);
+      sfen: function (e) {
+        window.lishogi.StrongSocket.defaults.events.sfen(e);
         lobby.gameActivity(e.id);
       },
     },
@@ -76,6 +60,9 @@ export default function boot(cfg, element) {
   cfg.trans = window.lishogi.trans(cfg.i18n);
   cfg.socketSend = window.lishogi.socket.send;
   cfg.element = element;
+  cfg.variant = getParameterByName('variant');
+  cfg.sfen = getParameterByName('sfen');
+
   lobby = window.LishogiLobby.start(cfg);
 
   const $startButtons = $('.lobby__start'),
@@ -86,8 +73,7 @@ export default function boot(cfg, element) {
     .on(clickEvent, function () {
       $(this).addClass('active').siblings().removeClass('active');
       window.lishogi.loadCssPath('lobby.setup');
-      lobby.leavePool();
-      let url = this.href;
+      let url = (this as HTMLAnchorElement).href;
       if (this.dataset.hrefAddon) {
         url += this.dataset.hrefAddon;
         delete this.dataset.hrefAddon;
@@ -130,14 +116,11 @@ export default function boot(cfg, element) {
   }
 }
 
-function spreadNumber(el, nbSteps, getDuration) {
-  let previous, displayed;
+function spreadNumber(selector: string, nbSteps: number) {
+  const el = document.querySelector(selector) as HTMLElement;
+  let previous = parseInt(el.getAttribute('data-count')!);
   const display = function (prev, cur, it) {
-    var val = window.lishogi.numberFormat(Math.round((prev * (nbSteps - 1 - it) + cur * (it + 1)) / nbSteps));
-    if (val !== displayed) {
-      el.textContent = val;
-      displayed = val;
-    }
+    el.textContent = window.lishogi.numberFormat(Math.round((prev * (nbSteps - 1 - it) + cur * (it + 1)) / nbSteps));
   };
   let timeouts: number[] = [];
   return function (nb, overrideNbSteps?) {
@@ -145,9 +128,9 @@ function spreadNumber(el, nbSteps, getDuration) {
     if (overrideNbSteps) nbSteps = Math.abs(overrideNbSteps);
     timeouts.forEach(clearTimeout);
     timeouts = [];
-    let prev = previous === 0 ? 0 : previous || nb;
+    const interv = Math.abs(window.lishogi.socket.pingInterval() / nbSteps);
+    const prev = previous || nb;
     previous = nb;
-    let interv = Math.abs(getDuration() / nbSteps);
     for (let i = 0; i < nbSteps; i++)
       timeouts.push(setTimeout(display.bind(null, prev, nb, i), Math.round(i * interv)));
   };

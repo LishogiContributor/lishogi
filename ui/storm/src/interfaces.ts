@@ -1,4 +1,4 @@
-import { Prop } from 'common';
+import { Prop } from 'common/common';
 import { Config, PuzPrefs, Puzzle } from 'puz/interfaces';
 
 export interface StormOpts {
@@ -23,7 +23,6 @@ export interface StormVm {
   lateStart: boolean;
   filterFailed: boolean;
   filterSlow: boolean;
-  dropRedraw: boolean;
 }
 
 export interface DailyBest {

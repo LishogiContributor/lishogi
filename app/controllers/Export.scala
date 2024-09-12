@@ -6,6 +6,7 @@ import scala.concurrent.duration._
 import play.api.mvc.Result
 
 import shogi.Color
+import shogi.format.usi.{ UciToUsi, Usi }
 import lila.app._
 import lila.common.HTTPRequest
 import lila.game.Pov
@@ -28,9 +29,9 @@ final class Export(env: Env) extends LilaController(env) {
     Open { implicit ctx =>
       OnlyHumansAndFacebookOrTwitter {
         ExportGifRateLimitGlobal("-", msg = HTTPRequest.lastRemoteAddress(ctx.req).value) {
-          OptionFuResult(env.game.gameRepo gameWithInitialFen id) { case (game, initialFen) =>
-            val pov = Pov(game, Color(color) | Color.sente)
-            env.game.gifExport.fromPov(pov, initialFen) map
+          OptionFuResult(env.game.gameRepo game id) { game =>
+            val pov = Pov(game, Color.fromName(color) | Color.sente)
+            env.game.gifExport.fromPov(pov) map
               stream("image/gif") map
               gameImageCacheSeconds(game)
           }
@@ -40,7 +41,7 @@ final class Export(env: Env) extends LilaController(env) {
 
   def legacyGameThumbnail(id: String) =
     Action {
-      MovedPermanently(routes.Page.notSupported().url) // routes.Export.gameThumbnail(id).url
+      MovedPermanently(routes.Export.gameThumbnail(id).url)
     }
 
   def gameThumbnail(id: String) =
@@ -54,21 +55,20 @@ final class Export(env: Env) extends LilaController(env) {
       }(rateLimitedFu)
     }
 
-  def legacyPuzzleThumbnail(id: Int) =
-    Action {
-      MovedPermanently(routes.Page.notSupported().url) // routes.Export.puzzleThumbnail(id).url
-    }
-
   def puzzleThumbnail(id: String) =
     Open { implicit ctx =>
       ExportImageRateLimitGlobal("-", msg = HTTPRequest.lastRemoteAddress(ctx.req).value) {
         OptionFuResult(env.puzzle.api.puzzle find Id(id)) { puzzle =>
           env.game.gifExport.thumbnail(
-            fen = puzzle.fenAfterInitialMove,
-            lastMove = puzzle.lastMove.some,
+            sfen = puzzle.sfenAfterInitialMove,
+            lastUsi = Usi(puzzle.lastUsi).orElse(UciToUsi(puzzle.lastUsi)) map { _.usi },
             orientation = puzzle.color
-          ) map stream("image/gif") map { res =>
-            res.withHeaders(CACHE_CONTROL -> "max-age=86400")
+          ) map { source =>
+            Ok.chunked(source)
+              .withHeaders(
+                noProxyBufferHeader,
+                CACHE_CONTROL -> "max-age=86400"
+              ) as "image/gif"
           }
         }
       }(rateLimitedFu)
@@ -81,6 +81,8 @@ final class Export(env: Env) extends LilaController(env) {
     res.withHeaders(CACHE_CONTROL -> s"max-age=$cacheSeconds")
   }
 
-  private def stream(contentType: String)(stream: Source[ByteString, _]) =
-    Ok.chunked(stream).withHeaders(noProxyBufferHeader) as contentType
+  private def stream(contentType: String)(streamOpt: Option[Source[ByteString, _]]) =
+    streamOpt.fold(NotFound("Variant not supported")) { stream =>
+      Ok.chunked(stream).withHeaders(noProxyBufferHeader) as contentType
+    }
 }

@@ -18,23 +18,20 @@ object bits {
     frag(
       jsTag("challenge.js", defer = true),
       embedJsUnsafe(s"""lishogi=window.lishogi||{};customWs=true;lishogi_challenge = ${safeJsonValue(
-        Json.obj(
-          "socketUrl" -> s"/challenge/${c.id}/socket/v$apiVersion",
-          "xhrUrl"    -> routes.Challenge.show(c.id, color.map(_.name)).url,
-          "owner"     -> owner,
-          "data"      -> json
-        )
-      )}""")
+          Json.obj(
+            "socketUrl" -> s"/challenge/${c.id}/socket/v$apiVersion",
+            "xhrUrl"    -> routes.Challenge.show(c.id, color.map(_.name)).url,
+            "owner"     -> owner,
+            "data"      -> json
+          )
+        )}""")
     )
 
-  def details(c: Challenge)(implicit ctx: Context) =
+  def details(c: Challenge, mine: Boolean)(implicit ctx: Context) =
     div(cls := "details")(
-      div(cls := "variant", dataIcon := (if (c.initialFen.isDefined) '*' else c.perfType.iconChar))(
+      div(cls := "variant", dataIcon := (if (c.initialSfen.isDefined) '*' else c.perfType.iconChar))(
         div(
-          if (c.variant.exotic)
-            views.html.game.bits.variantLink(c.variant, variantName(c.variant))
-          else
-            c.perfType.trans,
+          views.html.game.bits.variantLink(c.variant, c.perfType.some),
           br,
           span(cls := "clock")(
             c.daysPerTurn map { days =>
@@ -44,6 +41,16 @@ object bits {
           )
         )
       ),
+      div(cls := "game-color") {
+        val handicap = c.initialSfen.fold(false)(sfen => shogi.Handicap.isHandicap(sfen, c.variant))
+        frag(
+          shogi.Color.fromName(c.colorChoice.toString.toLowerCase).fold(trans.randomColor.txt()) { color =>
+            transWithColorName(trans.youPlayAsX, if (mine) color else !color, handicap)
+          },
+          " - ",
+          transWithColorName(trans.xPlays, c.initialSfen.flatMap(_.color).getOrElse(shogi.Sente), handicap)
+        )
+      },
       div(cls := "mode")(modeName(c.mode))
     )
 }

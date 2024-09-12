@@ -34,7 +34,7 @@ final class JSONHandlers(getLightUser: LightUser.GetterSync) {
             "id"   -> id.value,
             "name" -> name.value
           )
-        case ReportedBanned | CoachReview => Json.obj()
+        case ReportedBanned => Json.obj()
         case TitledTournamentInvitation(id, text) =>
           Json.obj(
             "id"   -> id,
@@ -45,6 +45,11 @@ final class JSONHandlers(getLightUser: LightUser.GetterSync) {
             "id"       -> gameId.value,
             "opponent" -> opponentId.map(_.value).flatMap(getLightUser),
             "win"      -> win.map(_.value)
+          )
+        case PausedGame(gameId, opponentId) =>
+          Json.obj(
+            "id"       -> gameId.value,
+            "opponent" -> opponentId.map(_.value).flatMap(getLightUser)
           )
         case _: PlanStart  => Json.obj()
         case _: PlanExpire => Json.obj()
@@ -57,10 +62,6 @@ final class JSONHandlers(getLightUser: LightUser.GetterSync) {
           Json.obj(
             "id" -> gameId,
             "op" -> opponent
-          )
-        case IrwinDone(userId) =>
-          Json.obj(
-            "user" -> getLightUser(userId)
           )
         case GenericLink(url, title, text, icon) =>
           Json.obj(

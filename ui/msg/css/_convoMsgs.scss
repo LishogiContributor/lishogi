@@ -13,6 +13,9 @@
   }
   &__typing {
     color: $c-font-dim;
+    line-height: 0.9em;
+    min-height: 0.9em;
+    font-size: 0.9em;
   }
   &__content {
     @extend %flex-column, %break-word;
@@ -75,7 +78,10 @@
     width: 90%;
   }
   .embed {
-    @extend %video;
+    @extend %embed;
+    &--game {
+      @extend %game-embed;
+    }
     &.not-found {
       height: 100px;
       padding: 0;

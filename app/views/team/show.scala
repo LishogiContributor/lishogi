@@ -26,10 +26,10 @@ object show {
       ctx: Context
   ) =
     bits.layout(
-      title = t.name,
+      title = trans.teamNamedX.txt(t.name),
       openGraph = lila.app.ui
         .OpenGraph(
-          title = s"${t.name} team",
+          title = trans.teamNamedX.txt(t.name),
           url = s"$netBaseUrl${routes.Team.show(t.id).url}",
           description = shorten(t.description, 152)
         )
@@ -39,23 +39,25 @@ object show {
           v    <- socketVersion
           chat <- chatOption
         } yield frag(
-          jsAt(s"compiled/lishogi.chat${isProd ?? ".min"}.js"),
+          jsModule("chat"),
           embedJsUnsafe(s"""lishogi.team=${safeJsonValue(
-            Json.obj(
-              "id"            -> t.id,
-              "socketVersion" -> v.value,
-              "chat" -> views.html.chat.json(
-                chat.chat,
-                name = if (t.isChatFor(_.LEADERS)) leadersChat.txt() else trans.chatRoom.txt(),
-                timeout = chat.timeout,
-                public = true,
-                resourceId = lila.chat.Chat.ResourceId(s"team/${chat.chat.id}"),
-                localMod = ctx.userId exists t.leaders.contains
+              Json.obj(
+                "id"            -> t.id,
+                "socketVersion" -> v.value,
+                "chat" -> views.html.chat.json(
+                  chat.chat,
+                  name = if (t.isChatFor(_.LEADERS)) leadersChat.txt() else trans.chatRoom.txt(),
+                  timeout = chat.timeout,
+                  public = true,
+                  resourceId = lila.chat.Chat.ResourceId(s"team/${chat.chat.id}"),
+                  localMod = ctx.userId exists t.leaders.contains
+                )
               )
-            )
-          )}""")
-        )
-    )(
+            )}""")
+        ),
+      canonicalPath = lila.common.CanonicalPath(routes.Team.show(t.id)).some
+    ) {
+      val enabledOrLeader = t.enabled || info.ledByMe || isGranted(_.Admin)
       main(
         cls := "team-show box",
         socketVersion.map { v =>
@@ -69,9 +71,9 @@ object show {
             else nbMembers.plural(t.nbMembers, strong(t.nbMembers.localize))
           )
         ),
-        (info.mine || t.enabled) option div(cls := "team-show__content")(
+        div(cls := "team-show__content")(
           div(cls := "team-show__content__col1")(
-            st.section(cls := "team-show__meta")(
+            enabledOrLeader option st.section(cls := "team-show__meta")(
               p(
                 teamLeaders.pluralSame(t.leaders.size),
                 ": ",
@@ -80,11 +82,11 @@ object show {
                 })
               )
             ),
-            chatOption.isDefined option frag(
+            (t.enabled && chatOption.isDefined) option frag(
               views.html.chat.frag,
               div(
-                cls := "chat__members",
-                aria.live := "off",
+                cls           := "chat__members",
+                aria.live     := "off",
                 aria.relevant := "additions removals text"
               )(
                 span(cls := "number")(nbsp),
@@ -96,17 +98,34 @@ object show {
             ),
             div(cls := "team-show__actions")(
               (t.enabled && !info.mine) option frag(
-                if (info.requestedByMe) strong(beingReviewed())
+                if (info.requestedByMe)
+                  frag(
+                    strong(beingReviewed()),
+                    postForm(action := routes.Team.quit(t.id))(
+                      submitButton(cls := "button button-red button-empty confirm")(trans.cancel())
+                    )
+                  )
                 else ctx.isAuth option joinButton(t)
               ),
+              (t.enabled && info.mine) option {
+                postForm(
+                  cls    := "team-show__subscribe form3",
+                  action := routes.Team.subscribe(t.id)
+                )(
+                  div(
+                    span(form3.cmnToggle("team-subscribe", "subscribe", checked = info.subscribed)),
+                    label(`for` := "team-subscribe")("Subscribe to team messages")
+                  )
+                )
+              },
               (info.mine && !info.ledByMe) option
                 postForm(cls := "quit", action := routes.Team.quit(t.id))(
                   submitButton(cls := "button button-empty button-red confirm")(quitTeam.txt())
                 ),
-              info.ledByMe option frag(
+              t.enabled && info.ledByMe option frag(
                 a(
-                  href := routes.Tournament.teamBattleForm(t.id),
-                  cls := "button button-empty text",
+                  href     := routes.Tournament.teamBattleForm(t.id),
+                  cls      := "button button-empty text",
                   dataIcon := "g"
                 )(
                   span(
@@ -115,8 +134,8 @@ object show {
                   )
                 ),
                 a(
-                  href := s"${routes.Tournament.form()}?team=${t.id}",
-                  cls := "button button-empty text",
+                  href     := s"${routes.Tournament.form}?team=${t.id}",
+                  cls      := "button button-empty text",
                   dataIcon := "g"
                 )(
                   span(
@@ -125,8 +144,8 @@ object show {
                   )
                 ),
                 a(
-                  href := routes.Team.pmAll(t.id),
-                  cls := "button button-empty text",
+                  href     := routes.Team.pmAll(t.id),
+                  cls      := "button button-empty text",
                   dataIcon := "e"
                 )(
                   span(
@@ -140,7 +159,7 @@ object show {
                   trans.settings.settings()
                 )
             ),
-            div(cls := "team-show__members")(
+            t.enabled option div(cls := "team-show__members")(
               st.section(cls := "recent-members")(
                 h2(teamRecentMembers()),
                 div(cls := "userlist infinitescroll")(
@@ -160,12 +179,12 @@ object show {
                 frag(br, trans.location(), ": ", richText(loc))
               }
             ),
-            info.hasRequests option div(cls := "team-show__requests")(
+            t.enabled && info.hasRequests option div(cls := "team-show__requests")(
               h2(xJoinRequests.pluralSame(info.requests.size)),
               views.html.team.request.list(info.requests, t.some)
             ),
             div(cls := "team-show__tour-forum")(
-              info.tours.nonEmpty option frag(
+              t.enabled && info.tours.nonEmpty option frag(
                 st.section(cls := "team-show__tour team-tournaments")(
                   h2(a(href := routes.Team.tournaments(t.id))(trans.tournaments())),
                   table(cls := "slist")(
@@ -175,7 +194,7 @@ object show {
                   )
                 )
               ),
-              ctx.noKid option
+              t.enabled && ctx.noKid option
                 st.section(cls := "team-show__forum")(
                   h2(a(href := teamForumUrl(t.id))(trans.forum())),
                   info.forumPosts.take(10).map { post =>
@@ -184,7 +203,7 @@ object show {
                         strong(post.topicName),
                         em(
                           post.userId map usernameOrId,
-                          " • ",
+                          " - ",
                           momentFromNow(post.createdAt)
                         )
                       ),
@@ -197,19 +216,12 @@ object show {
           )
         )
       )
-    )
+    }
 
   // handle special teams here
   private def joinButton(t: Team)(implicit ctx: Context) =
-    t.id match {
-      case "english-chess-players" => joinAt("https://ecf.octoknight.com/")
-      case "ecf"                   => joinAt(routes.Team.show("english-chess-players").url)
-      case _ =>
-        postForm(cls := "inline", action := routes.Team.join(t.id))(
-          submitButton(cls := "button button-green")(joinTeam())
-        )
-    }
+    postForm(cls := "inline", action := routes.Team.join(t.id))(
+      submitButton(cls := "button button-green")(joinTeam())
+    )
 
-  private def joinAt(url: String)(implicit ctx: Context) =
-    a(cls := "button button-green", href := url)(joinTeam())
 }

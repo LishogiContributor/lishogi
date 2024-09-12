@@ -4,15 +4,11 @@ import play.api.i18n.Lang
 import play.api.libs.json._
 
 import lila.common.Json._
-import lila.game.GameRepo
 import lila.rating.Perf
-import lila.tree
-import lila.tree.Node.defaultNodeJsonWriter
 import lila.user.User
 
 final class JsonView(
-    gameJson: GameJson,
-    gameRepo: GameRepo
+    gameJson: GameJson
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
   import JsonView._
@@ -23,8 +19,7 @@ final class JsonView(
     puzzle.gameId.fold(fuccess(otherSourcesJson(puzzle))) { gid =>
       gameJson(
         gameId = gid,
-        plies = puzzle.initialPly,
-        bc = false
+        plies = puzzle.initialPly
       )
     } map { gameJson =>
       Json
@@ -47,17 +42,18 @@ final class JsonView(
     }
   }
 
-  def otherSourcesJson(puzzle: Puzzle) =
+  private def otherSourcesJson(puzzle: Puzzle) =
     Json
       .obj(
-        "fen" -> puzzle.fen
+        "sfen" -> puzzle.sfen
       )
       .add("author" -> puzzle.author)
       .add("description" -> puzzle.description)
 
-  def userJson(u: User) =
+  private def userJson(u: User) =
     Json
       .obj(
+        "id"     -> u.id,
         "rating" -> u.perfs.puzzle.intRating
       )
       .add(
@@ -80,17 +76,25 @@ final class JsonView(
         })
       })
 
+  def roundJsonApi(round: PuzzleRound, ratingDiff: IntRatingDiff) = Json.obj(
+    "id"         -> round.id.puzzleId,
+    "win"        -> round.win,
+    "ratingDiff" -> ratingDiff.value
+  )
+
   def pref(p: lila.pref.Pref) =
     Json.obj(
-      "blindfold"       -> p.blindfold,
-      "coords"          -> p.coords,
-      "animation"       -> Json.obj("duration" -> p.animationFactor * 250),
-      "destination"     -> p.destination,
-      "dropDestination" -> p.dropDestination,
-      "moveEvent"       -> p.moveEvent,
-      "highlight"       -> p.highlight,
-      "is3d"            -> p.is3d,
-      "pieceNotation"   -> p.pieceNotation
+      "blindfold"          -> p.blindfold,
+      "coords"             -> p.coords,
+      "animation"          -> Json.obj("duration" -> p.animationMillis),
+      "destination"        -> p.destination,
+      "dropDestination"    -> p.dropDestination,
+      "moveEvent"          -> p.moveEvent,
+      "highlightLastDests" -> p.highlightLastDests,
+      "highlightCheck"     -> p.highlightCheck,
+      "squareOverlay"      -> p.squareOverlay,
+      "resizeHandle"       -> p.resizeHandle,
+      "keyboardMove"       -> (p.keyboardMove == lila.pref.Pref.KeyboardMove.YES)
     )
 
   def dashboardJson(dash: PuzzleDashboard, days: Int)(implicit lang: Lang) = Json.obj(
@@ -112,110 +116,41 @@ final class JsonView(
     "performance"     -> res.performance
   )
 
-  private def puzzleJson(puzzle: Puzzle): JsObject = Json.obj(
-    "id"         -> puzzle.id,
-    "rating"     -> puzzle.glicko.intRating,
-    "plays"      -> puzzle.plays,
-    "initialPly" -> puzzle.initialPly,
-    "solution" -> {
-      if (puzzle.gameId.isDefined) puzzle.line.tail.map(_.uci).toList
-      else puzzle.line.map(_.uci).toList
-    },
-    "themes" -> simplifyThemes(puzzle.themes)
-  )
+  private def puzzleJson(puzzle: Puzzle): JsObject = Json
+    .obj(
+      "id"          -> puzzle.id,
+      "rating"      -> puzzle.glicko.intRating,
+      "plays"       -> puzzle.plays,
+      "initialSfen" -> puzzle.sfen,
+      "initialPly"  -> puzzle.initialPly,
+      "solution" -> {
+        if (puzzle.gameId.isDefined) puzzle.line.tail.map(_.usi).toList
+        else puzzle.line.map(_.usi).toList
+      },
+      "themes" -> simplifyThemes(puzzle.themes)
+    )
+    .add("ambPromotions", puzzle.ambiguousPromotions.some.filter(_.nonEmpty))
+    .add("initialUsi", puzzle.gameId.isDefined option puzzle.line.head.usi)
 
   private def simplifyThemes(themes: Set[PuzzleTheme.Key]) =
     themes.filterNot(_ == PuzzleTheme.mate.key)
 
-  object bc {
+  object mobile {
 
-    def apply(puzzle: Puzzle, theme: PuzzleTheme, user: Option[User])(implicit
-        lang: Lang
-    ): Fu[JsObject] = {
-      puzzle.gameId.fold(fuccess(otherSourcesJson(puzzle))) { gid =>
-        gameJson(
-          gameId = gid,
-          plies = puzzle.initialPly,
-          bc = true
-        )
-      } map { gameJson =>
-        Json
-          .obj(
-            "game"   -> gameJson,
-            "puzzle" -> puzzleJson(puzzle)
-          )
-          .add("user" -> user.map(_.perfs.puzzle.intRating).map(userJson))
-      }
-    }
+    def apply(puzzles: Seq[Puzzle], theme: PuzzleTheme, user: Option[User]): JsObject =
+      Json
+        .obj("puzzles" -> puzzles.map(p => mobilePuzzleJson(p)), "theme" -> theme.key)
+        .add("user" -> user.map(userJson))
 
-    def batch(puzzles: Seq[Puzzle], user: Option[User])(implicit
-        lang: Lang
-    ): Fu[JsObject] = for {
-      games <- gameRepo.gameOptionsFromSecondary(puzzles.map(_.gameId.get))
-      jsons <- (puzzles zip games).collect { case (puzzle, Some(game)) =>
-        gameJson.noCacheBc(game, puzzle.initialPly) map { gameJson =>
-          Json.obj(
-            "game"   -> gameJson,
-            "puzzle" -> puzzleJson(puzzle)
-          )
-        }
-      }.sequenceFu
-    } yield Json
-      .obj("puzzles" -> jsons)
-      .add("user" -> user.map(_.perfs.puzzle.intRating).map(userJson))
+    private def mobileSource(puzzle: Puzzle): JsObject =
+      Json.obj(
+        "gameId" -> puzzle.gameId,
+        "author" -> puzzle.author
+      )
 
-    def userJson(rating: Int) = Json.obj(
-      "rating" -> rating,
-      "recent" -> Json.arr()
-    )
+    private def mobilePuzzleJson(puzzle: Puzzle): JsObject =
+      puzzleJson(puzzle) ++ mobileSource(puzzle)
 
-    private def puzzleJson(puzzle: Puzzle) = Json.obj(
-      "id"         -> Puzzle.numericalId(puzzle.id),
-      "realId"     -> puzzle.id,
-      "rating"     -> puzzle.glicko.intRating,
-      "attempts"   -> puzzle.plays,
-      "fen"        -> puzzle.fen,
-      "color"      -> puzzle.color.name,
-      "initialPly" -> (puzzle.initialPly + 1),
-      "gameId"     -> puzzle.gameId,
-      "lines" -> {
-        if (puzzle.gameId.isDefined)
-          puzzle.line.tail.reverse.foldLeft[JsValue](JsString("win")) { case (acc, move) =>
-            Json.obj(move.uci -> acc)
-          }
-        else
-          puzzle.line.reverse.foldLeft[JsValue](JsString("win")) { case (acc, move) =>
-            Json.obj(move.uci -> acc)
-          }
-      },
-      "vote"   -> 0,
-      "branch" -> makeBranch(puzzle).map(defaultNodeJsonWriter.writes)
-    )
-
-    private def makeBranch(puzzle: Puzzle): Option[tree.Branch] = {
-      import shogi.format._
-      val init     = shogi.Game(none, puzzle.fenAfterInitialMove.value.some).withTurns(puzzle.initialPly + 1)
-      val solution = puzzle.gameId.fold(puzzle.line.list)(_ => puzzle.line.tail)
-      val (_, branchList) = solution.foldLeft[(shogi.Game, List[tree.Branch])]((init, Nil)) {
-        case ((prev, branches), uci) =>
-          val (game, move) =
-            prev(uci)
-              .fold(err => sys error s"puzzle ${puzzle.id} $err", identity)
-          val branch = tree.Branch(
-            id = UciCharPair(move.fold(l => l.toUci, r => r.toUci)),
-            ply = game.turns,
-            move = Uci.WithSan(move.fold(l => l.toUci, r => r.toUci), game.pgnMoves.last),
-            fen = shogi.format.Forsyth >> game,
-            check = game.situation.check,
-            crazyData = game.situation.board.crazyData
-          )
-          (game, branch :: branches)
-      }
-      branchList.foldLeft[Option[tree.Branch]](None) {
-        case (None, branch)        => branch.some
-        case (Some(child), branch) => Some(branch addChild child)
-      }
-    }
   }
 }
 

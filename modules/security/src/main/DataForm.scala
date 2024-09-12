@@ -5,7 +5,7 @@ import play.api.data.Forms._
 import play.api.data.validation.Constraints
 import scala.concurrent.duration._
 
-import lila.common.{ EmailAddress, LameName, Form => LilaForm }
+import lila.common.{ EmailAddress, Form => LilaForm, LameName }
 import lila.user.{ TotpSecret, User, UserRepo }
 import User.{ ClearPassword, TotpToken }
 
@@ -32,7 +32,7 @@ final class DataForm(
 
   def emptyWithCaptcha = withCaptcha(empty)
 
-  private val anyEmail        = LilaForm.clean(text).verifying(Constraints.emailAddress)
+  private val anyEmail        = LilaForm.cleanNonEmptyText.verifying(Constraints.emailAddress)
   private val sendableEmail   = anyEmail.verifying(emailValidator.sendableConstraint)
   private val acceptableEmail = anyEmail.verifying(emailValidator.acceptableConstraint)
   private def acceptableUniqueEmail(forUser: Option[User]) =
@@ -42,7 +42,7 @@ final class DataForm(
 
   private val preloadEmailDnsForm = Form(single("email" -> acceptableEmail))
 
-  def preloadEmailDns(implicit req: play.api.mvc.Request[_]): Funit =
+  def preloadEmailDns(implicit req: play.api.mvc.Request[_], formBinding: FormBinding): Funit =
     preloadEmailDnsForm
       .bindFromRequest()
       .fold(
@@ -52,8 +52,7 @@ final class DataForm(
 
   object signup {
 
-    val username = LilaForm
-      .clean(nonEmptyText)
+    val username = LilaForm.cleanNonEmptyText
       .verifying(
         Constraints minLength 2,
         Constraints maxLength 20,
@@ -188,7 +187,7 @@ final class DataForm(
       Form(
         tuple(
           "passwd" -> passwordMapping(candidate),
-          "token"  -> text.verifying("invalidAuthenticationCode", t => u.totpSecret.??(_.verify(TotpToken(t))))
+          "token" -> text.verifying("invalidAuthenticationCode", t => u.totpSecret.??(_.verify(TotpToken(t))))
         )
       )
     }
@@ -215,7 +214,7 @@ final class DataForm(
 
   val reopen = Form(
     mapping(
-      "username" -> LilaForm.clean(nonEmptyText),
+      "username" -> LilaForm.cleanNonEmptyText,
       "email"    -> sendableEmail, // allow unacceptable emails for BC
       "gameId"   -> text,
       "move"     -> text

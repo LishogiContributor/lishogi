@@ -10,7 +10,7 @@ object clone {
 
   def apply(s: lila.study.Study)(implicit ctx: Context) =
     views.html.site.message(
-      title = s"Clone ${s.name}",
+      title = s"${trans.study.cloneStudy.txt()} ${s.name}",
       icon = Some("4")
     ) {
       postForm(action := routes.Study.cloneApply(s.id.value))(
@@ -20,9 +20,9 @@ object clone {
         p("Deleting one study will ", strong("not"), " delete the other study."),
         p(
           submitButton(
-            cls := "submit button large text",
+            cls      := "submit button large text",
             dataIcon := "4",
-            style := "margin: 30px auto; display: block; font-size: 2em;"
+            style    := "margin: 30px auto; display: block; font-size: 2em;"
           )("Clone the study")
         ),
         p(

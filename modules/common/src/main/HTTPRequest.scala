@@ -30,6 +30,7 @@ object HTTPRequest {
     "http://localhost",      // android
     "http://192.168.1.154",
     "http://localhost:8080", // local dev
+    "http://localhost:8100", // local dev
     "file://"                // old app
   )
 
@@ -48,6 +49,13 @@ object HTTPRequest {
   private def uaContains(req: RequestHeader, str: String) = userAgent(req).exists(_ contains str)
   def isChrome(req: RequestHeader)                        = uaContains(req, "Chrome/")
 
+  // chrome 96+, firefox 119+
+  val isChrome96Plus   = UaMatcher("""Chrome/(?:\d{3,}|9[6-9])""")
+  val isFirefox119Plus = UaMatcher("""Firefox/(?:119|1[2-9]\d|[2-9]\d\d)""")
+  val isMobielBrowser  = UaMatcher("""(?i)iphone|ipad|ipod|android.+mobile""")
+  def supportsCredentialless(req: RequestHeader) =
+    isChrome96Plus(req) || (!isMobielBrowser(req) && isFirefox119Plus(req))
+
   def origin(req: RequestHeader): Option[String] = req.headers get HeaderNames.ORIGIN
 
   def referer(req: RequestHeader): Option[String] = req.headers get HeaderNames.REFERER
@@ -58,6 +66,11 @@ object HTTPRequest {
     }
 
   def sid(req: RequestHeader): Option[String] = req.session get LilaCookie.sessionId
+
+  val userSessionIdKey = "sessionId"
+
+  def userSessionId(req: RequestHeader): Option[String] =
+    req.session.get(userSessionIdKey) orElse req.headers.get(userSessionIdKey)
 
   val isCrawler = UaMatcher {
     ("""(?i)googlebot|googlebot-mobile|googlebot-image|mediapartners-google|bingbot|slurp|java|wget|curl|commons-httpclient|python-urllib|libwww|httpunit|nutch|phpcrawl|msnbot|adidxbot|blekkobot|teoma|ia_archiver|gingercrawler|webmon|httrack|webcrawler|fast-webcrawler|fastenterprisecrawler|convera|biglotron|grub\.org|usinenouvellecrawler|antibot|netresearchserver|speedy|fluffy|jyxobot|bibnum\.bnf|findlink|exabot|gigabot|msrbot|seekbot|ngbot|panscient|yacybot|aisearchbot|ioi|ips-agent|tagoobot|mj12bot|dotbot|woriobot|yanga|buzzbot|mlbot|purebot|lingueebot|yandex\.com/bots|""" +
@@ -71,7 +84,7 @@ object HTTPRequest {
     def apply(req: RequestHeader): Boolean = userAgent(req) ?? { regex.find(_) }
   }
 
-  def isFishnet(req: RequestHeader) = req.path startsWith "/fishnet/"
+  def isFishnet(req: RequestHeader) = req.path startsWith "/shoginet/"
 
   def isHuman(req: RequestHeader) = !isCrawler(req) && !isFishnet(req)
 
@@ -84,7 +97,7 @@ object HTTPRequest {
 
   def hasFileExtension(req: RequestHeader) = fileExtensionRegex.find(req.path)
 
-  def weirdUA(req: RequestHeader) = userAgent(req).fold(true)(_.size < 30)
+  def weirdUA(req: RequestHeader) = userAgent(req).fold(true)(_.sizeIs < 30)
 
   def print(req: RequestHeader) = s"${printReq(req)} ${printClient(req)}"
 
@@ -93,7 +106,13 @@ object HTTPRequest {
   def printClient(req: RequestHeader) =
     s"${lastRemoteAddress(req)} origin:${~origin(req)} referer:${~referer(req)} ua:${~userAgent(req)}"
 
-  def isOAuth(req: RequestHeader) = req.headers.toMap.contains(HeaderNames.AUTHORIZATION)
+  def bearer(req: RequestHeader): Option[Bearer] =
+    req.headers.get(HeaderNames.AUTHORIZATION).flatMap { authorization =>
+      val prefix = "Bearer "
+      authorization.startsWith(prefix) option Bearer(authorization.stripPrefix(prefix))
+    }
+
+  def isOAuth(req: RequestHeader) = bearer(req).isDefined
 
   def acceptsNdJson(req: RequestHeader) = req.headers get HeaderNames.ACCEPT contains "application/x-ndjson"
   def acceptsJson(req: RequestHeader)   = req.headers get HeaderNames.ACCEPT contains "application/json"

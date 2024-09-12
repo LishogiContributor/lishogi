@@ -44,6 +44,7 @@ sealed trait Context extends lila.user.UserContextWrapper {
   val pageData: PageData
 
   def lang = userContext.lang
+  def withLang(newLang: Lang): Context
 
   def teamNbRequests  = pageData.teamNbRequests
   def nbChallenges    = pageData.nbChallenges
@@ -57,17 +58,19 @@ sealed trait Context extends lila.user.UserContextWrapper {
 
   def currentTheme = lila.pref.Theme(pref.theme)
 
-  def currentTheme3d = lila.pref.Theme3d(pref.theme3d)
-
   def currentPieceSet = lila.pref.PieceSet(pref.pieceSet)
 
-  def currentPieceSet3d = lila.pref.PieceSet3d(pref.pieceSet3d)
+  def currentChuPieceSet = lila.pref.ChuPieceSet(pref.chuPieceSet)
+
+  def currentKyoPieceSet = lila.pref.KyoPieceSet(pref.kyoPieceSet)
 
   def currentSoundSet = lila.pref.SoundSet(pref.soundSet)
 
   lazy val currentBg = if (pref.transp) "transp" else if (pref.dark) "dark" else "light"
 
   def transpBgImg = currentBg == "transp" option pref.bgImgOrDefault
+
+  def activeCustomTheme = (currentTheme.key == "custom") ?? pref.customTheme
 
   lazy val mobileApiVersion = Mobile.Api requestVersion req
 
@@ -79,7 +82,7 @@ sealed trait Context extends lila.user.UserContextWrapper {
 
   def zoom: Int = {
     req.session get "zoom2" flatMap (_.toIntOption) map (_ - 100) filter (0 <=) filter (100 >=)
-  } | 85
+  } | 90
 
   def flash(name: String): Option[String] = req.flash get name
 }
@@ -95,12 +98,17 @@ final class BodyContext[A](
 ) extends BaseContext(bodyContext, data) {
 
   def body = bodyContext.body
+
+  def withLang(l: Lang) = new BodyContext(bodyContext withLang l, data)
 }
 
 final class HeaderContext(
     headerContext: HeaderUserContext,
     data: PageData
-) extends BaseContext(headerContext, data)
+) extends BaseContext(headerContext, data) {
+
+  def withLang(l: Lang) = new HeaderContext(headerContext withLang l, data)
+}
 
 object Context {
 

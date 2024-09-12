@@ -1,8 +1,9 @@
 .hook__filters {
   padding: $block-gap 1.5em;
-  background: fade-out($c-bg-high, .5);
+  background: fade-out($c-bg-high, 0.5);
   height: 100%;
   white-space: nowrap;
+  display: block;
   td {
     padding: 1em 0;
   }
@@ -17,7 +18,8 @@
   }
   .checkable {
     @extend %nowrap-ellipsis;
-    label, input {
+    label,
+    input {
       vertical-align: middle;
       cursor: pointer;
     }
@@ -25,19 +27,22 @@
   .regular-checkbox {
     @extend %checkbox;
   }
-  tr.variant td:last-child {
-    display: flex;
-    flex-flow: row wrap;
-  }
-  tr.variant .checkable {
-    width: 33.3%;
+  tr.variant,
+  tr.days {
+    td:last-child {
+      display: flex;
+      flex-flow: row wrap;
+    }
+    .checkable {
+      width: 33.3%;
+    }
   }
   tr.inline .checkable {
     display: inline-block;
     padding: 4.3px 20px 4.3px 0;
   }
   input {
-    margin-right: .3em;
+    margin-right: 0.3em;
   }
   .range {
     display: block;
@@ -48,7 +53,7 @@
     margin-top: 1.5em;
     text-align: right;
     button {
-      margin-left: .3em;
+      margin-left: 0.3em;
     }
   }
 }

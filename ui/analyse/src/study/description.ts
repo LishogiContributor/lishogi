@@ -1,14 +1,18 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { bind, onInsert } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
+import { richHTML } from '../util';
 import { StudyCtrl } from './interfaces';
-import { bind, richHTML, onInsert } from '../util';
 
 export type Save = (string) => void;
 
 export class DescriptionCtrl {
   edit: boolean = false;
 
-  constructor(public text: string | undefined, readonly doSave: Save, readonly redraw: () => void) {}
+  constructor(
+    public text: string | undefined,
+    readonly doSave: Save,
+    readonly redraw: () => void
+  ) {}
 
   save(t: string) {
     this.text = t;
@@ -88,7 +92,13 @@ function edit(ctrl: DescriptionCtrl, id: string, chapter: boolean): VNode {
           'data-icon': 'L',
           title: 'Close',
         },
-        hook: bind('click', () => (ctrl.edit = false), ctrl.redraw),
+        hook: bind(
+          'click',
+          () => {
+            ctrl.edit = false;
+          },
+          ctrl.redraw
+        ),
       }),
     ]),
     h('form.form3', [

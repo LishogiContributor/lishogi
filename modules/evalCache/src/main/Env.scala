@@ -16,8 +16,7 @@ final class Env(
     cacheApi: lila.memo.CacheApi,
     scheduler: akka.actor.Scheduler
 )(implicit
-    ec: scala.concurrent.ExecutionContext,
-    mode: play.api.Mode
+    ec: scala.concurrent.ExecutionContext
 ) {
 
   private lazy val coll = db(appConfig.get[CollName]("evalCache.collection.evalCache"))
@@ -46,8 +45,8 @@ final class Env(
 
   def cli =
     new lila.common.Cli {
-      def process = { case "eval-cache" :: "drop" :: fenParts =>
-        api.drop(shogi.variant.Standard, shogi.format.FEN(fenParts mkString " ")) inject "done!"
+      def process = { case "eval-cache" :: "drop" :: sfenParts =>
+        api.drop(shogi.variant.Standard, shogi.format.forsyth.Sfen(sfenParts mkString " ")) inject "done!"
       }
     }
 }

@@ -10,8 +10,8 @@ final class Importer(env: Env) extends LilaController(env) {
   def importGame =
     OpenBody { implicit ctx =>
       fuccess {
-        val pgn  = ctx.body.queryString.get("pgn").flatMap(_.headOption).getOrElse("")
-        val data = lila.importer.ImportData(pgn, None)
+        val notation = ctx.body.queryString.get("notation").flatMap(_.headOption).getOrElse("")
+        val data     = lila.importer.ImportData(notation, None)
         Ok(html.game.importGame(env.importer.forms.importForm.fill(data)))
       }
     }
@@ -25,7 +25,7 @@ final class Importer(env: Env) extends LilaController(env) {
           failure =>
             negotiate(
               html = Ok(html.game.importGame(failure)).fuccess,
-              api = _ => BadRequest(Json.obj("error" -> "Invalid PGN")).fuccess
+              api = _ => BadRequest(Json.obj("error" -> "Invalid notation")).fuccess
             ),
           data =>
             env.importer.importer(data, ctx.userId) flatMap { game =>
@@ -35,8 +35,9 @@ final class Importer(env: Env) extends LilaController(env) {
                     game,
                     lila.fishnet.Work.Sender(
                       userId = ctx.userId,
+                      postGameStudy = none,
                       ip = HTTPRequest.lastRemoteAddress(ctx.req).some,
-                      mod = isGranted(_.Hunter) || isGranted(_.Relay),
+                      mod = isGranted(_.Hunter),
                       system = false
                     )
                   )
@@ -45,22 +46,11 @@ final class Importer(env: Env) extends LilaController(env) {
               lila
                 .log("importer")
                 .warn(
-                  s"Imported game validates but can't be replayed:\n${data.pgn}",
+                  s"Imported game validates but can't be replayed:\n${data.notation}",
                   e
                 )
-              Redirect(routes.Importer.importGame())
+              Redirect(routes.Importer.importGame)
             }
         )
-    }
-
-  def masterGame(id: String, orientation: String) =
-    Open { implicit ctx =>
-      env.explorer.importer(id) map {
-        _ ?? { game =>
-          val url      = routes.Round.watcher(game.id, orientation).url
-          val fenParam = get("fen").??(f => s"?fen=$f")
-          Redirect(s"$url$fenParam")
-        }
-      }
     }
 }

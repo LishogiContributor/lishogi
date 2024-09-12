@@ -24,29 +24,30 @@ object home {
       wrapClass = "full-screen-force",
       moreJs = frag(
         infiniteScrollTag,
-        jsAt(s"compiled/lishogi.tournamentSchedule${isProd ?? ".min"}.js"),
+        jsModule("tournamentSchedule"),
         embedJsUnsafe(
           s"""var app=LishogiTournamentSchedule.app(document.querySelector('.tour-chart'), ${safeJsonValue(
-            Json.obj(
-              "data" -> json,
-              "i18n" -> bits.jsI18n
-            )
-          )});
+              Json.obj(
+                "data" -> json,
+                "i18n" -> bits.scheduleJsI18n
+              )
+            )});
 var d=lishogi.StrongSocket.defaults;d.params.flag="tournament";d.events.reload=app.update;"""
         )
       ),
       openGraph = lila.app.ui
         .OpenGraph(
-          url = s"$netBaseUrl${routes.Tournament.home().url}",
+          url = s"$netBaseUrl${routes.Tournament.home.url}",
           title = trans.tournamentHomeTitle.txt(),
           description = trans.tournamentHomeDescription.txt()
         )
-        .some
+        .some,
+      withHrefLangs = lila.i18n.LangList.All.some
     ) {
       main(cls := "tour-home")(
         st.aside(cls := "tour-home__side")(
           h2(
-            a(href := routes.Tournament.leaderboard())(trans.leaderboard())
+            a(href := routes.Tournament.leaderboard)(trans.leaderboard())
           ),
           ul(cls := "leaderboard")(
             winners.top.map { w =>
@@ -65,7 +66,7 @@ var d=lishogi.StrongSocket.defaults;d.params.flag="tournament";d.events.reload=a
                 br
               )
             },
-            a(href := routes.Tournament.calendar())(trans.tournamentCalendar()),
+            a(href := routes.Tournament.calendar)(trans.tournamentCalendar()),
             br,
             a(href := routes.Tournament.help("arena".some))(trans.tournamentFAQ())
           ),
@@ -86,8 +87,8 @@ var d=lishogi.StrongSocket.defaults;d.params.flag="tournament";d.events.reload=a
             h1(trans.tournaments()),
             ctx.isAuth option div(cls := "box__top__actions")(
               a(
-                href := routes.Tournament.form(),
-                cls := "button button-green text",
+                href     := routes.Tournament.form,
+                cls      := "button button-green text",
                 dataIcon := "O"
               )(trans.createANewTournament())
             )

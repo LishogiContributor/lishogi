@@ -1,8 +1,6 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { MaybeVNodes, bind } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import TournamentController from './ctrl';
-import { MaybeVNodes } from './interfaces';
-import { bind } from './view/util';
 import * as search from './search';
 
 const maxPerPage = 10;

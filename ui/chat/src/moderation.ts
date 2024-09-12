@@ -1,8 +1,9 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { ModerationCtrl, ModerationOpts, ModerationData, ModerationReason } from './interfaces';
+import { bind } from 'common/snabbdom';
+import spinner from 'common/spinner';
+import { VNode, h } from 'snabbdom';
+import { ModerationCtrl, ModerationData, ModerationOpts, ModerationReason } from './interfaces';
+import { userLink } from './util';
 import { userModInfo } from './xhr';
-import { userLink, spinner, bind } from './util';
 
 export function moderationCtrl(opts: ModerationOpts): ModerationCtrl {
   let data: ModerationData | undefined;
@@ -67,12 +68,7 @@ export function moderationView(ctrl?: ModerationCtrl): VNode[] | undefined {
   const infos = data.history
     ? h(
         'div.infos.block',
-        [
-          window.lishogi.numberFormat(data.games || 0) + ' games',
-          data.troll ? 'TROLL' : undefined,
-          data.engine ? 'ENGINE' : undefined,
-          data.booster ? 'BOOSTER' : undefined,
-        ]
+        [window.lishogi.numberFormat(data.games || 0) + ' games', data.tos ? 'TOS' : undefined]
           .map(t => t && h('span', t))
           .concat([
             h(

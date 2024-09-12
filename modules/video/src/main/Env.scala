@@ -38,7 +38,7 @@ final class Env(
     viewColl = db(config.viewColl)
   )
 
-  private lazy val sheet = new Sheet(ws, config.sheetUrl, api)
+  private lazy val sheet = new VideoSheet(ws, config.sheetUrl, api)
 
   private lazy val youtube = new Youtube(
     ws = ws,
@@ -50,11 +50,11 @@ final class Env(
 
   if (mode == Mode.Prod) {
     scheduler.scheduleWithFixedDelay(config.sheetDelay * 2, config.sheetDelay) { () =>
-      sheet.fetchAll logFailure logger nevermind
+      sheet.fetchAll.logFailure(logger).unit
     }
 
     scheduler.scheduleWithFixedDelay(config.youtubeDelay * 2, config.youtubeDelay) { () =>
-      youtube.updateAll logFailure logger nevermind
+      youtube.updateAll.logFailure(logger).unit
     }
   }
 }

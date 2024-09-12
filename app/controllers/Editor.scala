@@ -1,41 +1,40 @@
 package controllers
 
-import shogi.format.Forsyth
+import shogi.format.forsyth.Sfen
+import shogi.variant.{ Standard, Variant }
 import shogi.Situation
-import play.api.libs.json._
 
 import lila.app._
 import views._
 
 final class Editor(env: Env) extends LilaController(env) {
 
-  private lazy val positionsJson = lila.common.String.html.safeJsonValue {
-    JsArray(shogi.StartingPosition.all map { p =>
-      Json.obj(
-        "eco"  -> p.eco,
-        "name" -> p.name,
-        "fen"  -> p.fen
-      )
-    })
-  }
+  def index = load("", Standard)
 
-  def index = load("")
+  def parseArg(arg: String) =
+    arg.split("/", 2) match {
+      case Array(key) => load("", Variant orDefault key)
+      case Array(key, sfen) =>
+        Variant.byKey get key match {
+          case Some(variant) => load(sfen, variant)
+          case _             => load(arg, Standard)
+        }
+      case _ => load("", Standard)
+    }
 
-  def load(urlFen: String) =
+  def load(urlSfen: String, variant: Variant) =
     Open { implicit ctx =>
-      val fenStr = lila.common.String
-        .decodeUriPath(urlFen)
-        .map(_.replace('_', ' ').trim)
-        .filter(_.nonEmpty)
-        .orElse(get("fen"))
+      val decodedSfen: Option[Sfen] = lila.common.String
+        .decodeUriPath(urlSfen)
+        .filter(_.trim.nonEmpty)
+        .orElse(get("sfen")) map Sfen.clean
+      val color = ctx.req.getQueryString("orientation").flatMap(shogi.Color.fromName).getOrElse(shogi.Sente)
       fuccess {
-        val situation = readFen(fenStr)
+        val situation = readSfen(decodedSfen, variant.some)
         Ok(
           html.board.editor(
-            sit = situation,
-            fen = Forsyth >> situation,
-            positionsJson,
-            animationDuration = env.api.config.editorAnimationDuration
+            situation,
+            color
           )
         )
       }
@@ -44,28 +43,27 @@ final class Editor(env: Env) extends LilaController(env) {
   def data =
     Open { implicit ctx =>
       fuccess {
-        val situation = readFen(get("fen"))
+        val sfen        = get("sfen") map Sfen.clean
+        val variant     = get("variant").flatMap(Variant.byKey get _)
+        val sit         = readSfen(sfen, variant)
+        val orientation = get("orientation").flatMap(shogi.Color.fromName).getOrElse(shogi.Sente)
         Ok(
-          html.board.bits.jsData(
-            sit = situation,
-            fen = Forsyth >> situation,
-            animationDuration = env.api.config.editorAnimationDuration
-          )
+          html.board.editor.jsData(sit, orientation)
         ) as JSON
       }
     }
 
-  private def readFen(fen: Option[String]): Situation =
-    fen.map(_.trim).filter(_.nonEmpty).flatMap(Forsyth.<<<).map(_.situation) | Situation(
-      shogi.variant.Standard
-    )
+  private def readSfen(sfenO: Option[Sfen], variantO: Option[Variant]): Situation = {
+    val variant = variantO | Standard
+    sfenO.filter(_.value.nonEmpty).flatMap(_.toSituation(variant)) | Situation(variant)
+  }
 
   def game(id: String) =
     Open { implicit ctx =>
       OptionResult(env.game.gameRepo game id) { game =>
         Redirect {
-          if (game.playable) routes.Round.watcher(game.id, "sente")
-          else routes.Editor.load(get("fen") | (shogi.format.Forsyth >> game.shogi))
+          if (game.playableEvenPaused) routes.Round.watcher(game.id, "sente")
+          else routes.Editor.parseArg(s"${game.variant.key}/${get("sfen") | (game.shogi.toSfen).value}")
         }
       }
     }

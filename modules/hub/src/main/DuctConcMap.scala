@@ -48,13 +48,15 @@ final class DuctConcMap[D <: Duct](
   def size: Int = ducts.size()
 
   def terminate(id: String, lastWill: Duct => Unit): Unit =
-    ducts.computeIfPresent(
-      id,
-      (_, d) => {
-        lastWill(d)
-        nullD
-      }
-    )
+    ducts
+      .computeIfPresent(
+        id,
+        (_, d) => {
+          lastWill(d)
+          nullD
+        }
+      )
+      .unit
 
   private[this] val ducts = new ConcurrentHashMap[String, D](initialCapacity)
 
@@ -63,5 +65,6 @@ final class DuctConcMap[D <: Duct](
   }
 
   // used to remove entries
+  @scala.annotation.nowarn
   private[this] var nullD: D = _
 }

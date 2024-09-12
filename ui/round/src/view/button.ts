@@ -1,21 +1,231 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { Hooks } from 'snabbdom/hooks';
-import * as util from '../util';
+import { modal } from 'common/modal';
+import { MaybeVNode, MaybeVNodes, onInsert } from 'common/snabbdom';
+import spinner from 'common/spinner';
 import * as game from 'game';
-import * as status from 'game/status';
 import { game as gameRoute } from 'game/router';
-import { PlayerUser } from 'game';
-import { RoundData, MaybeVNodes } from '../interfaces';
-import { ClockData } from '../clock/clockCtrl';
+import * as status from 'game/status';
+import { Hooks, VNode, h } from 'snabbdom';
 import RoundController from '../ctrl';
+import { RoundData } from '../interfaces';
+import * as util from '../util';
 
 function analysisBoardOrientation(data: RoundData) {
   return data.player.color;
 }
 
-function poolUrl(clock: ClockData, blocking?: PlayerUser) {
-  return '/#pool/' + clock.initial / 60 + '+' + clock.increment + (blocking ? '/' + blocking.id : '');
+function standardStudyForm(ctrl: RoundController): VNode {
+  return h(
+    'form',
+    {
+      attrs: {
+        method: 'post',
+        action: '/study/as',
+      },
+    },
+    [
+      h('input', {
+        attrs: { type: 'hidden', name: 'gameId', value: ctrl.data.game.id },
+      }),
+      h('input', {
+        attrs: { type: 'hidden', name: 'orientation', value: ctrl.shogiground.state.orientation },
+      }),
+      h(
+        'button.button',
+        {
+          attrs: {
+            type: 'submit',
+          },
+        },
+        ctrl.trans.noarg('createStudy')
+      ),
+    ]
+  );
+}
+
+function postGameStudyForm(ctrl: RoundController): VNode {
+  return h(
+    'form',
+    {
+      hook: util.onInsert(el => {
+        $(el).on('submit', e => {
+          e.preventDefault();
+          const formData = $(e.target).serialize();
+          window.lishogi.debounce(
+            () => {
+              $.post('/study/post-game-study', formData)
+                .done(res => {
+                  if (res.redirect) {
+                    ctrl.setRedirecting();
+                    window.lishogi.hasToReload = true;
+                    window.location.href = res.redirect;
+                  }
+                })
+                .fail(res => {
+                  alert(`${res.statusText} - ${res.error}`);
+                });
+            },
+            1000,
+            true
+          )();
+        });
+      }),
+    },
+    [
+      h('input', {
+        attrs: { type: 'hidden', name: 'gameId', value: ctrl.data.game.id },
+      }),
+      h('div', [
+        h('label', ctrl.trans.noarg('studyWith')),
+        h('input.user-invite', {
+          hook: onInsert<HTMLInputElement>(el => {
+            window.lishogi.userAutocomplete($(el), {
+              tag: 'span',
+              focus: true,
+            });
+          }),
+          attrs: {
+            name: 'invited',
+            placeholder: ctrl.trans.noarg('searchByUsername') + ` (${ctrl.trans.noarg('optional').toLowerCase()})`,
+          },
+        }),
+      ]),
+      h('input', {
+        attrs: { type: 'hidden', name: 'orientation', value: ctrl.shogiground.state.orientation },
+      }),
+      h(
+        'button.button',
+        {
+          attrs: {
+            type: 'submit',
+          },
+        },
+        ctrl.trans.noarg('createStudy')
+      ),
+    ]
+  );
+}
+
+function studyAdvancedButton(ctrl: RoundController): VNode | null {
+  const d = ctrl.data;
+  return game.replayable(d) && !!ctrl.data.player.user
+    ? h(
+        'a.fbt.new-study-button',
+        {
+          hook: util.bind('click', _ => {
+            ctrl.openStudyModal = true;
+            ctrl.redraw();
+          }),
+        },
+        '+'
+      )
+    : null;
+}
+
+function studyModal(ctrl: RoundController): VNode {
+  const d = ctrl.data;
+  return modal({
+    class: 'study__invite',
+    onClose() {
+      ctrl.openStudyModal = false;
+      ctrl.redraw();
+    },
+    content: [
+      h('div', [
+        h('div.study-option', [
+          h('div.study-title', ctrl.trans.noarg('postGameStudy')),
+          h('div.desc', ctrl.trans.noarg('postGameStudyExplanation')),
+          postGameStudyForm(ctrl),
+          h(
+            'a.text',
+            { attrs: { 'data-icon': '', href: `/study/post-game-study/${d.game.id}/hot` } },
+            ctrl.trans.noarg('postGameStudiesOfGame')
+          ),
+        ]),
+        h('div.study-option', [h('div.study-title', ctrl.trans.noarg('standardStudy')), standardStudyForm(ctrl)]),
+      ]),
+    ],
+  });
+}
+
+let loadingStudy = false;
+let initiatedStudy = false;
+function studyButton(ctrl: RoundController): VNode | null {
+  const d = ctrl.data,
+    isAnon = !ctrl.data.player.user,
+    withAnonOrAnon = !ctrl.data.opponent.user || isAnon;
+  const title = withAnonOrAnon
+    ? ctrl.trans.noarg('postGameStudy')
+    : !!ctrl.data.player.spectator
+      ? ctrl.trans.noarg('studyOfPlayers')
+      : ctrl.trans.noarg('studyWithOpponent');
+  return game.replayable(d)
+    ? h('div.post-game-study', [
+        ctrl.postGameStudyOffer && !loadingStudy
+          ? h(
+              'button.post-game-study-decline',
+              {
+                attrs: {
+                  'data-icon': 'L',
+                  title: ctrl.trans.noarg('decline'),
+                },
+                hook: util.bind('click', () => {
+                  ctrl.postGameStudyOffer = false;
+                  ctrl.redraw();
+                }),
+              },
+              ctrl.nvui ? ctrl.trans.noarg('decline') : ''
+            )
+          : null,
+        d.game.postGameStudy && !loadingStudy
+          ? h(
+              'a.fbt',
+              {
+                class: {
+                  glowing: ctrl.postGameStudyOffer && !loadingStudy && !initiatedStudy,
+                },
+                attrs: { href: '/study/' + d.game.postGameStudy },
+                hook: util.bind('click', () => {
+                  ctrl.postGameStudyOffer = false;
+                }),
+              },
+              h('span', title)
+            )
+          : h(
+              'form',
+              {
+                attrs: {
+                  method: 'post',
+                  action: '/study/post-game-study/' + d.game.id,
+                },
+                hook: util.bind('submit', () => {
+                  setTimeout(() => {
+                    loadingStudy = false;
+                    ctrl.redraw();
+                  }, 2500);
+                  loadingStudy = true;
+                  initiatedStudy = true;
+                  ctrl.redraw();
+                }),
+              },
+              [
+                h(
+                  'button.fbt',
+                  {
+                    class: {
+                      inactive: loadingStudy,
+                    },
+                    attrs: {
+                      type: 'submit',
+                      disabled: !!ctrl.data.player.spectator || isAnon,
+                    },
+                  },
+                  loadingStudy ? spinner() : title
+                ),
+              ]
+            ),
+        loadingStudy ? null : studyAdvancedButton(ctrl),
+      ])
+    : null;
 }
 
 function analysisButton(ctrl: RoundController): VNode | null {
@@ -84,16 +294,69 @@ function rematchButtons(ctrl: RoundController): MaybeVNodes {
           ctrl.redraw
         ),
       },
-      [me ? util.spinner() : h('span', noarg('rematch'))]
+      [me ? spinner() : h('span', noarg('rematch'))]
     ),
   ];
+}
+
+export function resume(ctrl: RoundController): MaybeVNode {
+  if (!status.paused(ctrl.data)) return null;
+  const d = ctrl.data,
+    me = !!d.player.offeringResume,
+    them = !!d.opponent.offeringResume,
+    noarg = ctrl.noarg;
+  return h('div.resume-button', [
+    them
+      ? h(
+          'button.resume-decline',
+          {
+            attrs: {
+              'data-icon': 'L',
+              title: noarg('decline'),
+            },
+            hook: util.bind('click', () => {
+              ctrl.socket.send('resume-no');
+            }),
+          },
+          ctrl.nvui ? noarg('decline') : ''
+        )
+      : null,
+    h(
+      'button.fbt.resume.sente',
+      {
+        class: {
+          me,
+          glowing: them,
+          disabled: !me && !(d.opponent.onGame || (!d.clock && d.player.user && d.opponent.user)),
+        },
+        attrs: {
+          title: them ? noarg('yourOpponentProposesResumption') : me ? noarg('resumptionOfferSent') : '',
+        },
+        hook: util.bind(
+          'click',
+          () => {
+            const d = ctrl.data;
+            if (d.player.offeringResume) {
+              d.player.offeringResume = false;
+              ctrl.socket.send('resume-no');
+            } else if (d.opponent.onGame) {
+              d.player.offeringResume = true;
+              ctrl.socket.send('resume-yes');
+            }
+          },
+          ctrl.redraw
+        ),
+      },
+      [me ? spinner() : h('span', noarg(them ? 'acceptResumption' : 'offerResumption'))]
+    ),
+  ]);
 }
 
 export function standard(
   ctrl: RoundController,
   condition: ((d: RoundData) => boolean) | undefined,
   icon: string,
-  hint: string,
+  hint: I18nKey,
   socketMsg: string,
   onclick?: () => void
 ): VNode {
@@ -113,6 +376,24 @@ export function standard(
       }),
     },
     [h('span', ctrl.nvui ? [ctrl.noarg(hint)] : util.justIcon(icon))]
+  );
+}
+
+export function impasse(ctrl: RoundController): MaybeVNode {
+  return h(
+    'button.fbt.impasse',
+    {
+      attrs: {
+        title: ctrl.noarg('impasse'),
+        disabled: !['standard', 'annanshogi', 'checkshogi'].includes(ctrl.data.game.variant.key),
+      },
+      class: { active: ctrl.impasseHelp },
+      hook: util.bind('click', _ => {
+        ctrl.impasseHelp = !ctrl.impasseHelp;
+        ctrl.redraw();
+      }),
+    },
+    [h('span', ctrl.nvui ? [ctrl.noarg('impasse')] : util.justIcon('&'))]
   );
 }
 
@@ -137,14 +418,14 @@ export function opponentGone(ctrl: RoundController) {
         ),
       ])
     : gone
-    ? h('div.suggestion', [h('p', ctrl.trans.vdomPlural('opponentLeftCounter', gone, h('strong', '' + gone)))])
-    : null;
+      ? h('div.suggestion', [h('p', ctrl.trans.vdomPlural('opponentLeftCounter', gone, h('strong', '' + gone)))])
+      : null;
 }
 
 function actConfirm(
   ctrl: RoundController,
   f: (v: boolean) => void,
-  transKey: string,
+  transKey: I18nKey,
   icon: string,
   klass?: string
 ): VNode {
@@ -165,32 +446,23 @@ export function resignConfirm(ctrl: RoundController): VNode {
 }
 
 export function drawConfirm(ctrl: RoundController): VNode {
-  return actConfirm(ctrl, ctrl.offerDraw, 'offerDraw', '2', 'draw-yes');
+  return actConfirm(ctrl, ctrl.offerDraw, 'offerDraw', '', 'draw-yes');
 }
 
-export function threefoldClaimDraw(ctrl: RoundController) {
-  return ctrl.data.game.threefold
-    ? h('div.suggestion', [
-        h(
-          'p',
-          {
-            hook: onSuggestionHook,
-          },
-          ctrl.noarg('threefoldRepetition')
-        ),
-        h(
-          'button.button',
-          {
-            hook: util.bind('click', () => ctrl.socket.sendLoading('draw-claim')),
-          },
-          ctrl.noarg('claimADraw')
-        ),
-      ])
-    : null;
+export function pauseConfirm(ctrl: RoundController): VNode {
+  return actConfirm(ctrl, ctrl.offerPause, 'offerAdjournment', 'Z', 'pause-yes');
 }
 
 export function cancelDrawOffer(ctrl: RoundController) {
   return ctrl.data.player.offeringDraw ? h('div.pending', [h('p', ctrl.noarg('drawOfferSent'))]) : null;
+}
+
+export function cancelPauseOffer(ctrl: RoundController) {
+  return ctrl.data.player.offeringPause ? h('div.pending', [h('p', ctrl.noarg('adjournmentOfferSent'))]) : null;
+}
+
+export function cancelResumeOffer(ctrl: RoundController) {
+  return ctrl.data.player.offeringResume ? h('div.pending', [h('p', ctrl.noarg('resumptionOfferSent'))]) : null;
 }
 
 export function answerOpponentDrawOffer(ctrl: RoundController) {
@@ -199,6 +471,16 @@ export function answerOpponentDrawOffer(ctrl: RoundController) {
         h('p', ctrl.noarg('yourOpponentOffersADraw')),
         acceptButton(ctrl, 'draw-yes', () => ctrl.socket.sendLoading('draw-yes')),
         declineButton(ctrl, () => ctrl.socket.sendLoading('draw-no')),
+      ])
+    : null;
+}
+
+export function answerOpponentPauseOffer(ctrl: RoundController) {
+  return ctrl.data.opponent.offeringPause
+    ? h('div.negotiation.pause', [
+        h('p', ctrl.noarg('yourOpponentOffersAnAdjournment')),
+        acceptButton(ctrl, 'pause-yes', () => ctrl.socket.sendLoading('pause-yes')),
+        declineButton(ctrl, () => ctrl.socket.sendLoading('pause-no')),
       ])
     : null;
 }
@@ -218,7 +500,7 @@ export function cancelTakebackProposition(ctrl: RoundController) {
     : null;
 }
 
-function acceptButton(ctrl: RoundController, klass: string, action: () => void, i18nKey: string = 'accept') {
+function acceptButton(ctrl: RoundController, klass: string, action: () => void, i18nKey: I18nKey = 'accept') {
   const text = ctrl.noarg(i18nKey);
   return ctrl.nvui
     ? h(
@@ -236,7 +518,7 @@ function acceptButton(ctrl: RoundController, klass: string, action: () => void, 
         hook: util.bind('click', action),
       });
 }
-function declineButton(ctrl: RoundController, action: () => void, i18nKey: string = 'decline') {
+function declineButton(ctrl: RoundController, action: () => void, i18nKey: I18nKey = 'decline') {
   const text = ctrl.noarg(i18nKey);
   return ctrl.nvui
     ? h(
@@ -265,12 +547,12 @@ export function answerOpponentTakebackProposition(ctrl: RoundController) {
     : null;
 }
 
-export function submitMove(ctrl: RoundController): VNode | undefined {
-  return ctrl.moveToSubmit || ctrl.dropToSubmit
+export function submitUsi(ctrl: RoundController): VNode | undefined {
+  return ctrl.usiToSubmit
     ? h('div.negotiation.move-confirm', [
+        declineButton(ctrl, () => ctrl.submitUsi(false), 'cancel'),
         h('p', ctrl.noarg('confirmMove')),
-        acceptButton(ctrl, 'confirm-yes', () => ctrl.submitMove(true)),
-        declineButton(ctrl, () => ctrl.submitMove(false), 'cancel'),
+        acceptButton(ctrl, 'confirm-yes', () => ctrl.submitUsi(true)),
       ])
     : undefined;
 }
@@ -298,27 +580,7 @@ export function backToTournament(ctrl: RoundController): VNode | undefined {
               action: '/tournament/' + d.tournament.id + '/withdraw',
             },
           },
-          [h('button.text.fbt.weak', util.justIcon('Z'), 'Pause')]
-        ),
-        analysisButton(ctrl),
-      ])
-    : undefined;
-}
-
-export function backToSwiss(ctrl: RoundController): VNode | undefined {
-  const d = ctrl.data;
-  return d.swiss?.running
-    ? h('div.follow-up', [
-        h(
-          'a.text.fbt.strong.glowing',
-          {
-            attrs: {
-              'data-icon': 'G',
-              href: '/swiss/' + d.swiss.id,
-            },
-            hook: util.bind('click', ctrl.setRedirecting),
-          },
-          ctrl.noarg('backToTournament')
+          [h('button.text.fbt.weak', util.justIcon('Z'), ctrl.trans.noargOrCapitalize('pause'))]
         ),
         analysisButton(ctrl),
       ])
@@ -340,13 +602,8 @@ export function moretime(ctrl: RoundController) {
 export function followUp(ctrl: RoundController): VNode {
   const d = ctrl.data,
     rematchable =
-      !d.game.rematch &&
-      (status.finished(d) || status.aborted(d)) &&
-      !d.tournament &&
-      !d.simul &&
-      !d.swiss &&
-      !d.game.boosted,
-    newable = (status.finished(d) || status.aborted(d)) && (d.game.source === 'lobby' || d.game.source === 'pool'),
+      !d.game.rematch && (status.finished(d) || status.aborted(d)) && !d.tournament && !d.simul && !d.game.boosted,
+    newable = (status.finished(d) || status.aborted(d)) && d.game.source === 'lobby',
     rematchZone = ctrl.challengeRematched
       ? [
           h(
@@ -358,8 +615,8 @@ export function followUp(ctrl: RoundController): VNode {
           ),
         ]
       : rematchable || d.game.rematch
-      ? rematchButtons(ctrl)
-      : [];
+        ? rematchButtons(ctrl)
+        : [];
   return h('div.follow-up', [
     ...rematchZone,
     d.tournament
@@ -371,27 +628,20 @@ export function followUp(ctrl: RoundController): VNode {
           ctrl.noarg('viewTournament')
         )
       : null,
-    d.swiss
-      ? h(
-          'a.fbt',
-          {
-            attrs: { href: '/swiss/' + d.swiss.id },
-          },
-          ctrl.noarg('viewTournament')
-        )
-      : null,
     newable
       ? h(
           'a.fbt',
           {
             attrs: {
-              href: d.game.source === 'pool' ? poolUrl(d.clock!, d.opponent.user) : '/?hook_like=' + d.game.id,
+              href: '/?hook_like=' + d.game.id,
             },
           },
           ctrl.noarg('newOpponent')
         )
       : null,
+    studyButton(ctrl),
     analysisButton(ctrl),
+    ctrl.openStudyModal ? studyModal(ctrl) : null,
   ]);
 }
 
@@ -419,16 +669,9 @@ export function watcherFollowUp(ctrl: RoundController): VNode | null {
             ctrl.noarg('viewTournament')
           )
         : null,
-      d.swiss
-        ? h(
-            'a.fbt',
-            {
-              attrs: { href: '/swiss/' + d.swiss.id },
-            },
-            ctrl.noarg('viewTournament')
-          )
-        : null,
+      studyButton(ctrl),
       analysisButton(ctrl),
+      ctrl.openStudyModal ? studyModal(ctrl) : null,
     ];
   return content.find(x => !!x) ? h('div.follow-up', content) : null;
 }

@@ -29,8 +29,8 @@ object mine {
         c.status match {
           case Status.Created | Status.Offline =>
             div(id := "ping-challenge")(
-              h1(if (c.isOpen) "Open challenge" else trans.challengeToPlay.txt()),
-              bits.details(c),
+              h1(if (c.isOpen) trans.openChallenge.txt() else trans.challengeToPlay.txt()),
+              bits.details(c, true),
               c.destUserId.map { destId =>
                 div(cls := "waiting")(
                   userIdLink(destId.some, cssClass = "target".some),
@@ -50,17 +50,16 @@ object mine {
                       br,
                       p(cls := "challenge-id-form")(
                         input(
-                          id := "challenge-id",
-                          cls := "copyable autoselect",
+                          id         := "challenge-id",
+                          cls        := "copyable autoselect",
                           spellcheck := "false",
                           readonly,
-                          value := challengeLink,
-                          size := challengeLink.size
+                          value := challengeLink
                         ),
                         button(
-                          title := "Copy URL",
-                          cls := "copy button",
-                          dataRel := "challenge-id",
+                          title    := "Copy URL",
+                          cls      := "copy button",
+                          dataRel  := "challenge-id",
                           dataIcon := "\""
                         )
                       ),
@@ -71,8 +70,8 @@ object mine {
                       br,
                       postForm(cls := "user-invite", action := routes.Challenge.toFriend(c.id))(
                         input(
-                          name := "username",
-                          cls := "friend-autocomplete",
+                          name        := "username",
+                          cls         := "friend-autocomplete",
                           placeholder := trans.search.search.txt()
                         ),
                         error.map { badTag(_) }
@@ -80,33 +79,36 @@ object mine {
                     )
                   )
               },
-              c.notableInitialFen.map { fen =>
+              c.initialSfen.map { sfen =>
                 frag(
                   br,
-                  div(cls := "board-preview", views.html.game.bits.miniBoard(fen, color = c.finalColor))
+                  div(
+                    cls := "board-preview",
+                    views.html.game.bits.miniBoard(sfen, color = c.finalColor, variant = c.variant)
+                  )
                 )
               },
               !c.isOpen option cancelForm
             )
           case Status.Declined =>
             div(cls := "follow-up")(
-              h1("Challenge declined"),
-              bits.details(c),
-              a(cls := "button button-fat", href := routes.Lobby.home())(trans.newOpponent())
+              h1(trans.challengeDeclined()),
+              bits.details(c, true),
+              a(cls := "button button-fat", href := routes.Lobby.home)(trans.newOpponent())
             )
           case Status.Accepted =>
             div(cls := "follow-up")(
-              h1("Challenge accepted!"),
-              bits.details(c),
+              h1(trans.challengeAccepted()),
+              bits.details(c, true),
               a(id := "challenge-redirect", href := routes.Round.watcher(c.id, "sente"), cls := "button-fat")(
                 trans.joinTheGame()
               )
             )
           case Status.Canceled =>
             div(cls := "follow-up")(
-              h1("Challenge canceled."),
-              bits.details(c),
-              a(cls := "button button-fat", href := routes.Lobby.home())(trans.newOpponent())
+              h1(trans.challengeCanceled()),
+              bits.details(c, true),
+              a(cls := "button button-fat", href := routes.Lobby.home)(trans.newOpponent())
             )
         }
       )

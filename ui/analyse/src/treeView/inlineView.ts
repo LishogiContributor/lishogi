@@ -1,12 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { path as treePath, ops as treeOps } from 'tree';
-import * as moveView from '../moveView';
+import { notationsWithColor } from 'common/notation';
+import { MaybeVNodes } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
+import { ops as treeOps, path as treePath } from 'tree';
 import AnalyseCtrl from '../ctrl';
-import { MaybeVNodes } from '../interfaces';
-import { mainHook, nodeClasses, findCurrentPath, renderInlineCommentsOf, retroLine } from './treeView';
-import { Ctx, Opts } from './treeView';
-import { notationStyle } from 'common/notation';
+import * as moveView from '../moveView';
+import { Ctx, Opts, findCurrentPath, mainHook, nodeClasses, renderInlineCommentsOf, retroLine } from './util';
 
 function renderChildrenOf(ctx: Ctx, node: Tree.Node, opts: Opts): MaybeVNodes | undefined {
   const cs = node.children,
@@ -17,7 +15,6 @@ function renderChildrenOf(ctx: Ctx, node: Tree.Node, opts: Opts): MaybeVNodes | 
       return renderMoveAndChildrenOf(ctx, main, {
         parentPath: opts.parentPath,
         isMainline: true,
-        withIndex: opts.withIndex,
       });
     return (
       renderInlined(ctx, cs, opts) || [
@@ -27,9 +24,8 @@ function renderChildrenOf(ctx: Ctx, node: Tree.Node, opts: Opts): MaybeVNodes | 
               renderMoveOf(ctx, main, {
                 parentPath: opts.parentPath,
                 isMainline: true,
-                withIndex: opts.withIndex,
               }),
-              ...renderInlineCommentsOf(ctx, main),
+              ...renderInlineCommentsOf(ctx, main, opts.parentPath),
             ]),
         h(
           'interrupt',
@@ -43,7 +39,6 @@ function renderChildrenOf(ctx: Ctx, node: Tree.Node, opts: Opts): MaybeVNodes | 
           : renderChildrenOf(ctx, main, {
               parentPath: opts.parentPath + main.id,
               isMainline: true,
-              withIndex: true,
             }) || []),
       ]
     );
@@ -75,7 +70,6 @@ function renderLines(ctx: Ctx, nodes: Tree.Node[], opts: Opts): VNode {
           renderMoveAndChildrenOf(ctx, n, {
             parentPath: opts.parentPath,
             isMainline: false,
-            withIndex: true,
             truncate: n.comp && !treePath.contains(ctx.ctrl.path, opts.parentPath + n.id) ? 3 : undefined,
           })
         )
@@ -86,7 +80,7 @@ function renderLines(ctx: Ctx, nodes: Tree.Node[], opts: Opts): VNode {
 
 function renderMoveAndChildrenOf(ctx: Ctx, node: Tree.Node, opts: Opts): MaybeVNodes {
   const path = opts.parentPath + node.id,
-    comments = renderInlineCommentsOf(ctx, node);
+    comments = renderInlineCommentsOf(ctx, node, opts.parentPath);
   if (opts.truncate === 0) return [h('move', { attrs: { p: path } }, '[...]')];
   return ([renderMoveOf(ctx, node, opts)] as MaybeVNodes)
     .concat(comments)
@@ -96,7 +90,6 @@ function renderMoveAndChildrenOf(ctx: Ctx, node: Tree.Node, opts: Opts): MaybeVN
         parentPath: path,
         isMainline: opts.isMainline,
         truncate: opts.truncate ? opts.truncate - 1 : undefined,
-        withIndex: !!comments[0],
       }) || []
     );
 }
@@ -105,7 +98,6 @@ function renderInline(ctx: Ctx, node: Tree.Node, opts: Opts): VNode {
   return h(
     'inline',
     renderMoveAndChildrenOf(ctx, node, {
-      withIndex: true,
       parentPath: opts.parentPath,
       isMainline: false,
     })
@@ -114,20 +106,17 @@ function renderInline(ctx: Ctx, node: Tree.Node, opts: Opts): VNode {
 
 function renderMoveOf(ctx: Ctx, node: Tree.Node, opts: Opts): VNode {
   const path = opts.parentPath + node.id,
+    colorIcon = notationsWithColor() ? '.color-icon.' + (node.ply % 2 ? 'sente' : 'gote') : '',
     content: MaybeVNodes = [
-      opts.withIndex || node.ply ? moveView.renderIndex(node.ply, true) : null,
-      notationStyle(ctx.ctrl.data.pref.pieceNotation)({
-        san: node.san!,
-        uci: node.uci!,
-        fen: node.fen,
-      }),
+      node.ply ? moveView.renderIndex(node.ply, ctx.ctrl.plyOffset(), true) : null,
+      h('move-notation' + colorIcon, node.notation),
     ];
   if (node.glyphs && ctx.showGlyphs) moveView.renderGlyphs(node.glyphs).forEach(g => content.push(g));
   return h(
     'move',
     {
       attrs: { p: path },
-      class: nodeClasses(ctx, path),
+      class: nodeClasses(ctx, node, path),
     },
     content
   );
@@ -139,8 +128,10 @@ export default function (ctrl: AnalyseCtrl): VNode {
     truncateComments: false,
     showComputer: ctrl.showComputer() && !ctrl.retro,
     showGlyphs: !!ctrl.study || ctrl.showComputer(),
+    variant: ctrl.data.game.variant.key,
     showEval: !!ctrl.study || ctrl.showComputer(),
     currentPath: findCurrentPath(ctrl),
+    offset: ctrl.plyOffset(),
   };
   return h(
     'div.tview2.tview2-inline',
@@ -148,7 +139,7 @@ export default function (ctrl: AnalyseCtrl): VNode {
       hook: mainHook(ctrl),
     },
     [
-      ...renderInlineCommentsOf(ctx, ctrl.tree.root),
+      ...renderInlineCommentsOf(ctx, ctrl.tree.root, ''),
       ...(renderChildrenOf(ctx, ctrl.tree.root, {
         parentPath: '',
         isMainline: true,

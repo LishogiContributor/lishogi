@@ -43,6 +43,7 @@ final class Env(
     val simul: lila.simul.Env,
     val relation: lila.relation.Env,
     val report: lila.report.Env,
+    val appeal: lila.appeal.Env,
     val pref: lila.pref.Env,
     val chat: lila.chat.Env,
     val puzzle: lila.puzzle.Env,
@@ -53,12 +54,9 @@ final class Env(
     val video: lila.video.Env,
     val playban: lila.playban.Env,
     val shutup: lila.shutup.Env,
-    val insight: lila.insight.Env,
     val push: lila.push.Env,
     val perfStat: lila.perfStat.Env,
-    val slack: lila.slack.Env,
     val challenge: lila.challenge.Env,
-    val explorer: lila.explorer.Env,
     val fishnet: lila.fishnet.Env,
     val study: lila.study.Env,
     val studySearch: lila.studySearch.Env,
@@ -67,17 +65,13 @@ final class Env(
     val event: lila.event.Env,
     val coach: lila.coach.Env,
     val clas: lila.clas.Env,
-    val pool: lila.pool.Env,
     val practice: lila.practice.Env,
-    val irwin: lila.irwin.Env,
     val activity: lila.activity.Env,
-    val relay: lila.relay.Env,
     val streamer: lila.streamer.Env,
     val oAuth: lila.oauth.Env,
     val bot: lila.bot.Env,
     val evalCache: lila.evalCache.Env,
     val rating: lila.rating.Env,
-    val swiss: lila.swiss.Env,
     val storm: lila.storm.Env,
     val lilaCookie: lila.common.LilaCookie,
     val controllerComponents: ControllerComponents
@@ -89,12 +83,12 @@ final class Env(
 
   def net = common.netConfig
 
-  val isProd            = mode == Mode.Prod
-  val isProdReally      = isProd && net.isProd
-  val isDev             = mode == Mode.Dev
-  val isStage           = config.get[Boolean]("app.stage")
-  val explorerEndpoint  = config.get[String]("explorer.endpoint")
-  val tablebaseEndpoint = config.get[String]("explorer.tablebase.endpoint")
+  val isProd  = mode == Mode.Prod && net.isProd
+  val isDev   = mode == Mode.Dev
+  val isStage = mode == Mode.Prod && !net.isProd
+
+  val insightsEndpoint = config.get[String]("insights.endpoint")
+  val insightsSecret   = config.get[String]("insights.secret")
 
   val appVersionDate    = config.getOptional[String]("app.version.date")
   val appVersionCommit  = config.getOptional[String]("app.version.commit")
@@ -141,7 +135,7 @@ final class Env(
       u <- user.repo byId userId orFail s"No such user $userId"
       badApple = u.lameOrTrollOrAlt
       playbanned <- playban.api.hasCurrentBan(u.id)
-      _          <- user.repo.disable(u, keepEmail = badApple || playbanned)
+      _          <- user.repo.disable(u.id, keepEmail = badApple || playbanned)
       _          <- relation.api.unfollowAll(u.id)
       _          <- user.rankingApi.remove(u.id)
       _          <- team.api.quitAll(u.id)
@@ -164,7 +158,7 @@ final class Env(
     // GC can be aborted by reverting the initial SB mark
     user.repo.isTroll(userId) foreach { troll =>
       if (troll) scheduler.scheduleOnce(1.second) {
-        closeAccount(userId, self = false)
+        closeAccount(userId, self = false).unit
       }
     }
   }
@@ -222,6 +216,7 @@ final class EnvBoot(
   lazy val simul: lila.simul.Env             = wire[lila.simul.Env]
   lazy val relation: lila.relation.Env       = wire[lila.relation.Env]
   lazy val report: lila.report.Env           = wire[lila.report.Env]
+  lazy val appeal: lila.appeal.Env           = wire[lila.appeal.Env]
   lazy val pref: lila.pref.Env               = wire[lila.pref.Env]
   lazy val chat: lila.chat.Env               = wire[lila.chat.Env]
   lazy val puzzle: lila.puzzle.Env           = wire[lila.puzzle.Env]
@@ -232,12 +227,9 @@ final class EnvBoot(
   lazy val video: lila.video.Env             = wire[lila.video.Env]
   lazy val playban: lila.playban.Env         = wire[lila.playban.Env]
   lazy val shutup: lila.shutup.Env           = wire[lila.shutup.Env]
-  lazy val insight: lila.insight.Env         = wire[lila.insight.Env]
   lazy val push: lila.push.Env               = wire[lila.push.Env]
   lazy val perfStat: lila.perfStat.Env       = wire[lila.perfStat.Env]
-  lazy val slack: lila.slack.Env             = wire[lila.slack.Env]
   lazy val challenge: lila.challenge.Env     = wire[lila.challenge.Env]
-  lazy val explorer: lila.explorer.Env       = wire[lila.explorer.Env]
   lazy val fishnet: lila.fishnet.Env         = wire[lila.fishnet.Env]
   lazy val study: lila.study.Env             = wire[lila.study.Env]
   lazy val studySearch: lila.studySearch.Env = wire[lila.studySearch.Env]
@@ -246,17 +238,13 @@ final class EnvBoot(
   lazy val event: lila.event.Env             = wire[lila.event.Env]
   lazy val coach: lila.coach.Env             = wire[lila.coach.Env]
   lazy val clas: lila.clas.Env               = wire[lila.clas.Env]
-  lazy val pool: lila.pool.Env               = wire[lila.pool.Env]
   lazy val practice: lila.practice.Env       = wire[lila.practice.Env]
-  lazy val irwin: lila.irwin.Env             = wire[lila.irwin.Env]
   lazy val activity: lila.activity.Env       = wire[lila.activity.Env]
-  lazy val relay: lila.relay.Env             = wire[lila.relay.Env]
   lazy val streamer: lila.streamer.Env       = wire[lila.streamer.Env]
   lazy val oAuth: lila.oauth.Env             = wire[lila.oauth.Env]
   lazy val bot: lila.bot.Env                 = wire[lila.bot.Env]
   lazy val evalCache: lila.evalCache.Env     = wire[lila.evalCache.Env]
   lazy val rating: lila.rating.Env           = wire[lila.rating.Env]
-  lazy val swiss: lila.swiss.Env             = wire[lila.swiss.Env]
   lazy val storm: lila.storm.Env             = wire[lila.storm.Env]
   lazy val api: lila.api.Env                 = wire[lila.api.Env]
   lazy val lilaCookie                        = wire[lila.common.LilaCookie]

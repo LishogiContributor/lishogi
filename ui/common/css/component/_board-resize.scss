@@ -2,14 +2,18 @@ body.resizing {
   user-select: none;
 }
 
-cg-resize {
+sg-resize {
   $resize-width: 22px;
   display: none;
   @include breakpoint($mq-board-resizable) {
     display: block;
     position: absolute;
-    right: #{13px - $resize-width};
-    bottom: #{13px - $resize-width};
+    right: #{12px - $resize-width};
+    bottom: #{12px - $resize-width};
+    .coords-edge & {
+      right: #{-$resize-width + 1};
+      bottom: #{-$resize-width + 1};
+    }
     width: $resize-width;
     height: $resize-width;
     cursor: nwse-resize;

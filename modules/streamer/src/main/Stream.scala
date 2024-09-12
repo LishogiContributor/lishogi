@@ -35,15 +35,6 @@ object Stream {
     case class Pagination(cursor: Option[String])
     case class Result(data: Option[List[TwitchStream]], pagination: Option[Pagination]) {
       def liveStreams = (~data).filter(_.isLive)
-      def streams(keyword: Keyword, streamers: List[Streamer], alwaysFeatured: List[User.ID]): List[Stream] =
-        liveStreams.collect { case TwitchStream(name, title, _) =>
-          streamers.find { s =>
-            s.twitch.exists(_.userId.toLowerCase == name.toLowerCase) && {
-              title.toLowerCase.contains(keyword.toLowerCase) ||
-              alwaysFeatured.contains(s.userId)
-            }
-          } map { Stream(name, title, _) }
-        }.flatten
     }
     case class Stream(userId: String, status: String, streamer: Streamer) extends lila.streamer.Stream {
       def serviceName = "twitch"
@@ -91,6 +82,20 @@ object Stream {
 
     case class StreamsFetched(list: List[YouTube.Stream], at: DateTime)
   }
+
+  def toJson(stream: Stream) = Json.obj(
+    "stream" -> Json.obj(
+      "service" -> stream.serviceName,
+      "status"  -> stream.status,
+      "lang"    -> stream.lang
+    ),
+    "streamer" -> Json
+      .obj("name" -> stream.streamer.name.value)
+      .add("headline" -> stream.streamer.headline.map(_.value))
+      .add("description" -> stream.streamer.description.map(_.value))
+      .add("twitch" -> stream.streamer.twitch.map(_.fullUrl))
+      .add("youTube" -> stream.streamer.youTube.map(_.fullUrl))
+  )
 
   private val LangRegex = """\[(\w\w)\]""".r.unanchored
 }

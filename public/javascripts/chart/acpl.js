@@ -1,7 +1,7 @@
 function toBlurArray(player) {
   return player.blurs && player.blurs.bits ? player.blurs.bits.split('') : [];
 }
-lishogi.advantageChart = function (data, trans, el, notation) {
+lishogi.advantageChart = function (data, trans, el) {
   lishogi.loadScript('javascripts/chart/common.js').done(function () {
     lishogi.loadScript('javascripts/chart/division.js').done(function () {
       lishogi.chartCommon('highchart').done(function () {
@@ -11,6 +11,7 @@ lishogi.advantageChart = function (data, trans, el, notation) {
 
         var blurs = [toBlurArray(data.player), toBlurArray(data.opponent)];
         if (data.player.color === 'sente') blurs.reverse();
+        var plyOffset = ((data.game.startedAtPly || 0) - ((data.game.startedAtStep || 1) - 1)) % 2;
 
         var makeSerieData = function (d) {
           var partial = !d.analysis || d.analysis.partial;
@@ -20,8 +21,6 @@ lishogi.advantageChart = function (data, trans, el, notation) {
 
             if (node.eval && node.eval.mate) {
               cp = node.eval.mate > 0 ? Infinity : -Infinity;
-            } else if (node.san.includes('#')) {
-              cp = color === 1 ? Infinity : -Infinity;
             } else if (node.eval && typeof node.eval.cp !== 'undefined') {
               cp = node.eval.cp;
             } else
@@ -30,7 +29,7 @@ lishogi.advantageChart = function (data, trans, el, notation) {
               };
 
             var point = {
-              name: node.ply + '. ' + notation({ san: node.san, uci: node.uci, fen: node.fen }),
+              name: node.ply + plyOffset + '. ' + node.notation,
               y: 2 / (1 + Math.exp(-0.0007 * cp)) - 1,
             };
             if (!partial && blurs[color].shift() === '1') {
@@ -111,12 +110,12 @@ lishogi.advantageChart = function (data, trans, el, notation) {
           tooltip: {
             pointFormatter: function (format) {
               format = format.replace('{series.name}', trans('advantage'));
-              var eval = data.treeParts[this.x + 1].eval;
-              if (!eval) return;
-              else if (eval.mate) {
-                return format.replace('{point.y}', '#' + eval.mate);
-              } else if (typeof eval.cp !== 'undefined') {
-                var e = Math.max(Math.min(Math.round(eval.cp / 10) / 10, 99), -99);
+              var m_eval = data.treeParts[this.x + 1].eval;
+              if (!m_eval) return;
+              else if (m_eval.mate) {
+                return format.replace('{point.y}', '#' + m_eval.mate);
+              } else if (typeof m_eval.cp !== 'undefined') {
+                var e = Math.max(Math.min(Math.round(m_eval.cp / 10) / 10, 99), -99);
                 if (e > 0) e = '+' + e;
                 return format.replace('{point.y}', e);
               }

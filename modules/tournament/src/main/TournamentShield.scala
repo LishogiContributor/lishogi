@@ -42,7 +42,7 @@ final class TournamentShieldApi(
       }
     }
 
-  private[tournament] def clear() = cache.invalidateUnit()
+  private[tournament] def clear(): Unit = cache.invalidateUnit().unit
 
   private val cache = cacheApi.unit[History] {
     _.refreshAfterWrite(1 day)
@@ -122,18 +122,6 @@ object TournamentShield {
 
   object Category {
 
-    case object UltraBullet
-        extends Category(
-          of = Left(Schedule.Speed.UltraBullet),
-          iconChar = '{'
-        )
-
-    case object HyperBullet
-        extends Category(
-          of = Left(Schedule.Speed.HyperBullet),
-          iconChar = 'T'
-        )
-
     case object Bullet
         extends Category(
           of = Left(Schedule.Speed.Bullet),
@@ -164,14 +152,47 @@ object TournamentShield {
           iconChar = '+'
         )
 
+    case object Minishogi
+        extends Category(
+          of = Right(shogi.variant.Minishogi),
+          iconChar = ','
+        )
+
+    // case object Chushogi
+    //     extends Category(
+    //       of = Right(shogi.variant.Chushogi),
+    //       iconChar = '('
+    //     )
+
+    case object Annanshogi
+        extends Category(
+          of = Right(shogi.variant.Annanshogi),
+          iconChar = ''
+        )
+
+    case object Kyotoshogi
+        extends Category(
+          of = Right(shogi.variant.Kyotoshogi),
+          iconChar = ''
+        )
+
+    case object Checkshogi
+        extends Category(
+          of = Right(shogi.variant.Checkshogi),
+          iconChar = '>'
+        )
+
     val all: List[Category] = List(
       Bullet,
       SuperBlitz,
       Blitz,
       Rapid,
       Classical,
-      HyperBullet,
-      UltraBullet
+      Minishogi,
+      // Chushogi,
+      Annanshogi,
+      Kyotoshogi,
+      Checkshogi
     )
 
     def of(t: Tournament): Option[Category] = all.find(_ matches t)

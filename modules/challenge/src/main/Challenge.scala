@@ -1,7 +1,7 @@
 package lila.challenge
 
-import shogi.format.FEN
-import shogi.variant.{ FromPosition, Variant }
+import shogi.format.forsyth.Sfen
+import shogi.variant.Variant
 import shogi.{ Color, Mode, Speed }
 import org.joda.time.DateTime
 
@@ -13,7 +13,7 @@ case class Challenge(
     _id: String,
     status: Challenge.Status,
     variant: Variant,
-    initialFen: Option[FEN],
+    initialSfen: Option[Sfen],
     timeControl: Challenge.TimeControl,
     mode: Mode,
     colorChoice: Challenge.ColorChoice,
@@ -84,12 +84,6 @@ case class Challenge(
 
   def speed = speedOf(timeControl)
 
-  def notableInitialFen: Option[FEN] =
-    variant match {
-      case FromPosition => initialFen
-      case _            => none
-    }
-
   def isOpen = ~open
 
   lazy val perfType = perfTypeOf(variant, timeControl)
@@ -128,14 +122,14 @@ object Challenge {
 
   sealed trait TimeControl
   object TimeControl {
-    case object Unlimited                extends TimeControl
-    case class Correspondence(days: Int) extends TimeControl
+    case object Unlimited                        extends TimeControl
+    case class Correspondence(days: Int)         extends TimeControl
     case class Clock(config: shogi.Clock.Config) extends TimeControl {
       // All durations are expressed in seconds
       def limit     = config.limit
       def increment = config.increment
       def byoyomi   = config.byoyomi
-      def periods   = config.periods
+      def periods   = config.periodsTotal
       def show      = config.show
     }
   }
@@ -164,9 +158,6 @@ object Challenge {
           case _                             => none
         }
       )
-      .orElse {
-        (variant == FromPosition) option perfTypeOf(shogi.variant.Standard, timeControl)
-      }
       .|(PerfType.Correspondence)
 
   private val idSize = 8
@@ -176,11 +167,11 @@ object Challenge {
   def toRegistered(variant: Variant, timeControl: TimeControl)(u: User) =
     Challenger.Registered(u.id, Rating(u.perfs(perfTypeOf(variant, timeControl))))
 
-  def randomColor = shogi.Color(lila.common.ThreadLocalRandom.nextBoolean())
+  def randomColor = shogi.Color.fromSente(lila.common.ThreadLocalRandom.nextBoolean())
 
   def make(
       variant: Variant,
-      initialFen: Option[FEN],
+      initialSfen: Option[Sfen],
       timeControl: TimeControl,
       mode: Mode,
       color: String,
@@ -194,17 +185,16 @@ object Challenge {
       case _       => ColorChoice.Random -> randomColor
     }
     val finalMode = timeControl match {
-      case TimeControl.Clock(clock) if !lila.game.Game.allowRated(variant, clock.some) => Mode.Casual
-      case _                                                                           => mode
+      case TimeControl.Clock(clock) if !lila.game.Game.allowRated(initialSfen, clock.some, variant) =>
+        Mode.Casual
+      case _ => mode
     }
     val isOpen = challenger == Challenge.Challenger.Open
     new Challenge(
       _id = randomId,
       status = Status.Created,
       variant = variant,
-      initialFen =
-        if (variant == FromPosition) initialFen
-        else !variant.standardInitialPosition option FEN(variant.initialFen),
+      initialSfen = initialSfen.filterNot(_.initialOf(variant)),
       timeControl = timeControl,
       mode = finalMode,
       colorChoice = colorChoice,

@@ -1,52 +1,53 @@
-import { Api as ShogigroundApi } from 'shogiground/api';
-import { DrawShape } from 'shogiground/draw';
-import * as cg from 'shogiground/types';
-import { Config as ShogigroundConfig } from 'shogiground/config';
-import { build as makeTree, path as treePath, ops as treeOps, TreeWrapper } from 'tree';
-import * as keyboard from './keyboard';
-import { Ctrl as ActionMenuCtrl } from './actionMenu';
-import { Autoplay, AutoplayDelay } from './autoplay';
-import * as promotion from './promotion';
-import * as util from './util';
-import * as chessUtil from 'chess';
-import { defined, prop, Prop } from 'common';
+import { Result } from '@badrap/result';
+import { CevalCtrl, EvalMeta, ctrl as cevalCtrl, isEvalBetter } from 'ceval';
+import { Prop, defined, prop } from 'common/common';
+import { makeNotation } from 'common/notation';
+import { isImpasse as impasse } from 'common/impasse';
+import { analysis } from 'common/links';
+import { getPerfIcon } from 'common/perfIcons';
+import { StoredBooleanProp, storedProp } from 'common/storage';
 import throttle from 'common/throttle';
-import { storedProp, StoredBooleanProp } from 'common/storage';
-import { make as makeSocket, Socket } from './socket';
-import { ForecastCtrl } from './forecast/interfaces';
-import { make as makeForecast } from './forecast/forecastCtrl';
-import { ctrl as cevalCtrl, isEvalBetter, CevalCtrl, Work as CevalWork, CevalOpts } from 'ceval';
-import explorerCtrl from './explorer/explorerCtrl';
-import { ExplorerCtrl } from './explorer/interfaces';
 import * as game from 'game';
-import { valid as crazyValid } from './crazy/crazyCtrl';
-import makeStudy from './study/studyCtrl';
+import { Shogiground } from 'shogiground';
+import { Api as ShogigroundApi } from 'shogiground/api';
+import { Config as ShogigroundConfig } from 'shogiground/config';
+import { DrawShape } from 'shogiground/draw';
+import * as sg from 'shogiground/types';
+import { eagleLionAttacks, falconLionAttacks } from 'shogiops/attacks';
+import {
+  shogigroundDropDests,
+  shogigroundMoveDests,
+  shogigroundSecondLionStep,
+  usiToSquareNames,
+} from 'shogiops/compat';
+import { parseSfen } from 'shogiops/sfen';
+import { NormalMove, Outcome, Piece } from 'shogiops/types';
+import { makeSquareName, makeUsi, opposite, parseSquareName, squareDist } from 'shogiops/util';
+import { Chushogi } from 'shogiops/variant/chushogi';
+import { Position, PositionError } from 'shogiops/variant/position';
+import { TreeWrapper, build as makeTree, ops as treeOps, path as treePath } from 'tree';
+import { Ctrl as ActionMenuCtrl } from './actionMenu';
+import { compute as computeAutoShapes } from './autoShape';
+import { Autoplay, AutoplayDelay } from './autoplay';
+import { EvalCache, make as makeEvalCache } from './evalCache';
+import { make as makeForecast } from './forecast/forecastCtrl';
+import { ForecastCtrl } from './forecast/interfaces';
+import { ForkCtrl, make as makeFork } from './fork';
+import { makeConfig } from './ground';
+import { AnalyseData, AnalyseOpts, NvuiPlugin, Redraw, ServerEvalData } from './interfaces';
+import * as keyboard from './keyboard';
+import { nextGlyphSymbol } from './nodeFinder';
+import { PracticeCtrl, make as makePractice } from './practice/practiceCtrl';
+import { RetroCtrl, make as makeRetro } from './retrospect/retroCtrl';
+import { Socket, make as makeSocket } from './socket';
+import * as speech from './speech';
+import GamebookPlayCtrl from './study/gamebook/gamebookPlayCtrl';
 import { StudyCtrl } from './study/interfaces';
 import { StudyPracticeCtrl } from './study/practice/interfaces';
-import { make as makeFork, ForkCtrl } from './fork';
-import { make as makeRetro, RetroCtrl } from './retrospect/retroCtrl';
-import { make as makePractice, PracticeCtrl } from './practice/practiceCtrl';
-import { make as makeEvalCache, EvalCache } from './evalCache';
-import { compute as computeAutoShapes } from './autoShape';
-import { nextGlyphSymbol } from './nodeFinder';
-import * as speech from './speech';
-import { AnalyseOpts, AnalyseData, ServerEvalData, Key, JustCaptured, NvuiPlugin, Redraw } from './interfaces';
-import GamebookPlayCtrl from './study/gamebook/gamebookPlayCtrl';
-import { ctrl as treeViewCtrl, TreeView } from './treeView/treeView';
-import { cancelDropMode } from 'shogiground/drop';
-import {
-  lishogiVariantRules,
-  assureLishogiUci,
-  parseLishogiUci,
-  makeChessSquare,
-  shogigroundDropDests,
-} from 'shogiops/compat';
-import { opposite, roleToChar } from 'shogiops/util';
-import { Outcome, isNormal } from 'shogiops/types';
-import { parseFen } from 'shogiops/fen';
-import { Position, PositionError } from 'shogiops/shogi';
-import { Result } from '@badrap/result';
-import { setupPosition } from 'shogiops/variant';
+import makeStudy from './study/studyCtrl';
+import { TreeView, ctrl as treeViewCtrl } from './treeView/treeView';
+import * as util from './util';
+import { promotableOnDrop, promote } from 'shogiops/variant/util';
 
 const li = window.lishogi;
 
@@ -70,7 +71,6 @@ export default class AnalyseCtrl {
   // sub controllers
   actionMenu: ActionMenuCtrl;
   autoplay: Autoplay;
-  explorer: ExplorerCtrl;
   forecast?: ForecastCtrl;
   retro?: RetroCtrl;
   fork: ForkCtrl;
@@ -79,14 +79,14 @@ export default class AnalyseCtrl {
   studyPractice?: StudyPracticeCtrl;
 
   // state flags
-  justPlayed?: string; // pos
-  justDropped?: string; // role
-  justCaptured?: JustCaptured;
+  justPlayedUsi?: string;
   autoScrollRequested: boolean = false;
   redirecting: boolean = false;
   onMainline: boolean = true;
   synthetic: boolean; // false if coming from a real game
+  imported: boolean; // true if coming from kif or csa
   ongoing: boolean; // true if real game is ongoing
+  lionFirstMove: NormalMove | undefined;
 
   // display flags
   flipped: boolean = false;
@@ -94,31 +94,33 @@ export default class AnalyseCtrl {
   showComments: boolean = true; // whether to display comments in the move tree
   showAutoShapes: StoredBooleanProp = storedProp('show-auto-shapes', true);
   showGauge: StoredBooleanProp = storedProp('show-gauge', true);
+  showMoveAnnotation: StoredBooleanProp = storedProp('show-move-annotation', true);
   showComputer: StoredBooleanProp = storedProp('show-computer', true);
   keyboardHelp: boolean = location.hash === '#keyboard';
+  studyModal: Prop<boolean> = prop(false);
   threatMode: Prop<boolean> = prop(false);
   treeView: TreeView;
-  cgVersion = {
-    js: 1, // increment to recreate shogiground
-    dom: 1,
-  };
 
   // underboard inputs
-  fenInput?: string;
-  pgnInput?: string;
+  sfenInput?: string;
+  kifInput?: string;
+  csaInput?: string;
 
   // other paths
   initialPath: Tree.Path;
   contextMenuPath?: Tree.Path;
   gamePath?: Tree.Path;
 
-  dropmodeActive: boolean = false;
   // misc
-  cgConfig: any; // latest shogiground config (useful for revert)
   music?: any;
   nvui?: NvuiPlugin;
 
-  constructor(readonly opts: AnalyseOpts, readonly redraw: Redraw) {
+  pvUsiQueue: Usi[] = [];
+
+  constructor(
+    readonly opts: AnalyseOpts,
+    readonly redraw: Redraw
+  ) {
     this.data = opts.data;
     this.element = opts.element;
     this.embed = opts.embed;
@@ -153,14 +155,15 @@ export default class AnalyseCtrl {
 
     this.setPath(this.initialPath);
 
-    this.showGround();
+    this.shogiground = Shogiground();
     this.onToggleComputer();
     this.startCeval();
-    this.explorer.setNode();
-    this.study = opts.study
-      ? makeStudy(opts.study, this, (opts.tagTypes || '').split(','), opts.practice, opts.relay)
-      : undefined;
+    this.study = opts.study ? makeStudy(opts.study, this, (opts.tagTypes || '').split(','), opts.practice) : undefined;
+    this.setOrientation();
     this.studyPractice = this.study ? this.study.practice : undefined;
+
+    this.shogiground.set(makeConfig(this), true);
+    this.showGround(true);
 
     if (location.hash === '#practice' || (this.study && this.study.data.chapter.practice)) this.togglePractice();
     else if (location.hash === '#menu') li.requestIdleCallback(this.actionMenu.toggle);
@@ -174,8 +177,8 @@ export default class AnalyseCtrl {
 
     li.pubsub.on('sound_set', (set: string) => {
       if (!this.music && set === 'music')
-        li.loadScript('javascripts/music/replay.js').then(() => {
-          this.music = window.lishogiReplayMusic();
+        li.loadScript('javascripts/music/play.js').then(() => {
+          this.music = window.lishogi.playMusic();
         });
       if (this.music && set !== 'music') this.music = null;
     });
@@ -192,21 +195,32 @@ export default class AnalyseCtrl {
   initialize(data: AnalyseData, merge: boolean): void {
     this.data = data;
     this.synthetic = data.game.id === 'synthetic';
+    this.imported = data.game.source === 'import';
     this.ongoing = !this.synthetic && game.playable(data);
+
+    if (this.data.game.variant.key === 'chushogi') li.loadChushogiPieceSprite();
+    else if (this.data.game.variant.key == 'kyotoshogi') li.loadKyotoshogiPieceSprite();
 
     const prevTree = merge && this.tree.root;
     this.tree = makeTree(treeOps.reconstruct(this.data.treeParts));
     if (prevTree) this.tree.merge(prevTree);
+    this.initNotation();
 
     this.actionMenu = new ActionMenuCtrl();
     this.autoplay = new Autoplay(this);
-    if (this.socket) this.socket.clearCache();
-    else this.socket = makeSocket(this.opts.socketSend, this);
-    this.explorer = explorerCtrl(this, this.opts.explorer, this.explorer ? this.explorer.allowed() : !this.embed);
+    if (!this.socket) this.socket = makeSocket(this.opts.socketSend, this);
     this.gamePath =
       this.synthetic || this.ongoing ? undefined : treePath.fromNodeList(treeOps.mainlineNodeList(this.tree.root));
     this.fork = makeFork(this);
   }
+
+  setOrientation = (): void => {
+    const userId = document.body.dataset.user,
+      players = this.study?.data.postGameStudy?.players,
+      userOrientation =
+        players && (players.sente.userId === userId ? 'sente' : players.gote.userId === userId ? 'gote' : undefined);
+    this.flipped = userOrientation && this.data.orientation !== userOrientation ? true : false;
+  };
 
   private setPath = (path: Tree.Path): void => {
     this.path = path;
@@ -214,8 +228,10 @@ export default class AnalyseCtrl {
     this.node = treeOps.last(this.nodeList) as Tree.Node;
     this.mainline = treeOps.mainlineNodeList(this.tree.root);
     this.onMainline = this.tree.pathIsMainline(path);
-    this.fenInput = undefined;
-    this.pgnInput = undefined;
+    this.lionFirstMove = undefined;
+    this.sfenInput = undefined;
+    this.kifInput = undefined;
+    this.csaInput = undefined;
   };
 
   flip = () => {
@@ -255,84 +271,69 @@ export default class AnalyseCtrl {
     this.actionMenu.open = false;
   }
 
-  private uciToLastMove(uci?: Uci): Key[] | undefined {
-    if (!uci) return;
-    if (uci[1] === '*') return [uci.substr(2, 2), uci.substr(2, 2)] as Key[];
-    return [uci.substr(0, 2), uci.substr(2, 2)] as Key[];
-  }
-
-  private showGround(): void {
+  private showGround(skip?: boolean): void {
     this.onChange();
-    if (!defined(this.node.dests)) this.getDests();
-    this.withCg(cg => {
-      cg.set(this.makeCgOpts());
-      this.setAutoShapes();
-      if (this.node.shapes) cg.setShapes(this.node.shapes as DrawShape[]);
-    });
+    if (!skip) this.shogiground.set(this.makeSgOpts());
+    this.setAutoShapes();
+    this.setShapes(this.node.shapes as DrawShape[] | undefined);
   }
 
-  getDests: () => void = throttle(800, () => {
-    if (!this.embed && !defined(this.node.dests))
-      this.socket.sendAnaDests({
-        variant: this.data.game.variant.key,
-        fen: this.node.fen,
-        path: this.path,
-      });
-  });
+  // allows moving after game end - use pos.isEnd, if needed
+  private getMoveDests(posRes: Result<Position>): sg.MoveDests {
+    if (this.embed) return new Map();
+    else
+      return posRes.unwrap(
+        pos => shogigroundMoveDests(pos),
+        _ => new Map()
+      );
+  }
 
-  private getDropDests(): cg.DropDests {
-    return this.position(this.node).unwrap(
-      s => shogigroundDropDests(s),
+  private getDropDests(posRes: Result<Position>): sg.DropDests {
+    if (this.embed) return new Map();
+    return posRes.unwrap(
+      pos => shogigroundDropDests(pos),
       _ => new Map()
     );
   }
 
-  makeCgOpts(): ShogigroundConfig {
+  makeSgOpts(): ShogigroundConfig {
     const node = this.node,
       color = this.turnColor(),
-      dests = chessUtil.readDests(this.node.dests),
-      drops = chessUtil.readDrops(this.node.drops),
+      posRes = this.position(this.node),
+      dests = this.getMoveDests(posRes),
+      drops = this.getDropDests(posRes),
       movableColor =
         this.practice || this.gamebookPlay()
           ? this.bottomColor()
-          : !this.embed && ((dests && dests.size > 0) || drops === null || drops.length)
-          ? color
-          : undefined,
+          : !this.embed && (dests.size > 0 || drops.size > 0)
+            ? color
+            : undefined,
+      splitSfen = node.sfen.split(' '),
       config: ShogigroundConfig = {
-        fen: node.fen,
+        sfen: {
+          board: splitSfen[0],
+          hands: splitSfen[2],
+        },
         turnColor: color,
-        movable: this.embed
-          ? {
-              color: undefined,
-              dests: new Map(),
-            }
-          : {
-              color: movableColor,
-              dests: (movableColor === color && dests) || new Map(),
-            },
-        dropmode: this.embed
-          ? {
-              dropDests: undefined,
-            }
-          : {
-              dropDests: (movableColor === color && this.getDropDests()) || new Map(),
-            },
-        check: !!node.check,
-        lastMove: this.uciToLastMove(node.uci),
+        activeColor: this.embed ? undefined : movableColor,
+        movable: {
+          dests: this.embed || movableColor !== color ? new Map() : dests,
+        },
+        droppable: {
+          dests: this.embed || movableColor !== color ? new Map() : drops,
+        },
+        checks: node.check,
+        lastDests: node.usi ? usiToSquareNames(node.usi) : undefined,
+        drawable: {
+          squares: [],
+        },
       };
-    if (!dests && !node.check) {
-      // premove while dests are loading from server
-      // can't use when in check because it highlights the wrong king
-      config.turnColor = opposite(color);
-      config.movable!.color = color;
-    }
     config.premovable = {
-      enabled: config.movable!.color && config.turnColor !== config.movable!.color,
+      enabled: config.activeColor && config.turnColor !== config.activeColor,
     };
     config.predroppable = {
-      enabled: config.movable!.color && config.turnColor !== config.movable!.color,
+      enabled: config.activeColor && config.turnColor !== config.activeColor,
     };
-    this.cgConfig = config;
     return config;
   }
 
@@ -348,8 +349,10 @@ export default class AnalyseCtrl {
         check: $.noop,
       };
 
+  private captureRegex = /[a-z]/gi;
+
   private onChange: () => void = throttle(300, () => {
-    li.pubsub.emit('analysis.change', this.node.fen, this.path, this.onMainline ? this.node.ply : false);
+    li.pubsub.emit('analysis.change', this.node.sfen, this.path, this.onMainline ? this.node.ply : false);
   });
 
   private updateHref: () => void = li.debounce(() => {
@@ -360,7 +363,7 @@ export default class AnalyseCtrl {
     this.autoScrollRequested = true;
   }
 
-  playedLastMoveMyself = () => !!this.justPlayed && !!this.node.uci && this.node.uci.startsWith(this.justPlayed);
+  playedLastMoveMyself = () => !!this.justPlayedUsi && this.node.usi === this.justPlayedUsi;
 
   jump(path: Tree.Path): void {
     const pathChanged = path !== this.path,
@@ -371,24 +374,22 @@ export default class AnalyseCtrl {
       const playedMyself = this.playedLastMoveMyself();
       if (this.study) this.study.setPath(path, this.node, playedMyself);
       if (isForwardStep) {
-        if (!this.node.uci) this.sound.move();
         // initial position
+        if (!this.node.usi) this.sound.move();
         else if (!playedMyself) {
-          if (this.node.san!.includes('x')) this.sound.capture();
+          if (this.node.capture) this.sound.capture();
           else this.sound.move();
         }
-        if (this.node.check) this.sound.check();
+        if (this.node.check && this.data.game.variant.key !== 'chushogi') this.sound.check();
       }
       this.threatMode(false);
       this.ceval.stop();
       this.startCeval();
       speech.node(this.node);
     }
-    this.justPlayed = this.justDropped = this.justCaptured = undefined;
-    this.explorer.setNode();
+    this.justPlayedUsi = undefined;
     this.updateHref();
     this.autoScroll();
-    promotion.cancel(this);
     if (pathChanged) {
       if (this.retro) this.retro.onJump();
       if (this.practice) this.practice.onJump();
@@ -400,7 +401,7 @@ export default class AnalyseCtrl {
 
   userJump = (path: Tree.Path): void => {
     this.autoplay.stop();
-    this.withCg(cg => cg.selectSquare(null));
+    this.shogiground.selectSquare(null);
     if (this.practice) {
       const prev = this.path;
       this.practice.preUserJump(prev, path);
@@ -441,90 +442,124 @@ export default class AnalyseCtrl {
     this.setPath(treePath.root);
     this.instanciateCeval();
     this.instanciateEvalCache();
-    this.cgVersion.js++;
+    this.shogiground.set(makeConfig(this), true);
   }
 
-  changePgn(pgn: string): void {
+  changeNotation(notation: string): void {
     this.redirecting = true;
     $.ajax({
-      url: '/analysis/pgn',
+      url: '/analysis/notation',
       method: 'post',
-      data: { pgn },
+      data: { notation },
       success: (data: AnalyseData) => {
         this.reloadData(data, false);
+        const $selSpan = $('.mselect__label span'),
+          icon = getPerfIcon(data.game.variant.key);
+        $selSpan.attr('data-icon', icon);
+        $selSpan.text(this.trans.noarg(data.game.variant.key));
+        $('nav.mselect__list a').each(function (this: HTMLElement) {
+          $(this).toggleClass('current', $(this).data('icon') === icon);
+        });
         this.userJump(this.mainlinePathToPly(this.tree.lastPly()));
         this.redraw();
       },
       error: error => {
-        console.log(error);
+        alert(error.responseText);
         this.redirecting = false;
         this.redraw();
       },
     });
   }
 
-  changeFen(fen: Fen): void {
+  changeSfen(sfen: Sfen): void {
     this.redirecting = true;
-    window.location.href =
-      '/analysis/' +
-      this.data.game.variant.key +
-      '/' +
-      encodeURIComponent(fen).replace(/%20/g, '_').replace(/%2F/g, '/');
+    window.location.href = analysis(this.data.game.variant.key, sfen);
   }
 
-  userNewPiece = (piece: cg.Piece, pos: Key): void => {
-    if (crazyValid(this.node.fen, piece, pos)) {
-      this.justPlayed = roleToChar(piece.role).toUpperCase() + '*' + pos;
-      this.justDropped = piece.role;
-      this.justCaptured = undefined;
-      this.sound.move();
-      const drop = {
-        role: piece.role,
-        pos,
-        variant: this.data.game.variant.key,
-        fen: this.node.fen,
-        path: this.path,
-      };
-      this.socket.sendAnaDrop(drop);
-      this.preparePremoving();
-    } else this.jump(this.path);
-    cancelDropMode(this.shogiground.state);
-    this.dropmodeActive = false;
-    this.redraw();
+  userDrop = (piece: Piece, key: Key, prom: boolean): void => {
+    let role = piece.role;
+    if (prom && promotableOnDrop(this.data.game.variant.key)(piece))
+      role = promote(this.data.game.variant.key)(role) || role;
+    const usi = makeUsi({ role: role, to: parseSquareName(key) });
+    this.justPlayedUsi = usi;
+    this.sound.move();
+    this.sendUsi(usi);
   };
 
-  userMove = (orig: Key, dest: Key, capture?: JustCaptured): void => {
-    this.justPlayed = orig;
-    this.justDropped = undefined;
-    const isCapture = capture;
-    this.sound[isCapture ? 'capture' : 'move']();
-    if (!promotion.start(this, orig, dest, capture, this.sendMove)) this.sendMove(orig, dest, capture);
+  userMove = (orig: Key, dest: Key, prom: boolean, capture?: sg.Piece): void => {
+    if (this.data.game.variant.key === 'chushogi') return this.chushogiUserMove(orig, dest, prom, capture);
+
+    const usi = orig + dest + (prom ? '+' : '');
+    this.justPlayedUsi = usi;
+    this.sound[!!capture ? 'capture' : 'move']();
+    this.sendUsi(usi);
   };
 
-  sendMove = (orig: Key, dest: Key, capture?: JustCaptured, prom?: Boolean): void => {
-    const move: any = {
-      orig,
-      dest,
+  sendUsi = (usi: string): void => {
+    const socUsi: any = {
+      usi: usi,
       variant: this.data.game.variant.key,
-      fen: this.node.fen,
+      sfen: this.node.sfen,
       path: this.path,
     };
-    if (capture) this.justCaptured = capture;
-    if (prom) move.promotion = prom;
-    else move.promotion = false;
     if (this.practice) this.practice.onUserMove();
-    this.socket.sendAnaMove(move);
-    this.preparePremoving();
+    this.socket.sendAnaUsi(socUsi);
+    this.preparePreMD();
     this.redraw();
   };
 
-  private preparePremoving(): void {
+  private chushogiUserMove = (orig: Key, dest: Key, prom: boolean, capture?: sg.Piece): void => {
+    this.sound[!!capture ? 'capture' : 'move']();
+
+    const posRes = this.position(this.node),
+      piece = posRes.isOk && posRes.value.board.get(parseSquareName(orig))!;
+    if (
+      piece &&
+      this.lionFirstMove === undefined &&
+      squareDist(parseSquareName(orig), parseSquareName(dest)) === 1 &&
+      (['lion', 'lionpromoted'].includes(piece.role) ||
+        (piece.role === 'eagle' && eagleLionAttacks(parseSquareName(orig), piece.color).has(parseSquareName(dest))) ||
+        (piece.role === 'falcon' && falconLionAttacks(parseSquareName(orig), piece.color).has(parseSquareName(dest))))
+    ) {
+      const pos = posRes.value as Chushogi;
+      this.shogiground.set({
+        activeColor: pos.turn,
+        turnColor: pos.turn,
+        movable: {
+          dests: shogigroundSecondLionStep(pos, orig, dest),
+        },
+        drawable: {
+          squares: [{ key: dest, className: 'force-selected' }],
+        },
+      });
+      this.shogiground.selectSquare(dest, false, true);
+      this.lionFirstMove = {
+        from: parseSquareName(orig),
+        to: parseSquareName(dest),
+      };
+    } else {
+      const hadMid = this.lionFirstMove !== undefined && makeSquareName(this.lionFirstMove.to) !== dest;
+      const move: NormalMove = {
+        from: hadMid ? this.lionFirstMove!.from : parseSquareName(orig),
+        to: parseSquareName(dest),
+        promotion: prom,
+        midStep: hadMid ? this.lionFirstMove!.to : undefined,
+      };
+      this.lionFirstMove = undefined;
+      const usi = makeUsi(move);
+      this.justPlayedUsi = usi;
+      this.sendUsi(usi);
+    }
+  };
+
+  private preparePreMD(): void {
     this.shogiground.set({
-      turnColor: this.shogiground.state.movable.color as cg.Color,
-      movable: {
-        color: opposite(this.shogiground.state.movable.color as cg.Color),
-      },
+      turnColor: this.shogiground.state.activeColor as Color,
+      activeColor: opposite(this.shogiground.state.activeColor as Color),
       premovable: {
+        enabled: true,
+      },
+      predroppable: {
         enabled: true,
       },
     });
@@ -536,21 +571,19 @@ export default class AnalyseCtrl {
 
   addNode(node: Tree.Node, path: Tree.Path) {
     const newPath = this.tree.addNode(node, path);
-    if (!newPath) {
-      return this.redraw();
+    if (!newPath) return this.redraw();
+    const parent = this.tree.nodeAtPath(path);
+    if (node.usi) {
+      node.notation = makeNotation(parent.sfen, this.data.game.variant.key, node.usi, parent.usi);
+      node.capture =
+        (parent.sfen.split(' ')[0].match(this.captureRegex) || []).length >
+        (node.sfen.split(' ')[0].match(this.captureRegex) || []).length;
     }
     this.jump(newPath);
     this.redraw();
-    this.shogiground.playPremove();
-  }
-
-  addDests(dests: string, path: Tree.Path): void {
-    this.tree.addDests(dests, path);
-    if (path === this.path) {
-      this.showGround();
-      if (this.outcome()) this.ceval.stop();
-    }
-    this.withCg(cg => cg.playPremove());
+    const queuedUsi = this.pvUsiQueue.shift();
+    if (queuedUsi) this.playUsi(queuedUsi, this.pvUsiQueue);
+    else this.shogiground.playPremove();
   }
 
   deleteNode(path: Tree.Path): void {
@@ -587,11 +620,8 @@ export default class AnalyseCtrl {
 
   reset(): void {
     this.showGround();
+    this.justPlayedUsi = undefined;
     this.redraw();
-  }
-
-  encodeNodeFen(): Fen {
-    return this.node.fen.replace(/\s/g, '_').replace(/\+/g, '%2B');
   }
 
   currentEvals() {
@@ -606,16 +636,40 @@ export default class AnalyseCtrl {
   }
 
   setAutoShapes = (): void => {
-    this.withCg(cg => cg.setAutoShapes(computeAutoShapes(this)));
+    this.shogiground.setAutoShapes(computeAutoShapes(this));
+  };
+
+  setShapes = (shapes?: DrawShape[]): void => {
+    if (shapes) this.shogiground.setShapes(shapes);
+  };
+
+  private initNotation = (): void => {
+    const variant = this.data.game.variant.key,
+      captureRegex = this.captureRegex;
+    function update(node: Tree.Node, prev?: Tree.Node) {
+      if (prev && node.usi && !node.notation) {
+        node.notation = makeNotation(prev.sfen, variant, node.usi, prev.usi);
+        node.capture =
+          (prev.sfen.split(' ')[0].match(captureRegex) || []).length >
+          (node.sfen.split(' ')[0].match(captureRegex) || []).length;
+      }
+      node.children.forEach(c => update(c, node));
+    }
+    update(this.tree.root);
   };
 
   private onNewCeval = (ev: Tree.ClientEval, path: Tree.Path, isThreat: boolean): void => {
     this.tree.updateAt(path, (node: Tree.Node) => {
-      if (node.fen !== ev.fen && !isThreat) return;
+      if (node.sfen !== ev.sfen && !isThreat) return;
       if (isThreat) {
-        if (!node.threat || isEvalBetter(ev, node.threat) || node.threat.maxDepth < ev.maxDepth) node.threat = ev;
-      } else if (isEvalBetter(ev, node.ceval)) node.ceval = ev;
-      else if (node.ceval && ev.maxDepth > node.ceval.maxDepth) node.ceval.maxDepth = ev.maxDepth;
+        const threat = ev as Tree.LocalEval;
+        if (!node.threat || isEvalBetter(threat, node.threat) || node.threat.maxDepth < threat.maxDepth)
+          node.threat = threat;
+      } else if (!node.ceval || isEvalBetter(ev, node.ceval)) node.ceval = ev;
+      else if (!ev.cloud) {
+        if (node.ceval.cloud && ev.maxDepth > node.ceval.depth) node.ceval = ev;
+        else if (ev.maxDepth > node.ceval.maxDepth!) node.ceval.maxDepth = ev.maxDepth;
+      }
 
       if (path === this.path) {
         this.setAutoShapes();
@@ -633,20 +687,22 @@ export default class AnalyseCtrl {
 
   private instanciateCeval(): void {
     if (this.ceval) this.ceval.destroy();
-    const cfg: CevalOpts = {
+    this.ceval = cevalCtrl({
       variant: this.data.game.variant,
+      initialSfen: this.data.game.initialSfen,
       possible: !this.embed && (this.synthetic || !game.playable(this.data)),
-      emit: (ev: Tree.ClientEval, work: CevalWork) => {
+      emit: (ev: Tree.ClientEval, work: EvalMeta) => {
         this.onNewCeval(ev, work.path, work.threatMode);
       },
       setAutoShapes: this.setAutoShapes,
       redraw: this.redraw,
-    };
-    if (this.opts.study && this.opts.practice) {
-      cfg.storageKeyPrefix = 'practice';
-      cfg.multiPvDefault = 1;
-    }
-    this.ceval = cevalCtrl(cfg);
+      ...(this.opts.study && this.opts.practice
+        ? {
+            storageKeyPrefix: 'practice',
+            multiPvDefault: 1,
+          }
+        : {}),
+    });
   }
 
   getCeval() {
@@ -660,26 +716,30 @@ export default class AnalyseCtrl {
     );
   }
 
+  isImpasse(node?: Tree.Node): boolean {
+    node = node || this.node;
+    return impasse(this.data.game.variant.key, node.sfen, this.data.game.initialSfen);
+  }
+
   position(node: Tree.Node): Result<Position, PositionError> {
-    const setup = parseFen(node.fen).unwrap();
-    return setupPosition(lishogiVariantRules(this.data.game.variant.key), setup);
+    return parseSfen(this.data.game.variant.key, node.sfen, false);
   }
 
   canUseCeval(): boolean {
-    return !this.node.threefold && !this.outcome();
+    return !this.node.fourfold && !this.outcome();
   }
 
   startCeval = throttle(800, () => {
     if (this.ceval.enabled()) {
       if (this.canUseCeval()) {
-        this.ceval.start(this.path, this.nodeList, this.threatMode(), false);
+        this.ceval.start(this.path, this.nodeList, this.threatMode());
         this.evalCache.fetch(this.path, parseInt(this.ceval.multiPv()));
       } else this.ceval.stop();
     }
   });
 
   toggleCeval = () => {
-    if (!this.showComputer()) return;
+    if (!this.showComputer() || this.ceval.technology === 'none') return;
     this.ceval.toggle();
     this.setAutoShapes();
     this.startCeval();
@@ -723,19 +783,29 @@ export default class AnalyseCtrl {
   };
 
   cevalSetThreads = (v: number): void => {
-    if (!this.ceval.threads) return;
-    this.ceval.threads(v);
+    this.ceval.setThreads(v);
     this.cevalReset();
   };
 
   cevalSetHashSize = (v: number): void => {
-    if (!this.ceval.hashSize) return;
-    this.ceval.hashSize(v);
+    this.ceval.setHashSize(v);
     this.cevalReset();
   };
 
   cevalSetInfinite = (v: boolean): void => {
     this.ceval.infinite(v);
+    this.cevalReset();
+  };
+
+  cevalSetEnableNnue = (v: boolean): void => {
+    this.ceval.enableNnue(v);
+    this.ceval.stop();
+    alert('Reload the window to see changes.');
+  };
+
+  cevalSetEnteringKingRule = (v: boolean): void => {
+    this.ceval.enteringKingRule(v);
+    this.tree.removeCeval();
     this.cevalReset();
   };
 
@@ -752,7 +822,7 @@ export default class AnalyseCtrl {
   };
 
   private resetAutoShapes() {
-    if (this.showAutoShapes()) this.setAutoShapes();
+    if (this.showAutoShapes() || this.showMoveAnnotation()) this.setAutoShapes();
     else this.shogiground && this.shogiground.setAutoShapes([]);
   }
 
@@ -765,11 +835,16 @@ export default class AnalyseCtrl {
     this.showGauge(!this.showGauge());
   };
 
+  toggleMoveAnnotation = (v: boolean): void => {
+    this.showMoveAnnotation(v);
+    this.resetAutoShapes();
+  };
+
   private onToggleComputer() {
     if (!this.showComputer()) {
       this.tree.removeComputerVariations();
       if (this.ceval.enabled()) this.toggleCeval();
-      this.shogiground && this.shogiground.setAutoShapes([]);
+      this.shogiground.setAutoShapes([]);
     } else this.resetAutoShapes();
   }
 
@@ -785,9 +860,11 @@ export default class AnalyseCtrl {
   mergeAnalysisData(data: ServerEvalData): void {
     if (this.study && this.study.data.chapter.id !== data.ch) return;
     this.tree.merge(data.tree);
+    this.initNotation();
     if (!this.showComputer()) this.tree.removeComputerVariations();
     this.data.analysis = data.analysis;
-    if (data.analysis) data.analysis.partial = !!treeOps.findInMainline(data.tree, n => !n.eval && !!n.children.length);
+    if (data.analysis)
+      data.analysis.partial = !!treeOps.findInMainline(data.tree, n => !n.eval && !!n.children.length && n.ply <= 200);
     if (data.division) this.data.game.division = data.division;
     if (this.retro) this.retro.onMergeAnalysisData();
     if (this.study) this.study.serverEval.onMergeAnalysisData();
@@ -795,48 +872,32 @@ export default class AnalyseCtrl {
     this.redraw();
   }
 
-  playUci(uci: Uci): void {
-    const move = parseLishogiUci(assureLishogiUci(uci)!)!;
-    const to = makeChessSquare(move.to);
-    if (isNormal(move)) {
-      const piece = this.shogiground.state.pieces.get(makeChessSquare(move.from));
-      const capture = this.shogiground.state.pieces.get(to);
-      this.sendMove(
-        makeChessSquare(move.from),
-        to,
-        capture && piece && capture.color !== piece.color ? capture : undefined,
-        move.promotion
-      );
-    } else
-      this.shogiground.newPiece(
-        {
-          color: this.shogiground.state.movable.color as Color,
-          role: move.role,
-        },
-        to
-      );
+  playUsi(usi: Usi, usiQueue?: Usi[]) {
+    this.pvUsiQueue = usiQueue ?? [];
+    this.sendUsi(usi);
   }
 
-  explorerMove(uci: Uci) {
-    this.playUci(uci);
-    this.explorer.loading(true);
+  playUsiList(usiList: Usi[]): void {
+    this.pvUsiQueue = usiList;
+    const firstUsi = this.pvUsiQueue.shift();
+    if (firstUsi) this.playUsi(firstUsi, this.pvUsiQueue);
   }
 
   playBestMove() {
-    const uci = this.nextNodeBest() || (this.node.ceval && this.node.ceval.pvs[0].moves[0]);
-    if (uci) this.playUci(uci);
+    const usi = this.nextNodeBest() || (this.node.ceval && this.node.ceval.pvs[0].moves[0]);
+    if (usi) this.playUsi(usi);
   }
 
   canEvalGet(): boolean {
     if (this.node.ply >= 15 && !this.opts.study) return false;
 
-    // cloud eval does not support threefold repetition
-    const fens = new Set();
+    // cloud eval does not support fourfold repetition
+    const sfens = new Set();
     for (let i = this.nodeList.length - 1; i >= 0; i--) {
       const node = this.nodeList[i];
-      const fen = node.fen.split(' ').slice(0, 4).join(' ');
-      if (fens.has(fen)) return false;
-      fens.add(fen);
+      const sfen = node.sfen.split(' ').slice(0, 3).join(' ');
+      if (sfens.has(sfen)) return false;
+      sfens.add(sfen);
     }
     return true;
   }
@@ -846,6 +907,7 @@ export default class AnalyseCtrl {
       variant: this.data.game.variant.key,
       canGet: () => this.canEvalGet(),
       canPut: () =>
+        this.ceval?.cachable &&
         this.data.evalPut &&
         this.canEvalGet() &&
         // if not in study, only put decent opening moves
@@ -861,21 +923,14 @@ export default class AnalyseCtrl {
     else {
       this.retro = makeRetro(this, this.bottomColor());
       if (this.practice) this.togglePractice();
-      if (this.explorer.enabled()) this.toggleExplorer();
     }
     this.setAutoShapes();
-  };
-
-  toggleExplorer = (): void => {
-    if (this.practice) this.togglePractice();
-    if (this.explorer.enabled() || this.explorer.allowed()) this.explorer.toggle();
   };
 
   togglePractice = () => {
     if (this.practice || !this.ceval.possible) this.practice = undefined;
     else {
       if (this.retro) this.toggleRetro();
-      if (this.explorer.enabled()) this.toggleExplorer();
       this.practice = makePractice(this, () => {
         // push to 20 to store AI moves in the cloud
         // lower to 18 after task completion (or failure)
@@ -896,8 +951,24 @@ export default class AnalyseCtrl {
 
   isGamebook = (): boolean => !!(this.study && this.study.data.chapter.gamebook);
 
-  withCg<A>(f: (cg: ShogigroundApi) => A): A | undefined {
-    if (this.shogiground && this.cgVersion.js === this.cgVersion.dom) return f(this.shogiground);
-    return undefined;
-  }
+  // plies respect color - it is even if it's sente turn and vice versa
+  // but move number is a separate thing
+  // so instead of sending both
+  // let's just count the offset
+  plyOffset = (): number => {
+    return this.data.game.startedAtPly - ((this.data.game.startedAtStep ?? 1) - 1);
+  };
+
+  // Ideally we would just use node.clock
+  // but we store remaining times for lishogi games as node.clock
+  // for imports we store movetime as node.clock, because
+  // that's what's provided next to each move
+  getMovetime = (node: Tree.Node): number | undefined => {
+    const offset = this.mainline[0].ply;
+    if (defined(node.clock) && !this.study) {
+      if (defined(this.data.game.moveCentis)) return this.data.game.moveCentis[node.ply - 1 - offset];
+      if (this.imported) return node.clock;
+    }
+    return;
+  };
 }

@@ -1,5 +1,9 @@
 package views.html.base
 
+import shogi.format.forsyth.Sfen
+import controllers.routes
+import play.api.i18n.Lang
+
 import lila.app.ui.ScalatagsTemplate._
 
 object bits {
@@ -7,10 +11,9 @@ object bits {
   def mselect(id: String, current: Frag, items: List[Frag]) =
     div(cls := "mselect")(
       input(
-        tpe := "checkbox",
-        cls := "mselect__toggle fullscreen-toggle",
-        st.id := s"mselect-$id",
-        aria.label := "Other variants"
+        tpe   := "checkbox",
+        cls   := "mselect__toggle fullscreen-toggle",
+        st.id := s"mselect-$id"
       ),
       label(`for` := s"mselect-$id", cls := "mselect__label")(current),
       label(`for` := s"mselect-$id", cls := "fullscreen-mask"),
@@ -18,7 +21,7 @@ object bits {
     )
 
   lazy val stage = a(
-    href := "https://lishogi.org",
+    href  := "https://lishogi.org",
     style := """
 background: #7f1010;
 color: #fff;
@@ -38,4 +41,7 @@ z-index: 99;
       a(href := "https://twitter.com/lishogi", rel := "nofollow")("Twitter"),
       a(href := "https://discord.gg/YFtpMGg3rR", rel := "nofollow")("Discord")
     )
+
+  def sfenAnalysisLink(sfen: Sfen)(implicit lang: Lang) =
+    a(href := routes.UserAnalysis.parseArg(sfen.value.replace(" ", "_")))(trans.analysis())
 }

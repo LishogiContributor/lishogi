@@ -2,34 +2,31 @@ package controllers
 
 import lila.app._
 
-import play.api.data._
-import play.api.data.Forms._
 import play.api.libs.json._
 import views.html
 
 final class Learn(env: Env) extends LilaController(env) {
 
   import lila.learn.JSONHandlers._
+  import lila.learn.LearnForm._
 
   def index =
     Open { implicit ctx =>
       pageHit
-      ctx.me
-        .?? { me =>
-          env.learn.api.get(me) map { Json.toJson(_) } map some
-        }
-        .map { progress =>
-          Ok(html.learn.index(progress))
-        }
+      negotiate(
+        html = ctx.me
+          .?? { me =>
+            env.learn.api.get(me) map { Json.toJson(_) } map some
+          }
+          .map { progress =>
+            Ok(html.learn.index(progress, ctx.pref))
+          },
+        api = _ =>
+          ctx.me.fold(BadRequest("Not logged in").fuccess) { me =>
+            env.learn.api.get(me) map { Json.toJson(_) } dmap { JsonOk(_) }
+          }
+      )
     }
-
-  private val scoreForm = Form(
-    mapping(
-      "stage" -> nonEmptyText,
-      "level" -> number,
-      "score" -> number
-    )(Tuple3.apply)(Tuple3.unapply)
-  )
 
   def score =
     AuthBody { implicit ctx => me =>
@@ -37,12 +34,19 @@ final class Learn(env: Env) extends LilaController(env) {
       scoreForm
         .bindFromRequest()
         .fold(
-          _ => BadRequest.fuccess,
-          { case (stage, level, s) =>
-            val score = lila.learn.StageProgress.Score(s)
-            env.learn.api.setScore(me, stage, level, score) >>
-              env.activity.write.learn(me.id, stage) inject Ok(Json.obj("ok" -> true))
-          }
+          jsonFormError,
+          scores => env.learn.api.setScore(me, scores) inject Ok(Json.obj("ok" -> true))
+        )
+    }
+
+  def scores =
+    AuthBody { implicit ctx => me =>
+      implicit val body = ctx.body
+      scoresForm
+        .bindFromRequest()
+        .fold(
+          jsonFormError,
+          scores => env.learn.api.setScores(me, scores) inject Ok(Json.obj("ok" -> true))
         )
     }
 

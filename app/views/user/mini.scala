@@ -26,7 +26,7 @@ object mini {
             u.profileOrDefault.countryInfo map { c =>
               val hasRoomForNameText = u.username.size + c.shortName.size < 20
               span(
-                cls := "upt__info__top__country",
+                cls   := "upt__info__top__country",
                 title := (!hasRoomForNameText).option(c.name)
               )(
                 img(cls := "flag", src := staticUrl(s"images/flags/${c.code}.png")),
@@ -36,7 +36,7 @@ object mini {
           ),
           ping map bits.signalBars
         ),
-        if (u.marks.engine && !ctx.me.has(u) && !isGranted(_.UserSpy))
+        if (u.lame && !ctx.me.has(u) && !isGranted(_.UserSpy))
           div(cls := "upt__info__warning")(trans.thisAccountViolatedTos())
         else
           div(cls := "upt__info__ratings")(u.best8Perfs map { showPerfRating(u, _) })
@@ -46,33 +46,33 @@ object mini {
           (myId != u.id && u.enabled) option div(cls := "upt__actions btn-rack")(
             a(
               dataIcon := "1",
-              cls := "btn-rack__btn",
-              title := trans.watchGames.txt(),
-              href := routes.User.tv(u.username)
+              cls      := "btn-rack__btn",
+              title    := trans.watchGames.txt(),
+              href     := routes.User.tv(u.username)
             ),
             !blocked option frag(
               a(
                 dataIcon := "c",
-                cls := "btn-rack__btn",
-                title := trans.chat.txt(),
-                href := routes.Msg.convo(u.username)
+                cls      := "btn-rack__btn",
+                title    := trans.chat.txt(),
+                href     := routes.Msg.convo(u.username)
               ),
               a(
                 dataIcon := "U",
-                cls := "btn-rack__btn",
-                title := trans.challengeToPlay.txt(),
-                href := s"${routes.Lobby.home()}?user=${u.username}#friend"
+                cls      := "btn-rack__btn",
+                title    := trans.challengeToPlay.txt(),
+                href     := s"${routes.Lobby.home}?user=${u.username}#friend"
               )
             ),
             views.html.relation.mini(u.id, blocked, followable, rel)
           ),
           crosstable.flatMap(_.nonEmpty) map { cross =>
             a(
-              cls := "upt__score",
-              href := s"${routes.User.games(u.username, "me")}#games",
+              cls   := "upt__score",
+              href  := s"${routes.User.games(u.username, "me")}#games",
               title := trans.nbGames.pluralTxt(cross.nbGames, cross.nbGames.localize)
             )(trans.yourScore(raw(s"""<strong>${cross.showScore(myId)}</strong> - <strong>${~cross
-              .showOpponentScore(myId)}</strong>""")))
+                .showOpponentScore(myId)}</strong>""")))
           }
         )
       },
@@ -86,7 +86,7 @@ object mini {
       ),
       (!ctx.pref.isBlindfold) ?? playing map { pov =>
         frag(
-          gameFen(pov),
+          gameSfen(pov),
           div(cls := "upt__game-legend")(
             i(dataIcon := pov.game.perfType.map(_.iconChar.toString), cls := "text")(
               pov.game.clock.map(_.config.show)

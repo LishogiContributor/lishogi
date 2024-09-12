@@ -1,7 +1,7 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { bind } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from '../ctrl';
-import { nodeFullName, bind, richHTML } from '../util';
+import { nodeFullName, richHTML } from '../util';
 import { StudyCtrl } from './interfaces';
 
 function authorDom(author) {
@@ -17,9 +17,9 @@ function authorDom(author) {
 }
 
 export function authorText(author): string {
-  if (!author) return 'Unknown';
-  if (!author.name) return author;
-  return author.name;
+  if (!author) return '';
+  if (!author.name) return '[' + author + ']';
+  return '[' + author.name + ']';
 }
 
 export function currentComments(ctrl: AnalyseCtrl, includingMine: boolean): VNode | undefined {
@@ -69,7 +69,7 @@ export function currentComments(ctrl: AnalyseCtrl, includingMine: boolean): VNod
             })
           : null,
         authorDom(by),
-        ...(node.san ? [' on ', h('span.node', nodeFullName(node, ctrl.data.pref.pieceNotation ?? 0))] : []),
+        ...(node.usi ? [' on ', h('span.node', nodeFullName(node))] : []),
         ': ',
         h('div.text', { hook: richHTML(comment.text) }),
       ]);

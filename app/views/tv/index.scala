@@ -22,31 +22,31 @@ object index {
   )(implicit ctx: Context) =
     views.html.round.bits.layout(
       variant = pov.game.variant,
-      title = s"${channel.name} TV: ${playerText(pov.player)} vs ${playerText(pov.opponent)}",
+      title = s"${transKeyTxt(channel.key)} TV: ${playerText(pov.player)} vs ${playerText(pov.opponent)}",
       moreJs = frag(
         roundTag,
         embedJsUnsafe(
           s"""lishogi=window.lishogi||{};customWS=true;onload=function(){LishogiRound.boot(${safeJsonValue(
-            Json.obj(
-              "data" -> data,
-              "i18n" -> views.html.round.jsI18n(pov.game)
-            )
-          )})}"""
+              Json.obj(
+                "data" -> data,
+                "i18n" -> views.html.round.jsI18n(pov.game)
+              )
+            )})}"""
         )
       ),
       moreCss = cssTag("tv.single"),
       shogiground = false,
       openGraph = lila.app.ui
         .OpenGraph(
-          title = s"Watch the best ${channel.name.toLowerCase} games of lishogi.org",
-          description =
-            s"Sit back, relax, and watch the best ${channel.name.toLowerCase} Lishogi players compete on Lishogi TV",
+          title = s"${trans.watchLishogiTV.txt()} - ${transKeyTxt(channel.key)}",
+          description = trans.watchLishogiTVDescription.txt(),
           url = s"$netBaseUrl${routes.Tv.onChannel(channel.key)}"
         )
         .some,
-      robots = true
+      robots = true,
+      withHrefLangs = lila.i18n.LangList.All.some
     )(
-      main(cls := "round tv-single")(
+      main(cls := s"round tv-single ${mainVariantClass(pov.game.variant)}")(
         st.aside(cls := "round__side")(
           side.meta(pov),
           side.channels(channel, champions, "/tv")

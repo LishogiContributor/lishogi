@@ -12,12 +12,22 @@
   .button {
     width: 100%;
     padding: 1rem;
+    &.frameless {
+      padding: 0.5rem;
+    }
+    .spinner {
+      width: 26px;
+      height: unset;
+    }
   }
 
   .alternative {
     margin-top: 2rem;
     font-size: 0.9em;
     @extend %flex-between;
+    a {
+      margin: 0 0.1rem;
+    }
   }
 
   &-login {

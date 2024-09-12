@@ -9,7 +9,6 @@ import lila.practice.JsonView._
 import lila.practice.{ PracticeSection, PracticeStudy, UserStudy }
 import lila.study.Study.WithChapter
 import lila.study.{ Chapter, Study => StudyModel }
-import lila.tree.Node.partitionTreeJsonWriter
 import views._
 
 final class Practice(
@@ -23,7 +22,7 @@ final class Practice(
     Open { implicit ctx =>
       pageHit
       api.get(ctx.me) flatMap { up =>
-        NoCache(Ok(html.practice.index(up))).fuccess
+        Ok(html.practice.index(up)).noCache.fuccess
       }
     }
 
@@ -58,8 +57,8 @@ final class Practice(
         struct.sections.find(_.id == sectionId).fold(notFound) { section =>
           select(section) ?? { study =>
             Redirect(
-              routes.Page.notSupported()
-            ).fuccess // show(section.id, study.slug, study.id.value)).fuccess
+              routes.Practice.show(section.id, study.slug, study.id.value)
+            ).fuccess
           }
         }
       }
@@ -67,20 +66,16 @@ final class Practice(
 
   private def showUserPractice(us: lila.practice.UserStudy)(implicit ctx: Context) =
     analysisJson(us) map { case (analysisJson, studyJson) =>
-      NoCache(
-        EnableSharedArrayBuffer(
-          Ok(
-            html.practice.show(
-              us,
-              lila.practice.JsonView.JsData(
-                study = studyJson,
-                analysis = analysisJson,
-                practice = lila.practice.JsonView(us)
-              )
-            )
+      Ok(
+        html.practice.show(
+          us,
+          lila.practice.JsonView.JsData(
+            study = studyJson,
+            analysis = analysisJson,
+            practice = lila.practice.JsonView(us)
           )
         )
-      )
+      ).noCache.enableSharedArrayBuffer
     }
 
   def chapter(studyId: String, chapterId: String) =
@@ -92,30 +87,29 @@ final class Practice(
               "study"    -> studyJson,
               "analysis" -> analysisJson
             )
-          ) as JSON
+          ).noCache
         }
-      } map NoCache
+      }
     }
 
   private def analysisJson(us: UserStudy)(implicit ctx: Context): Fu[(JsObject, JsObject)] =
     us match {
       case UserStudy(_, _, chapters, WithChapter(study, chapter), _) =>
         env.study.jsonView(study, chapters, chapter, ctx.me) map { studyJson =>
-          val initialFen = chapter.root.fen.some
-          val pov        = userAnalysisC.makePov(initialFen, chapter.setup.variant)
+          val initialSfen = chapter.root.sfen.some
+          val pov         = userAnalysisC.makePov(initialSfen, chapter.setup.variant)
           val baseData = env.round.jsonView
             .userAnalysisJson(
               pov,
               ctx.pref,
-              initialFen,
               chapter.setup.orientation,
               owner = false,
               me = ctx.me
             )
           val analysis = baseData ++ Json.obj(
-            "treeParts" -> partitionTreeJsonWriter.writes {
-              lila.study.TreeBuilder(chapter.root, chapter.setup.variant)
-            },
+            "treeParts" -> lila.study.JsonView.partitionTreeJsonWriter.writes(
+              chapter.root
+            ),
             "practiceGoal" -> lila.practice.PracticeGoal(chapter)
           )
           (analysis, studyJson)
@@ -129,7 +123,7 @@ final class Practice(
 
   def reset =
     AuthBody { _ => me =>
-      api.progress.reset(me) inject Redirect(routes.Page.notSupported()) // index
+      api.progress.reset(me) inject Redirect(routes.Practice.index)
     }
 
   def config =
@@ -149,7 +143,7 @@ final class Practice(
         } { text =>
           ~api.config.set(text).toOption >>-
             api.structure.clear() >>
-            env.mod.logApi.practiceConfig(me.id) inject Redirect(routes.Page.notSupported()) // config
+            env.mod.logApi.practiceConfig(me.id) inject Redirect(routes.Practice.config)
         }
       }
     }

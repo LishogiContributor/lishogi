@@ -16,7 +16,6 @@ final class Env(
     gameCache: lila.game.Cached,
     userRepo: lila.user.UserRepo,
     gameRepo: lila.game.GameRepo,
-    poolApi: lila.pool.PoolApi,
     cacheApi: lila.memo.CacheApi,
     remoteSocketApi: lila.socket.RemoteSocket
 )(implicit
@@ -31,7 +30,8 @@ final class Env(
     coll = db(CollName("seek")),
     archiveColl = db(CollName("seek_archive")),
     maxPerPage = MaxPerPage(13),
-    maxPerUser = Max(5)
+    maxPerUser = Max(5),
+    maxHard = Max(150)
   )
 
   lazy val seekApi = wire[SeekApi]
@@ -49,9 +49,9 @@ final class Env(
 
   private lazy val biter = wire[Biter]
 
-  wire[LobbySocket]
+  lazy val socket = wire[LobbySocket]
 
   lila.common.Bus.subscribeFun("abortGame") { case lila.game.actorApi.AbortedBy(pov) =>
-    abortListener(pov)
+    abortListener(pov).unit
   }
 }

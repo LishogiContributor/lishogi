@@ -1,58 +1,58 @@
 package lila.game
 
 import org.joda.time.DateTime
-import scalaz.Validation.FlatMap._
+import cats.data.Validated
 
-import shogi.format.{ FEN, pgn => shogiPgn }
+import shogi.format.{ Reader, Tags }
 
 object Rewind {
 
-  private def createTags(fen: Option[FEN], game: Game) = {
-    val variantTag = Some(shogiPgn.Tag(_.Variant, game.variant.name))
-    val fenTag     = fen map (f => shogiPgn.Tag(_.FEN, f.value))
-
-    shogiPgn.Tags(List(variantTag, fenTag).flatten)
-  }
-
-  def apply(game: Game, initialFen: Option[FEN]): Valid[Progress] =
-    shogiPgn.Reader
-      .movesWithSans(
-        moveStrs = game.pgnMoves,
-        op = sans => shogiPgn.Sans(sans.value.dropRight(1)),
-        tags = createTags(initialFen, game)
+  def apply(game: Game): Validated[String, Progress] =
+    Reader
+      .fromUsi(
+        usis = game.usis.dropRight(1),
+        initialSfen = game.initialSfen,
+        variant = game.variant,
+        tags = Tags.empty
       )
-      .flatMap(_.valid) map { replay =>
-      val rewindedGame = replay.state
-      val color        = game.turnColor
-      val prevTurn     = game.shogi.fullMoveNumber
-      //val prevTurn     = if(color == shogi.Color.Gote) game.shogi.fullMoveNumber else game.shogi.fullMoveNumber -1
-      val refundPeriod = (game.clockHistory map (_.turnIsPresent(color, prevTurn))).getOrElse(false)
-      val newClock = game.clock.map(_.takeback(refundPeriod)) map { clk =>
-        game.clockHistory.flatMap(_.last(color)).fold(clk) { t =>
-          {
-            val backInTime = {
-              if (clk.isUsingByoyomi(color)) clk.byoyomi
-              else t
+      .valid
+      .map { replay =>
+        val rewindedGame = replay.state
+        val color        = game.turnColor
+        val turn         = rewindedGame.fullTurnNumber
+        val refundPeriod = ~(game.clockHistory map (_.countSpentPeriods(!color, turn)))
+
+        val newClock = game.clock.map(_.refundPeriods(!color, refundPeriod).takeback) map { clk =>
+          game.clockHistory
+            .flatMap { ch =>
+              if (ch.firstEnteredPeriod(color).exists(_ < turn)) clk.byoyomiOf(color).some
+              else ch.last(color)
             }
-            clk.setRemainingTime(color, backInTime)
-          }
+            .fold(clk) { t =>
+              clk.setRemainingTime(color, t)
+            }
         }
-      }
-      def rewindPlayer(player: Player) = player.copy(proposeTakebackAt = 0)
-      val newGame = game.copy(
-        sentePlayer = rewindPlayer(game.sentePlayer),
-        gotePlayer = rewindPlayer(game.gotePlayer),
-        shogi = rewindedGame.copy(clock = newClock),
-        binaryMoveTimes = game.binaryMoveTimes.map { binary =>
-          val moveTimes = BinaryFormat.moveTime.read(binary, game.playedTurns)
-          BinaryFormat.moveTime.write(moveTimes.dropRight(1))
-        },
-        loadClockHistory = _ =>
-          game.clockHistory.map { ch =>
-            (ch.update(!color, _.dropRight(1))).dropTurn(!color, prevTurn)
+        def rewindPlayer(player: Player) = player.copy(proposeTakebackAt = 0)
+        val newGame = game.copy(
+          sentePlayer = rewindPlayer(game.sentePlayer),
+          gotePlayer = rewindPlayer(game.gotePlayer),
+          shogi = game.initialSfen.fold(rewindedGame.copy(clock = newClock)) { sfen =>
+            rewindedGame
+              .copy(clock = newClock)
+              .withHistory(
+                rewindedGame.situation.history.withInitialSfen(sfen)
+              )
           },
-        movedAt = DateTime.now
-      )
-      Progress(game, newGame)
-    }
+          binaryMoveTimes = game.binaryMoveTimes.map { binary =>
+            val moveTimes = BinaryFormat.moveTime.read(binary, game.playedPlies)
+            BinaryFormat.moveTime.write(moveTimes.dropRight(1))
+          },
+          loadClockHistory = _ =>
+            game.clockHistory.map { ch =>
+              (ch.update(!color, _.dropRight(1))).refundSpentPeriods(!color, turn)
+            },
+          movedAt = DateTime.now
+        )
+        Progress(game, newGame)
+      }
 }

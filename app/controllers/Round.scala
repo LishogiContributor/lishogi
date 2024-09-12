@@ -7,9 +7,8 @@ import lila.api.Context
 import lila.app._
 import lila.chat.Chat
 import lila.common.HTTPRequest
-import lila.game.{ Pov, Game => GameModel, PgnDump }
+import lila.game.{ Game => GameModel, NotationDump, Pov }
 import lila.tournament.{ Tournament => Tour }
-import lila.swiss.Swiss.{ Id => SwissId }
 import lila.user.{ User => UserModel }
 import views._
 
@@ -18,8 +17,7 @@ final class Round(
     gameC: => Game,
     challengeC: => Challenge,
     analyseC: => Analyse,
-    tournamentC: => Tournament,
-    swissC: => Swiss
+    tournamentC: => Tournament
 ) extends LilaController(env)
     with TheftPrevention {
 
@@ -41,7 +39,7 @@ final class Round(
                 (pov.game.isSwitchable ?? otherPovs(pov.game)) zip
                 env.bookmark.api.exists(pov.game, ctx.me) zip
                 env.api.roundApi.player(pov, tour, lila.api.Mobile.Api.currentVersion) map {
-                  case _ ~ simul ~ chatOption ~ crosstable ~ playing ~ bookmarked ~ data =>
+                  case ((((((_, simul), chatOption), crosstable), playing), bookmarked), data) =>
                     simul foreach env.simul.api.onPlayerConnection(pov.game, ctx.me)
                     Ok(
                       html.round.player(
@@ -54,7 +52,7 @@ final class Round(
                         chatOption = chatOption,
                         bookmarked = bookmarked
                       )
-                    )
+                    ).noCache
                 }
             }
           },
@@ -65,14 +63,14 @@ final class Round(
             pov.game.playableByAi ?? env.fishnet.player(pov.game)
             gameC.preloadUsers(pov.game) zip
               env.api.roundApi.player(pov, tour, apiVersion) zip
-              getPlayerChat(pov.game, none) map { case _ ~ data ~ chat =>
-                Ok {
+              getPlayerChat(pov.game, none) map { case ((_, data), chat) =>
+                Ok(
                   data.add("chat", chat.flatMap(_.game).map(c => lila.chat.JsonView(c.chat)))
-                }
+                ).noCache
               }
           }
       }
-    ) dmap NoCache
+    )
 
   def player(fullId: String) =
     Open { implicit ctx =>
@@ -147,7 +145,7 @@ final class Round(
     }
 
   private def proxyPov(gameId: String, color: String): Fu[Option[Pov]] =
-    shogi.Color(color) ?? {
+    shogi.Color.fromName(color) ?? {
       env.round.proxyRepo.pov(gameId, _)
     }
 
@@ -166,7 +164,7 @@ final class Round(
                 getWatcherChat(pov.game) zip
                 (ctx.noBlind ?? env.game.crosstableApi.withMatchup(pov.game)) zip
                 env.bookmark.api.exists(pov.game, ctx.me) flatMap {
-                  case tour ~ simul ~ chat ~ crosstable ~ bookmarked =>
+                  case ((((tour, simul), chat), crosstable), bookmarked) =>
                     env.api.roundApi.watcher(
                       pov,
                       tour,
@@ -191,9 +189,9 @@ final class Round(
                 }
             else
               for { // web crawlers don't need the full thing
-                initialFen <- env.game.gameRepo.initialFen(pov.gameId)
-                pgn        <- env.api.pgnDump(pov.game, initialFen, none, PgnDump.WithFlags(clocks = false))
-              } yield Ok(html.round.watcher.crawler(pov, initialFen, pgn))
+                kif <- env.api
+                  .notationDump(pov.game, none, NotationDump.WithFlags(clocks = false))
+              } yield Ok(html.round.watcher.crawler(pov, kif))
           },
           api = apiVersion =>
             for {
@@ -205,13 +203,13 @@ final class Round(
                 .add("chat" -> chat.map(c => lila.chat.JsonView(c.chat)))
                 .add("analysis" -> analysis.map(a => lila.analyse.JsonView.mobile(pov.game, a)))
             }
-        ) map { NoCache(_) }
+        ) dmap (_.noCache)
     }
 
   private[controllers] def getWatcherChat(
       game: GameModel
   )(implicit ctx: Context): Fu[Option[lila.chat.UserChat.Mine]] = {
-    ctx.noKid && ctx.me.fold(true)(env.chat.panic.allowed) && {
+    ctx.noKid && ctx.me.fold(HTTPRequest isHuman ctx.req)(env.chat.panic.allowed) && {
       game.finishedOrAborted || !ctx.userId.exists(game.userIds.contains)
     }
   } ?? {
@@ -236,24 +234,15 @@ final class Round(
             )
           )
           .some
-      (game.tournamentId, game.simulId, game.swissId) match {
-        case (Some(tid), _, _) =>
+      (game.tournamentId, game.simulId) match {
+        case (Some(tid), _) =>
           {
             ctx.isAuth && tour.fold(true)(tournamentC.canHaveChat(_, none))
           } ?? env.chat.api.userChat.cached
             .findMine(Chat.Id(tid), ctx.me)
             .dmap(toEventChat(s"tournament/$tid"))
-        case (_, Some(sid), _) =>
+        case (_, Some(sid)) =>
           env.chat.api.userChat.cached.findMine(Chat.Id(sid), ctx.me).dmap(toEventChat(s"simul/$sid"))
-        case (_, _, Some(sid)) =>
-          env.swiss.api
-            .roundInfo(SwissId(sid))
-            .flatMap { _ ?? swissC.canHaveChat }
-            .flatMap {
-              _ ?? {
-                env.chat.api.userChat.cached.findMine(Chat.Id(sid), ctx.me).dmap(toEventChat(s"swiss/$sid"))
-              }
-            }
         case _ =>
           game.hasChat ?? {
             env.chat.api.playerChat.findIf(Chat.Id(game.id), !game.justCreated) map { chat =>
@@ -277,11 +266,9 @@ final class Round(
       OptionFuResult(proxyPov(gameId, color)) { pov =>
         env.tournament.api.gameView.withTeamVs(pov.game) zip
           (pov.game.simulId ?? env.simul.repo.find) zip
-          env.game.gameRepo.initialFen(pov.game) zip
           env.game.crosstableApi.withMatchup(pov.game) zip
-          env.bookmark.api.exists(pov.game, ctx.me) map {
-            case tour ~ simul ~ initialFen ~ crosstable ~ bookmarked =>
-              Ok(html.game.bits.sides(pov, initialFen, tour, crosstable, simul, bookmarked = bookmarked))
+          env.bookmark.api.exists(pov.game, ctx.me) map { case (((tour, simul), crosstable), bookmarked) =>
+            Ok(html.game.bits.sides(pov, tour, crosstable, simul, bookmarked = bookmarked))
           }
       }
     }
@@ -308,9 +295,9 @@ final class Round(
     Open { implicit ctx =>
       OptionResult(env.game.gameRepo game id) { game =>
         Redirect(
-          "%s?fen=%s#%s".format(
-            routes.Lobby.home(),
-            get("fen") | (shogi.format.Forsyth >> game.shogi),
+          "%s?sfen=%s#%s".format(
+            routes.Lobby.home,
+            get("sfen") | (game.shogi.toSfen).value,
             mode
           )
         )
@@ -322,11 +309,11 @@ final class Round(
       OptionFuRedirect(env.round.proxyRepo.pov(fullId)) { pov =>
         if (isTheft(pov)) {
           lila.log("round").warn(s"theft resign $fullId ${HTTPRequest.lastRemoteAddress(ctx.req)}")
-          fuccess(routes.Lobby.home())
+          fuccess(routes.Lobby.home)
         } else {
           env.round resign pov
           import scala.concurrent.duration._
-          akka.pattern.after(500.millis, env.system.scheduler)(fuccess(routes.Lobby.home()))
+          akka.pattern.after(500.millis, env.system.scheduler)(fuccess(routes.Lobby.home))
         }
       }
     }
@@ -334,7 +321,7 @@ final class Round(
   def mini(gameId: String, color: String) =
     Open { implicit ctx =>
       OptionOk(
-        shogi.Color(color).??(env.round.proxyRepo.povIfPresent(gameId, _)) orElse env.game.gameRepo
+        shogi.Color.fromName(color).??(env.round.proxyRepo.povIfPresent(gameId, _)) orElse env.game.gameRepo
           .pov(gameId, color)
       )(html.game.bits.mini)
     }

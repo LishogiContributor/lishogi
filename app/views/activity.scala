@@ -48,7 +48,7 @@ object activity {
       iconTag(""),
       div(
         trans.activity.supportedNbMonths
-          .plural(p.months, p.months, a(href := routes.Plan.index())("Patron")) // patron
+          .plural(p.months, p.months, a(href := routes.Plan.index)("Patron")) // patron
       )
     )
 
@@ -69,7 +69,7 @@ object activity {
   private def onePractice(tup: (lila.practice.PracticeStudy, Int))(implicit ctx: Context) =
     tup match {
       case (study, nb) =>
-        val href = routes.Page.notSupported() // show("-", study.slug, study.id.value)
+        val href = routes.Practice.show("-", study.slug, study.id.value)
         frag(
           trans.activity.practicedNbPositions.plural(nb, nb, a(st.href := href)(study.name)),
           br
@@ -161,7 +161,7 @@ object activity {
                 pov.game.wonBy(pov.color) match {
                   case Some(true)  => trans.victory()
                   case Some(false) => trans.defeat()
-                  case _           => "Draw"
+                  case _           => trans.draw()
                 }
               ),
               " vs ",
@@ -288,10 +288,10 @@ object activity {
   private def scoreFrag(s: Score)(implicit ctx: Context) =
     raw {
       s"""<score>${scoreStr("win", s.win, trans.nbWins)}${scoreStr("draw", s.draw, trans.nbDraws)}${scoreStr(
-        "loss",
-        s.loss,
-        trans.nbLosses
-      )}</score>"""
+          "loss",
+          s.loss,
+          trans.nbLosses
+        )}</score>"""
     }
 
   private def ratingProgFrag(r: RatingProg) =

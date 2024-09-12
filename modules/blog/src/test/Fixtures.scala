@@ -4,52 +4,52 @@ object Fixtures {
 
   def noYoutube =
     """
-<h2>YES! We did it. Crazyhouse is here!</h2>
+<h2>YES! We did it. variant is here!</h2>
 
-<p>It's everywhere. <strong>Lobby games, tournaments, simuls, and the analysis board; </strong>Crazyhouse is a first-class variant on lishogi.org.</p>
+<p>It's everywhere. <strong>Lobby games, tournaments, simuls, and the analysis board; </strong>variant is a first-class variant on lishogi.org.</p>
 
-<h2>What is crazyhouse?</h2>
+<h2>What is chvariant?</h2>
 
-<p>It's a <em>very</em> exciting chess variant. In a crazyhouse game, either player can introduce a captured piece back onto the chessboard as their own. This is called <em>dropping</em> a piece.</p>
+<p>It's a <em>very</em> exciting chess variant. In a chvariant game, either player can introduce a captured piece back onto the chessboard as their own. This is called <em>dropping</em> a piece.</p>
 
 <p class="block-img"><img alt="" src="https://d27t3nufpewl0w.cloudfront.net/lishogi/de5a66765de83e6c30865a558d067fda66459bd1_tuto1-arrow.png" width="530" height="359" /></p>
 
-<p>In this example, White has two previously captured Black pieces in their <em>pocket</em>, a knight and a bishop. These pieces were captured by White earlier in the game. White can check the Black king by <strong><em>dropping</em></strong><strong> a bishop on c3!</strong></p>
+<p>In this example, White has two previously captured Black pieces in their <em>hand</em>, a knight and a bishop. These pieces were captured by White earlier in the game. White can check the Black king by <strong><em>dropping</em></strong><strong> a bishop on c3!</strong></p>
 
 <p class="block-img"><img alt="" src="https://d27t3nufpewl0w.cloudfront.net/lishogi/a109d485184efb7600bdb2df9964ab50b2b3358b_tuto2-arrow.png" width="530" height="361" /></p>
 
 <p>In turn Black can block the check by <strong>dropping a knight on e5!</strong></p>
 
-<p><a href="http://lishogi.org/variant/crazyhouse"><strong>Read more about crazyhouse rules and strategies here</strong></a></p>
+<p><a href="http://lishogi.org/variant/chvariant"><strong>Read more about chvariant rules and strategies here</strong></a></p>
 
 <h2>Have great games!</h2>
 
-<p>To be honest, this was quite tough to implement, but also fun and totally worth it. The main challenge being that crazyhouse changes the very definition of what a <em>move</em> is; since now it can also be a drop. This change to a key concept of lishogi required some rewiring of the program foundations.</p>
+<p>To be honest, this was quite tough to implement, but also fun and totally worth it. The main challenge being that chvariant changes the very definition of what a <em>move</em> is; since now it can also be a drop. This change to a key concept of lishogi required some rewiring of the program foundations.</p>
 
 <p><em>Please don't ask me for </em><a href="https://en.wikipedia.org/wiki/Bughouse_chess"><em>bughouse</em></a>. Lichess is a game for one board and two players. Now, someone should totally build a new bughouse website/app. It's impossible to integrate into lishogi because it's radically unlike chess, structurally speaking.</p>
 
-<h2>First crazyhouse tournament</h2>
+<h2>First chvariant tournament</h2>
 
 <p>What could be a better way to get started? <a href="http://lishogi.org/tournament/crazy1st"><strong>Join the party!</strong></a></p>
 
-<p><em>[EDIT] The first tournament is over. Second crazyhouse tournament: </em><a href="http://lishogi.org/tournament/crazy2nd"><em><strong>Join here!</strong></em></a></p>
+<p><em>[EDIT] The first tournament is over. Second chvariant tournament: </em><a href="http://lishogi.org/tournament/crazy2nd"><em><strong>Join here!</strong></em></a></p>
 """
 
   def withYoutube =
     """
-<p><em>Note: this article was </em><a href="https://www.reddit.com/r/chess/comments/42zpnv/crazyhouse_an_overview_strategic_concepts/"><em>posted on reddit</em></a><em> first.</em></p>
+<p><em>Note: this article was </em><a href="https://www.reddit.com/r/chess/comments/42zpnv/chvariant_an_overview_strategic_concepts/"><em>posted on reddit</em></a><em> first.</em></p>
 
-<h2>Introduction to Crazyhouse</h2>
+<h2>Introduction to variant</h2>
 
-<h3>What is <a href="http://lishogi.org/variant/crazyhouse">crazyhouse</a>, and how does it differ from chess?</h3>
+<h3>What is <a href="http://lishogi.org/variant/chvariant">chvariant</a>, and how does it differ from chess?</h3>
 
-<p><em>According to the wiki:<br>Crazyhouse (also known as Drop chess, Mad chess, Reinforcement chess, Turnabout chess and Schizo-chess) is a chess variant similar to bughouse chess, but with only two players. It effectively incorporates a rule from the game shogi, in which a player can introduce a captured piece back to the chessboard as his own.</em></p>
+<p><em>According to the wiki:<br>variant (also known as Drop chess, Mad chess, Reinforcement chess, Turnabout chess and Schizo-chess) is a chess variant similar to bughouse chess, but with only two players. It effectively incorporates a rule from the game shogi, in which a player can introduce a captured piece back to the chessboard as his own.</em></p>
 
 <p>The fact that pieces can be re-introduced into play makes this an extremely tactical game with a huge emphasis placed on initiative and solid structure. You have to be able to calculate not only the normal chess variations from any given position, but also the resulting implications that could arise with each exchanged piece; and, even more than in chess, you need to actively prevent weaknesses in your own structure.</p>
 
-<p>Pawns and knights increase slightly and the queen decreases slightly in relative importance, and there is no endgame to speak of, since all the pieces can be placed back on the board. Otherwise, crazyhouse takes all the normal chess themes and heightens them by magnitudes. An extra tempo or two can lead to a crushing attack, and even small weaknesses, when exploited correctly, can become glaring. Precision is almost always required, especially when defending, as every position is a sharp one.</p>
+<p>Pawns and knights increase slightly and the queen decreases slightly in relative importance, and there is no endgame to speak of, since all the pieces can be placed back on the board. Otherwise, chvariant takes all the normal chess themes and heightens them by magnitudes. An extra tempo or two can lead to a crushing attack, and even small weaknesses, when exploited correctly, can become glaring. Precision is almost always required, especially when defending, as every position is a sharp one.</p>
 
-<p>For those reasons, I'm willing to propose that becoming a proficient crazyhouse player can only help your chess vision: you'll see tactics more naturally, calculate more efficiently, and identify weaknesses more quickly. A lot of ideas can be carried over. But even if that's not the case, crazyhouse is an extremely fun game that can stand on its own merits! So let's see what it's all about.</p>
+<p>For those reasons, I'm willing to propose that becoming a proficient chvariant player can only help your chess vision: you'll see tactics more naturally, calculate more efficiently, and identify weaknesses more quickly. A lot of ideas can be carried over. But even if that's not the case, chvariant is an extremely fun game that can stand on its own merits! So let's see what it's all about.</p>
 
 <p class="block-img"><img alt="" src="https://d27t3nufpewl0w.cloudfront.net/lishogi/c13a4de82869df16e3cf6ae02dbb369fef1feb4c_knightpos744.jpg" width="744" height="391" /></p>
 
@@ -61,7 +61,7 @@ object Fixtures {
 
 <h3>Opening</h3>
 
-<p>As white, you have an extra tempo which you should use to at best start an attack and at worst gain a positional advantage. As black, your goal is first to neutralize white's initiative and then equalize by imbalancing the position or counterpunching.<br>The standard rules apply: develop your pieces, control the center, and get your king to safety. But there are some opening ideas uniquely emphasized in Crazyhouse:</p>
+<p>As white, you have an extra tempo which you should use to at best start an attack and at worst gain a positional advantage. As black, your goal is first to neutralize white's initiative and then equalize by imbalancing the position or counterpunching.<br>The standard rules apply: develop your pieces, control the center, and get your king to safety. But there are some opening ideas uniquely emphasized in variant:</p>
 
 <ul>
 
@@ -85,9 +85,9 @@ object Fixtures {
 
 <h3>Middlegame</h3>
 
-<p>The middlegame is almost always where the game is won or lost. This is where you should look to start exchanging pieces, breaking with your pawns, building up pressure on vulnerable squares, or cracking open your opponent's defenses with careful pawn drops or piece sacs. The midgame is rapidly achieved in crazyhouse, so be ready to join battle straight away! I'll cover strategic midgame motifs below in the 'Strategy Pointers' section.</p>
+<p>The middlegame is almost always where the game is won or lost. This is where you should look to start exchanging pieces, breaking with your pawns, building up pressure on vulnerable squares, or cracking open your opponent's defenses with careful pawn drops or piece sacs. The midgame is rapidly achieved in chvariant, so be ready to join battle straight away! I'll cover strategic midgame motifs below in the 'Strategy Pointers' section.</p>
 
-<p>Lots of exchanges will take place in the middle game. When considering the tactical implications of exchanges, remember that, though they move the same, pieces accomplish slightly different things in crazyhouse than in chess, and that should be accounted for in your mental calculations. As a general rule of thumb, I like to think of piece values thusly:</p>
+<p>Lots of exchanges will take place in the middle game. When considering the tactical implications of exchanges, remember that, though they move the same, pieces accomplish slightly different things in chvariant than in chess, and that should be accounted for in your mental calculations. As a general rule of thumb, I like to think of piece values thusly:</p>
 
 <h3>Piece	Value</h3>
 
@@ -113,13 +113,13 @@ object Fixtures {
 
 <ul>
 
-<li>On both offense and defense, be aware of positional sacrifices: knights and bishops or even major pieces can often be sac'd to expose the king in a manner which might be considered unsound in chess but which in Crazyhouse is very powerful. Similarly, a few points of material can be sacrificed to gain a foothold in enemy territory.</li>
+<li>On both offense and defense, be aware of positional sacrifices: knights and bishops or even major pieces can often be sac'd to expose the king in a manner which might be considered unsound in chess but which in variant is very powerful. Similarly, a few points of material can be sacrificed to gain a foothold in enemy territory.</li>
 
 <li>Guard the weak squares by your king. When your king's in the center, this means f2/7; when your king's castled kingside, this means g2/7.</li>
 
 <li>Scan for weaknesses: holes where pawns can be dropped, pieces vulnerable to a fork, weakly defended kingside squares, overloaded defensive pieces. Identify a weakness and then concentrate all your drops on that weakness.</li>
 
-<li>If you identify a weakness but your pocket is empty, look to force exchanges. If your own position is weak, avoid exchanges until you're more solid.</li>
+<li>If you identify a weakness but your hand is empty, look to force exchanges. If your own position is weak, avoid exchanges until you're more solid.</li>
 
 <li>Avoid weakening squares of a certain color complex. Diags (pawns, bishops) can be dropped deep into your territory on your weak color complex. Try to create weaknesses in your opponent's pawn structure where you can infiltrate. Build pawn lattices into enemy territory (<a href="http://lishogi.org/IqfmjHrW">like in this game</a>), preferably near the opponent's king. Expand your space wherever reasonably possible. </li>
 
@@ -131,7 +131,7 @@ object Fixtures {
 
 <ul>
 
-<li>Defend pawn drops on your kingside: know how to react to p@h3/h6. The knight is an excellent defensive piece in this scenario. For example, if you have a knight on f3 and your king is castled, p@h3 can be countered by gxf3, Bxf3, <strong>Ng5</strong>, Bxf1, Qxf1, with the idea of eventually replacing the g pawn with p@g2. If you have a knight in your pocket, p@h3 can be met gxf3, Bxf3, <strong>N@f4</strong>, simultaneously attacking the bishop and defending g2. Again if the rook is captured by the bishop you recapture with your queen and your king is quite safe.</li>
+<li>Defend pawn drops on your kingside: know how to react to p@h3/h6. The knight is an excellent defensive piece in this scenario. For example, if you have a knight on f3 and your king is castled, p@h3 can be countered by gxf3, Bxf3, <strong>Ng5</strong>, Bxf1, Qxf1, with the idea of eventually replacing the g pawn with p@g2. If you have a knight in your hand, p@h3 can be met gxf3, Bxf3, <strong>N@f4</strong>, simultaneously attacking the bishop and defending g2. Again if the rook is captured by the bishop you recapture with your queen and your king is quite safe.</li>
 
 <li>If they drop a pawn on the h file before you're castled, Rg1/8 is often an adequate response.</li>
 
@@ -155,7 +155,7 @@ object Fixtures {
 
 <li>Knights are often strongest when placed on the fifth rank (as white) or the fourth rank (as black), as from there they observe key squares on the seventh (or second) rank. For example, I sometimes like placing a knight N@h5 with the idea of sacking on g7 to pull the king out. <a href="http://lishogi.org/THYYswro#29">Example in this game at move 15</a>.</li>
 
-<li>Rooks should for the most part be kept in your pocket until you can exploit the back rank.</li>
+<li>Rooks should for the most part be kept in your hand until you can exploit the back rank.</li>
 
 <li>Don't bring your Queen out until it can be brought into the attack with tempo or with a clear threat. If overly exposed it can become a focal point for your opponent's attack, gaining him tempo. If kept on d1/8 it covers many important squares, especially the c-pawn and the back rank by your king. The Queen is a fantastic defensive piece; keeping it by your king is rarely a bad idea. At the worst case it can be sac'd for a piece to quell your opponent's attack. Generally speaking, you should be well compensated if you can get two pieces for your queen.</li>
 
@@ -233,7 +233,7 @@ object Fixtures {
 
 <h2>My Opening Systems</h2>
 
-<p>Here's my Crazyhouse opening repertoire, listed by the frequency with which I play it. I'm not going to claim it's anywhere near perfected, or even that it's what you should play. But I've had success with it. Obviously the move orders will change quite a bit depending on what your opponent does and you'll have to be flexible, but I'm going to list the common move order for each just so you can get a feel for the general set-up. I can't go through each variation because it would take forever, but if there's a certain line you're interested in let me know.</p>
+<p>Here's my variant opening repertoire, listed by the frequency with which I play it. I'm not going to claim it's anywhere near perfected, or even that it's what you should play. But I've had success with it. Obviously the move orders will change quite a bit depending on what your opponent does and you'll have to be flexible, but I'm going to list the common move order for each just so you can get a feel for the general set-up. I can't go through each variation because it would take forever, but if there's a certain line you're interested in let me know.</p>
 
 <h3>White Openings</h3>
 
@@ -255,7 +255,7 @@ object Fixtures {
 
 <p><em>Illustrative Game:</em> <a href="http://lishogi.org/LTdPNcHW">lishogi.org/LTdPNcHW</a></p>
 
-<p><em>Themes:</em> Focus on the pin on the h4-d8 diagonal. Sometimes exchange for a second bishop which you can place behind the first on h4. Pile up on the pin. Option of trading on f6 for a pocket knight or on e7 for a pocket bishop. Try to advance e4-e5 if given the chance and claim space. If the black bishop goes to f5, challenge it with Bd3 and re-capture with the c pawn for a strong center; if it goes to g4, block the pin with Be2. If given the chance, exchange pawns in the center and place p@h6. In completely passive or dubious black systems where they're generating little or no counterplay it can be explosive to play e4, d4, and then after the minor pieces are deployed f4!? followed by 0-0 and f5.</p>
+<p><em>Themes:</em> Focus on the pin on the h4-d8 diagonal. Sometimes exchange for a second bishop which you can place behind the first on h4. Pile up on the pin. Option of trading on f6 for a hand knight or on e7 for a hand bishop. Try to advance e4-e5 if given the chance and claim space. If the black bishop goes to f5, challenge it with Bd3 and re-capture with the c pawn for a strong center; if it goes to g4, block the pin with Be2. If given the chance, exchange pawns in the center and place p@h6. In completely passive or dubious black systems where they're generating little or no counterplay it can be explosive to play e4, d4, and then after the minor pieces are deployed f4!? followed by 0-0 and f5.</p>
 
 <h4>e4 systems</h4>
 
@@ -331,19 +331,19 @@ object Fixtures {
 
 <ul>
 
-<li><a href="https://www.youtube.com/watch?v=wbxgu7M-P1E">IM John Bartholomew plays the lishogi Crazyhouse bullet arena</a></li>
+<li><a href="https://www.youtube.com/watch?v=wbxgu7M-P1E">IM John Bartholomew plays the lishogi variant bullet arena</a></li>
 
 <li><a href="https://www.youtube.com/watch?v=Czy1va4lhZg">NM Chess Network plays a lishogi blitz tournament</a></li>
 
-<li><a href="https://www.youtube.com/watch?v=rrgrnlNEUOk">Lichess Master Atrophied explains Crazyhouse rules</a></li>
+<li><a href="https://www.youtube.com/watch?v=rrgrnlNEUOk">Lichess Master Atrophied explains variant rules</a></li>
 
 <li><a href="https://www.youtube.com/watch?v=wn87NOBBNl4">Lichess Master Atrophied explains opening principles</a></li>
 
-<li><a href="http://lishogi.org/games/search?perf=18&sort.field=d&sort.order=desc">Lichess Crazyhouse Games Database</a></li>
+<li><a href="http://lishogi.org/games/search?perf=18&sort.field=d&sort.order=desc">Lichess variant Games Database</a></li>
 
-<li><a href="http://ficsgames.org/cgi-bin/search.cgi">FICS Crazyhouse Games Database (search for games by cheesybread or tantheman -- the very best!)</a></li>
+<li><a href="http://ficsgames.org/cgi-bin/search.cgi">FICS variant Games Database (search for games by cheesybread or tantheman -- the very best!)</a></li>
 
-<li><a href="https://www.reddit.com/r/crazyhouse">Crazyhouse subreddit</a></li>
+<li><a href="https://www.reddit.com/r/chvariant">variant subreddit</a></li>
 
 </ul>
 

@@ -1,8 +1,9 @@
 package lila.tournament
 
 import shogi.Clock.{ Config => ClockConfig }
+import shogi.format.forsyth.Sfen
+import shogi.Mode
 import shogi.variant.Variant
-import shogi.{ Mode, StartingPosition }
 import lila.db.BSON
 import lila.db.dsl._
 import lila.rating.PerfType
@@ -40,7 +41,7 @@ object BSONHandlers {
         "limit"     -> c.limitSeconds,
         "increment" -> c.incrementSeconds,
         "byoyomi"   -> c.byoyomiSeconds,
-        "periods"   -> c.periods
+        "periods"   -> c.periodsTotal
       )
   )
 
@@ -58,12 +59,10 @@ object BSONHandlers {
 
   implicit val tournamentHandler = new BSON[Tournament] {
     def reads(r: BSON.Reader) = {
-      val variant = r.intO("variant").fold[Variant](Variant.default)(Variant.orDefault)
-      val position: StartingPosition = r.strO("fen").flatMap(Thematic.byFen) orElse
-        r.strO("eco").flatMap(Thematic.byEco) getOrElse // for BC
-        StartingPosition.initial
-      val startsAt   = r date "startsAt"
-      val conditions = r.getO[Condition.All]("conditions") getOrElse Condition.All.empty
+      val variant                = r.intO("variant").fold[Variant](Variant.default)(Variant.orDefault)
+      val position: Option[Sfen] = r.getO[Sfen]("sfen").filterNot(_.initialOf(variant))
+      val startsAt               = r date "startsAt"
+      val conditions             = r.getO[Condition.All]("conditions") getOrElse Condition.All.empty
       Tournament(
         id = r str "_id",
         name = r str "name",
@@ -102,7 +101,7 @@ object BSONHandlers {
         "clock"      -> o.clock,
         "minutes"    -> o.minutes,
         "variant"    -> o.variant.some.filterNot(_.standard).map(_.id),
-        "fen"        -> o.position.some.filterNot(_.initial).map(_.fen),
+        "sfen"       -> o.position.map(_.value),
         "mode"       -> o.mode.some.filterNot(_.rated).map(_.id),
         "password"   -> o.password,
         "conditions" -> o.conditions.ifNonEmpty,
@@ -172,7 +171,7 @@ object BSONHandlers {
           case true => user1
           case _    => user2
         },
-        turns = r intO "t",
+        plies = r intO "t",
         berserk1 = r.intO("b1").fold(r.boolD("b1"))(1 ==), // it used to be int = 0/1
         berserk2 = r.intO("b2").fold(r.boolD("b2"))(1 ==)
       )
@@ -184,7 +183,7 @@ object BSONHandlers {
         "s"   -> o.status.id,
         "u"   -> BSONArray(o.user1, o.user2),
         "w"   -> o.winner.map(o.user1 ==),
-        "t"   -> o.turns,
+        "t"   -> o.plies,
         "b1"  -> w.boolO(o.berserk1),
         "b2"  -> w.boolO(o.berserk2)
       )

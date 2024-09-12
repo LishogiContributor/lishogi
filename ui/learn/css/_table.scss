@@ -1,8 +1,13 @@
 .learn__table {
-  align-self: center;
-
+  display: flex;
+  align-items: center;
   .wrap {
     @extend %box-neat, %box-radius-force;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 55%;
+    background: $c-bg-box;
   }
 
   .title {
@@ -15,10 +20,12 @@
       margin: 15px 0 5px -3px;
       white-space: nowrap;
     }
-    img {
-      width: 80px;
-      height: 80px;
+    .stage-img {
+      flex: 1;
       margin: 5px 8px 5px 5px;
+    }
+    .text {
+      flex: 4;
     }
   }
   .subtitle {
@@ -27,15 +34,18 @@
 
   .goal {
     @extend %flex-center;
-    background: $c-bg-box;
+    flex: 1;
     border: $border;
     border-top: none;
-    padding: $block-gap;
+    padding: 3rem $block-gap;
     text-align: center;
     justify-content: center;
+    white-space: pre-line;
+    font-size: 1.1em;
   }
   .result {
     @extend %flex-center;
+    flex: 1;
     justify-content: center;
     flex-flow: column nowrap;
     border: $border;
@@ -43,20 +53,20 @@
     text-align: center;
     cursor: pointer;
     @include transition();
-    min-height: 135px;
-    padding: 0;
+    padding: 6px 0;
     font-size: 1.7em;
+    @include breakpoint($mq-col2) {
+      padding: 0;
+    }
 
     @keyframes shadow-glow {
       50% {
         box-shadow: 0 0 10px 10px rgba(255, 255, 255, 0.5);
-        transform: scale(1.05);
       }
     }
     @keyframes text-shadow-glow {
       50% {
         text-shadow: 0 0 10px #fff;
-        transform: scale(1.05);
       }
     }
     h2 {
@@ -71,14 +81,14 @@
     }
     .stars {
       margin-top: 4px;
-    }
-    .stars i {
-      margin: 3px;
-      animation: text-shadow-glow 1s 1;
+      i {
+        margin: 3px;
+        animation: text-shadow-glow 1s 1;
+      }
     }
     button {
       margin: 15px auto 15px auto;
-      font-size: 30px;
+      font-size: 28px;
       font-weight: bold;
       text-transform: uppercase;
       background: #fff;
@@ -91,16 +101,16 @@
     &.completed {
       background: $c-good;
       color: $c-good-over;
-    }
-    &.completed button {
-      color: $c-good;
+      button {
+        color: $c-good;
+      }
     }
     &.failed {
       background: $c-bad;
       color: $c-bad-over;
-    }
-    &.failed button {
-      color: $c-bad;
+      button {
+        color: $c-bad;
+      }
     }
     @keyframes go-home {
       from {
@@ -116,42 +126,39 @@
   }
 
   .progress {
-    @extend %flex-center-nowrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+    grid-gap: 1px;
     text-align: center;
-    border: $border;
     border-top: 0;
     a {
       @extend %flex-center;
       align-content: center;
-      flex: 1 1 100%;
       text-align: center;
       background: $c-bg-high;
       height: 3em;
       font-size: 0.9em;
-      border-left: $border;
+      outline: $border;
       opacity: 0.8;
       @include transition();
-    }
-    a:first-child {
-      border-left: 0;
-    }
-    a:hover {
-      opacity: 1;
-    }
-    a span {
-      margin: auto;
-    }
-    .st3 i:first-child {
-      display: block;
-    }
-    a.done {
-      color: $c-good-over;
-      background: $c-good;
-    }
-    a.active {
-      opacity: 1;
-      color: $c-primary-over;
-      background: $c-primary;
+      span {
+        margin: auto;
+        &.st3 i:first-child {
+          display: block;
+        }
+      }
+      &:hover {
+        opacity: 1;
+      }
+      &.done {
+        color: $c-good-over;
+        background: $c-good;
+      }
+      &.active {
+        opacity: 1;
+        color: $c-primary-over;
+        background: $c-primary;
+      }
     }
   }
 }

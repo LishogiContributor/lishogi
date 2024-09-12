@@ -2,7 +2,12 @@ $c-challenge: $c-secondary;
 
 .challenge-page {
   .challenge-id-form {
-    white-space: nowrap;
+    display: flex;
+    flex-wrap: wrap;
+    & > input {
+      width: 32ch;
+      max-width: 80%;
+    }
   }
   .invite {
     display: flex;
@@ -22,7 +27,7 @@ $c-challenge: $c-secondary;
     }
     .spinner {
       width: 13em;
-      height: 13em;
+      height: 16em;
       margin: 2em auto;
     }
   }
@@ -32,6 +37,10 @@ $c-challenge: $c-secondary;
   }
   .details {
     @extend %flex-between;
+    @include breakpoint($mq-col1-uniboard) {
+      flex-direction: column;
+      gap: 1rem;
+    }
     border-radius: 99px;
     background: mix($c-challenge, $c-bg-box, 10%);
     border: 1px solid $c-challenge;
@@ -52,10 +61,15 @@ $c-challenge: $c-secondary;
         font-weight: bold;
       }
     }
+    .game-color {
+      font-size: 1.25rem;
+      justify-content: center;
+    }
     .mode {
       font-weight: bold;
       color: $c-challenge;
       text-transform: uppercase;
+      justify-content: flex-end;
     }
   }
   .follow-up .button {

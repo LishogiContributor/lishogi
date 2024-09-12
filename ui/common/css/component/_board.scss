@@ -1,95 +1,113 @@
-.main-board {
+.main-board,
+.mini-board {
   @extend %square;
-  &__preload {
+  align-self: center;
+  padding-bottom: calc(100% / 11 * 12 / 9 * 11 + #{$hands-gap}); // 100% / 11 * 12 / 9 * 11
+  .sg-wrap {
+    display: grid;
+    grid-template-rows: 1fr 9fr 1fr;
+    grid-template-areas:
+      'sg-hand-top'
+      'sg-board'
+      'sg-hand-bottom';
+    gap: $hand-gap;
     position: absolute;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    sg-board {
+      grid-area: sg-board;
+    }
   }
-  .cg-wrap {
-    @extend %abs-100;
+  &.v-minishogi,
+  &.v-kyotoshogi {
+    padding-bottom: calc(100% / 11 * 12 / 5 * 7 + #{$hands-gap});
+    .sg-wrap {
+      grid-template-rows: 1fr 5fr 1fr;
+    }
+  }
+  &.v-chushogi {
+    padding-bottom: calc(100% / 11 * 12);
+    .sg-wrap {
+      grid-template-areas: 'sg-board';
+      grid-template-rows: 1fr;
+    }
   }
 }
 
-.mini-board.no-pockets {
-  @extend %square;
-  cg-helper {
-    bottom: 0;
+.main-board {
+  @include breakpoint($mq-col2-uniboard) {
+    padding-bottom: calc((100% - #{$hands-gap}) / 11 * 9 / 11 * 12);
+    .sg-wrap {
+      width: 100%;
+      height: 100%;
+      grid-template-columns: 1fr 9fr 1fr;
+      grid-template-rows: auto;
+      grid-template-areas: 'sg-hand-top sg-board sg-hand-bottom';
+      gap: 2vmin;
+    }
+    &.v-minishogi,
+    &.v-kyotoshogi {
+      padding-bottom: calc((100% - #{$hands-gap}) / 7 * 5 / 11 * 12);
+      .sg-wrap {
+        grid-template-columns: 1fr 5fr 1fr;
+        grid-template-rows: auto;
+      }
+    }
+    &.v-chushogi {
+      justify-self: center;
+      padding-bottom: calc(100% / 11 * 12);
+      .sg-wrap {
+        width: 100%;
+        grid-template-areas: 'sg-board';
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+      }
+    }
   }
 }
 
 .mini-board {
-  @extend %mini-board-square;
-  cg-helper {
-    bottom: calc(100% / 11);
-    cg-pocket {
-      .pocket {
-        margin: 0;
-        &-top {
-          border-radius: 3px 3px 0px 0px;
-          position: absolute;
-          top: -900%;
-          height: 100%;
-        }
-        &-bottom {
-          border-radius: 0px 0px 3px 3px;
-          position: absolute;
-          height: 100%;
-          top: 100%;
-        }
-        @include breakpoint($mq-col2-uniboard) {
-          /*
-          &-top {
-          }
-          &-bottom {
-          }
-        */
-        }
-        @extend %box-radius;
-        display: flex;
-        justify-content: center;
-        width: 900%;
-        box-shadow: 0 3px 5px rgba(0, 0, 0, 0.3) inset;
-        @if $theme-light {
-          background: #b3b3b3;
-        } @else {
-          background: #6b6b6b;
-        }
-        &-c1 {
-          display: flex;
-          align-items: center;
-          flex: 0 0 calc(100% / 9);
-          max-width: 10vmin;
-        }
-        &-c2 {
-          @extend %square;
-        }
-        piece {
-          display: block;
-          width: 200% !important;
-          height: 200% !important;
-          margin: -50%;
-          @include transition();
-          &::after {
-            @extend %active, %box-radius;
-            content: attr(data-nb);
-            bottom: 0;
-            right: 0;
-            position: absolute;
-            line-height: 0.9em;
-            padding: 3px 0.3em;
-            font-weight: bold;
-            font-size: 1.4em;
-          }
-          &[data-nb='0'] {
-            cursor: auto;
-            opacity: 0.1;
-            &::after {
-              content: none;
-            }
-          }
-        }
-        .blindfold &:not(.usable) {
-          opacity: 0;
-        }
+  .sg-wrap {
+    gap: 1vmin;
+    padding-top: 1vmin;
+    padding-bottom: 1vmin;
+    sg-board {
+      sg-squares sq::after {
+        width: 5px !important;
+        height: 5px !important;
+        margin: -3px !important;
       }
+      .grid-width-2 & sg-squares sq::after,
+      .thick-grid:not(.custom) & sg-squares sq::after {
+        width: 6px !important;
+        height: 6px !important;
+        margin: -4px !important;
+      }
+      .grid-width-3 & sg-squares sq::after {
+        width: 8px !important;
+        height: 8px !important;
+        margin: -5px !important;
+      }
+    }
+  }
+  &.v-chushogi .sg-wrap {
+    padding: unset;
+    sg-squares sq::after {
+      width: 3px !important;
+      height: 3px !important;
+      margin: -2px !important;
+    }
+    .grid-width-2 & sg-squares sq::after,
+    .thick-grid:not(.custom) & sg-squares sq::after {
+      width: 5px !important;
+      height: 5px !important;
+      margin: -3px !important;
+    }
+    .grid-width-3 & sg-squares sq::after {
+      width: 6px !important;
+      height: 6px !important;
+      margin: -4px !important;
     }
   }
 }

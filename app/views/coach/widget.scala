@@ -24,20 +24,20 @@ object widget {
     c.coach.picturePath
       .map { path =>
         img(
-          width := size,
+          width  := size,
           height := size,
-          cls := "picture",
-          src := dbImageUrl(path.value),
-          alt := s"${c.user.titleUsername} Lishogi coach picture"
+          cls    := "picture",
+          src    := dbImageUrl(path.value),
+          alt    := s"${c.user.titleUsername} Lishogi coach picture"
         )
       }
       .getOrElse {
         img(
-          width := size,
+          width  := size,
           height := size,
-          cls := "default picture",
-          src := staticUrl("images/placeholder.png"),
-          alt := "Default Lishogi coach picture"
+          cls    := "default picture",
+          src    := staticUrl("images/placeholder.png"),
+          alt    := "Default Lishogi coach picture"
         )
       }
 
@@ -47,10 +47,13 @@ object widget {
       link option a(cls := "overlay", href := routes.Coach.show(c.user.username)),
       pic(c, if (link) 300 else 350),
       div(cls := "overview")(
-        (if (link) h2 else h1)(cls := "coach-name")(titleName(c)),
-        c.coach.profile.headline.map { h =>
-          p(cls := s"headline ${if (h.size < 60) "small" else if (h.size < 120) "medium" else "large"}")(h)
-        },
+        (if (link) h2 else h1) (cls := "coach-name")(titleName(c)),
+        c.coach.profile.headline
+          .map { h =>
+            p(
+              cls := s"headline ${if (h.sizeIs < 60) "small" else if (h.sizeIs < 120) "medium" else "large"}"
+            )(h)
+          },
         table(
           tbody(
             tr(
@@ -61,7 +64,7 @@ object widget {
                 },
                 profile.countryInfo.map { c =>
                   frag(
-                    span(cls := "country")(
+                    span(cls  := "country")(
                       img(cls := "flag", src := staticUrl(s"images/flags/${c.code}.png")),
                       " ",
                       c.name
@@ -77,9 +80,6 @@ object widget {
             tr(cls := "rating")(
               th(rating()),
               td(
-                profile.fideRating.map { r =>
-                  frag("FIDE: ", r)
-                },
                 a(href := routes.User.show(c.user.username))(
                   c.user.best8Perfs.take(6).filter(c.user.hasEstablishedRating).map {
                     showPerfRating(c.user, _)

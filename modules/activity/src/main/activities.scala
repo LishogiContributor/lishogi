@@ -36,17 +36,6 @@ object activities {
   }
   implicit val StormZero = Zero.instance(Storm(0, 0))
 
-  case class Learn(value: Map[Learn.Stage, Int]) {
-    def +(stage: Learn.Stage) =
-      copy(
-        value = value + (stage -> value.get(stage).fold(1)(1 +))
-      )
-  }
-  object Learn {
-    case class Stage(value: String) extends AnyVal
-  }
-  implicit val LearnZero = Zero.instance(Learn(Map.empty))
-
   case class Practice(value: Map[Study.Id, Int]) {
     def +(studyId: Study.Id) =
       copy(
@@ -86,7 +75,7 @@ object activities {
         val newIds = (id :: ids).distinct
         copy(
           ids = newIds take maxSubEntries,
-          nb = nb.map(1 +).orElse(newIds.size > maxSubEntries option newIds.size)
+          nb = nb.map(1 +).orElse(newIds.sizeIs > maxSubEntries option newIds.size)
         )
       }
     def isEmpty = ids.isEmpty

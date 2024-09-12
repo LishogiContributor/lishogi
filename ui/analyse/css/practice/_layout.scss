@@ -17,6 +17,7 @@
     'side';
 
   @include breakpoint($mq-col2) {
+    grid-template-rows: min-content;
     grid-template-areas:
       'board gauge tools'
       'under .     controls'
@@ -24,7 +25,6 @@
   }
 
   @include breakpoint($mq-col3) {
-    grid-template-rows: fit-content(0);
     grid-template-areas:
       'side    . board gauge tools'
       '.       . under .     controls';

@@ -15,9 +15,8 @@ object pref {
   private def categFieldset(categ: lila.pref.PrefCateg, active: lila.pref.PrefCateg) =
     div(cls := List("none" -> (categ != active)))
 
-  private def setting(name: Frag, body: Frag, display: Boolean = true) = {
-    if (display) st.section(h2(name), body) else st.section(style := "display:none;")(h2(name), body)
-  }
+  private def setting(name: Frag, body: Frag) =
+    st.section(h2(name), body)
 
   private def radios(field: play.api.data.Field, options: Iterable[(Any, String)], prefix: String = "ir") =
     st.group(cls := "radio")(
@@ -28,10 +27,10 @@ object pref {
           input(
             st.id := s"$prefix$id",
             checked option st.checked,
-            cls := checked option "active",
+            cls    := checked option "active",
             `type` := "radio",
-            value := v._1.toString,
-            name := field.name
+            value  := v._1.toString,
+            name   := field.name
           ),
           label(`for` := s"$prefix$id")(v._2)
         )
@@ -48,20 +47,39 @@ object pref {
       val booleanChoices = Seq(0 -> trans.no.txt(), 1 -> trans.yes.txt())
       div(cls := "account box box-pad")(
         h1(bits.categName(categ)),
-        postForm(cls := "autosubmit", action := routes.Pref.formApply())(
+        postForm(cls := "autosubmit", action := routes.Pref.formApply)(
           categFieldset(PrefCateg.GameDisplay, categ)(
             setting(
               pieceAnimation(),
               radios(form("display.animation"), translatedAnimationChoices)
             ),
             setting(
-              materialDifference(),
-              radios(form("display.captured"), booleanChoices),
-              false
+              boardCoordinates(),
+              radios(form("display.coords"), translatedBoardCoordinateChoices)
             ),
             setting(
-              boardHighlights(),
-              radios(form("display.highlight"), booleanChoices)
+              clearHands(),
+              radios(form("display.clearHands"), booleanChoices)
+            ),
+            setting(
+              handsBackground(),
+              radios(form("display.handsBackground"), booleanChoices)
+            ),
+            setting(
+              boardLayout(),
+              radios(form("display.boardLayout"), translatedBoardLayoutChoices)
+            ),
+            setting(
+              boardHighlightsLastDests(),
+              radios(form("display.highlightLastDests"), booleanChoices)
+            ),
+            setting(
+              boardHighlightsCheck(),
+              radios(form("display.highlightCheck"), booleanChoices)
+            ),
+            setting(
+              displayTouchSquareOverlay(),
+              radios(form("display.squareOverlay"), booleanChoices)
             ),
             setting(
               pieceDestinations(),
@@ -72,17 +90,12 @@ object pref {
               radios(form("display.dropDestination"), booleanChoices)
             ),
             setting(
-              boardCoordinates(),
-              radios(form("display.coords"), translatedBoardCoordinateChoices)
-            ),
-            setting(
               moveListWhilePlaying(),
               radios(form("display.replay"), translatedMoveListWhilePlayingChoices)
             ),
             setting(
-              pgnPieceNotation(),
-              radios(form("display.pieceNotation"), translatedPieceNotationChoices),
-              false
+              colorName(),
+              radios(form("display.colorName"), translatedColorNameChoices)
             ),
             setting(
               zenMode(),
@@ -93,22 +106,18 @@ object pref {
               radios(form("display.resizeHandle"), translatedBoardResizeHandleChoices)
             ),
             setting(
-              blindfoldChess(),
+              blindfoldShogi(),
               radios(form("display.blindfold"), translatedBlindfoldChoices)
             )
           ),
-          categFieldset(PrefCateg.ChessClock, categ)(
+          categFieldset(PrefCateg.ShogiClock, categ)(
             setting(
               tenthsOfSeconds(),
               radios(form("clock.tenths"), translatedClockTenthsChoices)
             ),
             setting(
-              "When to start countdown ticking",
+              clockTickingStart(),
               radios(form("clock.countdown"), translatedClockCountdownChoices)
-            ),
-            setting(
-              horizontalGreenProgressBars(),
-              radios(form("clock.bar"), booleanChoices)
             ),
             setting(
               soundWhenTimeGetsCritical(),
@@ -142,8 +151,11 @@ object pref {
             ),
             setting(
               inputMovesWithTheKeyboard(),
-              radios(form("behavior.keyboardMove"), booleanChoices),
-              false
+              radios(form("behavior.keyboardMove"), booleanChoices)
+            ),
+            setting(
+              scrollOnTheBoardToReplayMoves(),
+              radios(form("behavior.scrollMoves"), booleanChoices)
             )
           ),
           categFieldset(PrefCateg.Privacy, categ)(
@@ -165,8 +177,7 @@ object pref {
             ),
             setting(
               trans.shareYourInsightsData(),
-              radios(form("insightShare"), translatedInsightShareChoices),
-              false
+              radios(form("insightsShare"), booleanChoices)
             )
           ),
           p(cls := "saved text none", dataIcon := "E")(yourPreferencesHaveBeenSaved())

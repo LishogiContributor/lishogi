@@ -1,11 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import * as modal from '../modal';
-import { prop, Prop } from 'common';
-import { bind, bindSubmit, emptyRedButton } from '../util';
+import { Prop, prop } from 'common/common';
+import * as modal from 'common/modal';
+import { MaybeVNodes, bindNonPassive, bindSubmit } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
+import { Redraw } from '../interfaces';
+import { emptyRedButton } from '../util';
 import { StudyData } from './interfaces';
-import { Redraw, MaybeVNodes } from '../interfaces';
-import RelayCtrl from './relay/relayCtrl';
 
 export interface StudyFormCtrl {
   open: Prop<boolean>;
@@ -15,7 +14,6 @@ export interface StudyFormCtrl {
   isNew(): boolean;
   trans: Trans;
   redraw: Redraw;
-  relay?: RelayCtrl;
 }
 
 interface FormData {
@@ -61,8 +59,7 @@ export function ctrl(
   save: (data: FormData, isNew: boolean) => void,
   getData: () => StudyData,
   trans: Trans,
-  redraw: Redraw,
-  relay?: RelayCtrl
+  redraw: Redraw
 ): StudyFormCtrl {
   const initAt = Date.now();
 
@@ -86,7 +83,6 @@ export function ctrl(
     isNew,
     trans,
     redraw,
-    relay,
   };
 }
 
@@ -109,19 +105,19 @@ export function view(ctrl: StudyFormCtrl): VNode {
     ['everyone', ctrl.trans.noarg('everyone')],
   ];
   return modal.modal({
-    class: 'study-edit',
+    class: 'study__modal.study-edit',
     onClose() {
       ctrl.open(false);
       ctrl.redraw();
     },
     content: [
-      h('h2', ctrl.trans.noarg(ctrl.relay ? 'configureLiveBroadcast' : isNew ? 'createStudy' : 'editStudy')),
+      h('h2', ctrl.trans.noarg(isNew ? 'createStudy' : 'editStudy')),
       h(
         'form.form3',
         {
           hook: bindSubmit(e => {
             const obj: FormData = {};
-            'name visibility computer explorer cloneable chat sticky description'.split(' ').forEach(n => {
+            'name visibility computer cloneable chat sticky description'.split(' ').forEach(n => {
               const el = (e.target as HTMLElement).querySelector('#study-' + n) as HTMLInputElement;
               if (el) obj[n] = el.value;
             });
@@ -129,7 +125,7 @@ export function view(ctrl: StudyFormCtrl): VNode {
           }, ctrl.redraw),
         },
         [
-          h('div.form-group' + (ctrl.relay ? '.none' : ''), [
+          h('div.form-group', [
             h('label.form-label', { attrs: { for: 'study-name' } }, ctrl.trans.noarg('name')),
             h('input#study-name.form-control', {
               attrs: {
@@ -172,21 +168,10 @@ export function view(ctrl: StudyFormCtrl): VNode {
               select({
                 key: 'computer',
                 name: ctrl.trans.noarg('computerAnalysis'),
-                choices: userSelectionChoices.map(c => [c[0], ctrl.trans.noarg(c[1])]),
+                choices: userSelectionChoices.map(c => [c[0], c[1]]),
                 selected: data.settings.computer,
               })
             ),
-            h(
-              'div.form-group.form-half',
-              select({
-                key: 'explorer',
-                name: ctrl.trans.noarg('openingExplorer'),
-                choices: userSelectionChoices,
-                selected: data.settings.explorer,
-              })
-            ),
-          ]),
-          h('div.form-split', [
             h(
               'div.form-group.form-half',
               select({
@@ -196,6 +181,8 @@ export function view(ctrl: StudyFormCtrl): VNode {
                 selected: data.settings.chat,
               })
             ),
+          ]),
+          h('div.form-split', [
             h(
               'div.form-group.form-half',
               select({
@@ -208,29 +195,20 @@ export function view(ctrl: StudyFormCtrl): VNode {
                 selected: '' + data.settings.sticky,
               })
             ),
+            h(
+              'div.form-group.form-half',
+              select({
+                key: 'description',
+                name: ctrl.trans.noarg('pinnedStudyComment'),
+                choices: [
+                  ['false', ctrl.trans.noarg('noPinnedComment')],
+                  ['true', ctrl.trans.noarg('rightUnderTheBoard')],
+                ],
+                selected: '' + data.settings.description,
+              })
+            ),
           ]),
-          h(
-            'div.form-group.form-half',
-            select({
-              key: 'description',
-              name: ctrl.trans.noarg('pinnedStudyComment'),
-              choices: [
-                ['false', ctrl.trans.noarg('noPinnedComment')],
-                ['true', ctrl.trans.noarg('rightUnderTheBoard')],
-              ],
-              selected: '' + data.settings.description,
-            })
-          ),
-          h(`div.form-actions${ctrl.relay ? '' : '.single'}`, [
-            ctrl.relay
-              ? h(
-                  'a',
-                  {
-                    attrs: { href: `/broadcast/-/${data.id}/edit` },
-                  },
-                  'Broadcast settings'
-                )
-              : null,
+          h('div.form-actions', [
             h(
               'button.button',
               {
@@ -251,9 +229,7 @@ export function view(ctrl: StudyFormCtrl): VNode {
                   action: '/study/' + data.id + '/clear-chat',
                   method: 'post',
                 },
-                hook: bind('submit', _ => {
-                  return confirm(ctrl.trans.noarg('deleteTheStudyChatHistory'));
-                }),
+                hook: bindNonPassive('submit', _ => confirm(ctrl.trans.noarg('deleteTheStudyChatHistory'))),
               },
               [h(emptyRedButton, ctrl.trans.noarg('clearChat'))]
             ),
@@ -264,9 +240,7 @@ export function view(ctrl: StudyFormCtrl): VNode {
               action: '/study/' + data.id + '/delete',
               method: 'post',
             },
-            hook: bind('submit', _ => {
-              return isNew || confirm(ctrl.trans.noarg('deleteTheEntireStudy'));
-            }),
+            hook: bindNonPassive('submit', _ => isNew || confirm(ctrl.trans.noarg('deleteTheEntireStudy'))),
           },
           [h(emptyRedButton, ctrl.trans.noarg(isNew ? 'cancel' : 'deleteStudy'))]
         ),

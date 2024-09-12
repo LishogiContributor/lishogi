@@ -5,17 +5,20 @@
   "description": "lishogi.org simul",
   "main": "src/main.js",
   "keywords": [
-    "chess",
+    "shogi",
     "lishogi",
     "simul"
   ],
   "author": "Thibault Duplessis",
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
-    "@build/rollupProject": "2.0.0"
+    "@build/rollupProject": "2.0.0",
+    "rollup": "^2",
+    "typescript": "^5"
   },
   "dependencies": {
     "chat": "2.0.0",
+    "common": "2.0.0",
     "game": "2.0.0",
     "mithril": "github:ornicar/mithril.js#lila-1"
   },

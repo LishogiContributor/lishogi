@@ -1,109 +1,144 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import { Shogiground } from 'shogiground';
-import { Api as CgApi } from 'shogiground/api';
-import { Config as CgConfig } from 'shogiground/config';
-import * as cg from 'shogiground/types';
-import { DrawShape } from 'shogiground/draw';
-import changeColorHandle from 'common/coordsColor';
+import { notationFiles, notationRanks } from 'common/notation';
+import { predrop, premove } from 'common/pre-sg';
 import resizeHandle from 'common/resize';
+import { Config as SgConfig } from 'shogiground/config';
+import { DrawShape } from 'shogiground/draw';
+import * as sg from 'shogiground/types';
+import { forsythToRole, roleToForsyth } from 'shogiops/sfen';
+import { Piece, Role } from 'shogiops/types';
+import { makeSquareName, parseSquareName } from 'shogiops/util';
+import {
+  handRoles,
+  pieceCanPromote,
+  pieceForcePromote,
+  promotableOnDrop,
+  promote as shogiPromote,
+} from 'shogiops/variant/util';
+import { VNode, h } from 'snabbdom';
 import AnalyseCtrl from './ctrl';
 
-export function render(ctrl: AnalyseCtrl): VNode {
-  return h('div.cg-wrap.cgv' + ctrl.cgVersion.js, {
+export function renderBoard(ctrl: AnalyseCtrl): VNode {
+  return h('div.sg-wrap', {
     hook: {
       insert: vnode => {
-        ctrl.shogiground = Shogiground(vnode.elm as HTMLElement, makeConfig(ctrl));
+        ctrl.shogiground.attach({
+          board: vnode.elm as HTMLElement,
+        });
         ctrl.setAutoShapes();
-        if (ctrl.node.shapes) ctrl.shogiground.setShapes(ctrl.node.shapes as DrawShape[]);
-        ctrl.cgVersion.dom = ctrl.cgVersion.js;
+        ctrl.setShapes(ctrl.node.shapes as DrawShape[] | undefined);
       },
-      destroy: _ => ctrl.shogiground.destroy(),
     },
   });
 }
 
-export function promote(ground: CgApi, key: Key, role: cg.Role) {
-  const piece = ground.state.pieces.get(key);
-  if (piece) {
-    ground.setPieces(
-      new Map([
-        [
-          key,
-          {
-            color: piece.color,
-            role,
-            promoted: true,
-          },
-        ],
-      ])
-    );
-  }
-}
-
-export function makeConfig(ctrl: AnalyseCtrl): CgConfig {
+export function makeConfig(ctrl: AnalyseCtrl): SgConfig {
   const d = ctrl.data,
+    variant = d.game.variant.key,
     pref = d.pref,
-    opts = ctrl.makeCgOpts();
-  const config = {
+    opts = ctrl.makeSgOpts();
+  const config: SgConfig = {
     turnColor: opts.turnColor,
-    fen: opts.fen,
-    check: opts.check,
-    lastMove: opts.lastMove,
+    activeColor: opts.activeColor,
+    sfen: {
+      board: opts.sfen?.board,
+      hands: opts.sfen?.hands,
+    },
+    checks: opts.checks,
+    lastDests: opts.lastDests,
     orientation: ctrl.bottomColor(),
-    coordinates: pref.coords !== 0 && !ctrl.embed,
-    addPieceZIndex: pref.is3d,
     viewOnly: !!ctrl.embed,
+    hands: {
+      roles: handRoles(variant),
+      inlined: variant !== 'chushogi',
+    },
     movable: {
       free: false,
-      color: opts.movable!.color,
       dests: opts.movable!.dests,
       showDests: pref.destination,
     },
+    droppable: {
+      free: false,
+      dests: opts.droppable!.dests,
+      showDests: pref.dropDestination && pref.destination,
+    },
+    coordinates: {
+      enabled: pref.coords !== 0 && !ctrl.embed,
+      files: notationFiles(),
+      ranks: notationRanks(),
+    },
     events: {
       move: ctrl.userMove,
-      dropNewPiece: ctrl.userNewPiece,
-      insert(elements) {
-        if (!ctrl.embed) resizeHandle(elements, ctrl.data.pref.resizeHandle, ctrl.node.ply);
-        if (!ctrl.embed && ctrl.data.pref.coords == 1) changeColorHandle();
-      },
-      select: () => {
-        if (ctrl.dropmodeActive && !ctrl.shogiground?.state.dropmode.active) {
-          ctrl.dropmodeActive = false;
-          ctrl.redraw();
+      drop: ctrl.userDrop,
+      unselect: (key: Key) => {
+        if (ctrl.lionFirstMove && ctrl.lionFirstMove.to === parseSquareName(key)) {
+          const from = ctrl.lionFirstMove.from,
+            to = ctrl.lionFirstMove.to;
+          ctrl.userMove(makeSquareName(from), makeSquareName(to), false, undefined);
         }
+      },
+      insert(boardEls?: sg.BoardElements, _handEls?: sg.HandElements) {
+        if (!ctrl.embed && boardEls)
+          resizeHandle(boardEls, ctrl.data.pref.resizeHandle, { ply: ctrl.node.ply, initialPly: ctrl.mainline[0].ply });
       },
     },
     premovable: {
       enabled: opts.premovable!.enabled,
       showDests: pref.destination,
+      generate: opts.premovable!.enabled ? premove(variant) : undefined,
       events: {
         set: ctrl.onPremoveSet,
       },
     },
     predroppable: {
       enabled: opts.predroppable!.enabled,
-      showDropDests: pref.dropDestination && pref.destination,
-    },
-    dropmode: {
-      showDropDests: pref.dropDestination && pref.destination,
-      dropDests: opts.dropmode!.dropDests,
+      generate: opts.predroppable!.enabled ? predrop(variant) : undefined,
+      showDests: pref.dropDestination && pref.destination,
     },
     drawable: {
       enabled: !ctrl.embed,
       eraseOnClick: !ctrl.opts.study || !!ctrl.opts.practice,
     },
+    promotion: {
+      promotesTo: (role: Role) => shogiPromote(variant)(role),
+      movePromotionDialog: (orig: Key, dest: Key) => {
+        const piece = ctrl.shogiground.state.pieces.get(orig) as Piece,
+          capture = ctrl.shogiground.state.pieces.get(dest) as Piece | undefined;
+        return (
+          !!piece &&
+          pieceCanPromote(variant)(piece, parseSquareName(orig)!, parseSquareName(dest)!, capture) &&
+          !pieceForcePromote(variant)(piece, parseSquareName(dest)!)
+        );
+      },
+      dropPromotionDialog(piece) {
+        return promotableOnDrop(variant)(piece as Piece);
+      },
+      forceMovePromotion: (orig: Key, dest: Key) => {
+        const piece = ctrl.shogiground.state.pieces.get(orig) as Piece;
+        return !!piece && pieceForcePromote(variant)(piece, parseSquareName(dest)!);
+      },
+    },
+    forsyth: {
+      fromForsyth: forsythToRole(variant),
+      toForsyth: roleToForsyth(variant),
+    },
     highlight: {
-      lastMove: pref.highlight,
-      check: pref.highlight,
+      lastDests: pref.highlightLastDests,
+      check: pref.highlightCheck && variant !== 'chushogi',
+    },
+    draggable: {
+      enabled: pref.moveEvent > 0,
+      showGhost: pref.highlightLastDests,
+      showTouchSquareOverlay: pref.squareOverlay,
+    },
+    selectable: {
+      enabled: pref.moveEvent !== 1,
     },
     animation: {
       duration: pref.animationDuration,
     },
     disableContextMenu: true,
-    notation: pref.pieceNotation ?? 0,
   };
-  ctrl.study && ctrl.study.mutateCgConfig(config);
+  ctrl.study && ctrl.study.mutateSgConfig(config);
 
   return config;
 }

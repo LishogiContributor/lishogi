@@ -1,51 +1,44 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import changeColorHandle from 'common/coordsColor';
+import { VNode, h } from 'snabbdom';
+import { Open, Redraw, bind, header } from './util';
 
-import { Redraw, Open, bind, header } from './util';
-
-type Theme = string;
-
-interface ThemeDimData {
-  current: Theme;
-  list: Theme[];
-}
+type ThemeKey = string;
+type Theme = {
+  key: ThemeKey;
+  name: string;
+};
 
 export interface ThemeData {
-  d2: ThemeDimData;
-  d3: ThemeDimData;
+  current: ThemeKey;
+  list: Theme[];
+  thickGrid: boolean;
 }
 
 export interface ThemeCtrl {
-  dimension: () => keyof ThemeData;
-  data: () => ThemeDimData;
+  data: ThemeData;
   trans: Trans;
-  set(t: Theme): void;
+  set(t: ThemeKey): void;
+  setThickGrid(isThick: boolean): void;
   open: Open;
 }
 
-export function ctrl(
-  data: ThemeData,
-  trans: Trans,
-  dimension: () => keyof ThemeData,
-  redraw: Redraw,
-  open: Open
-): ThemeCtrl {
-  function dimensionData() {
-    return data[dimension()];
-  }
-
+export function ctrl(data: ThemeData, trans: Trans, redraw: Redraw, open: Open): ThemeCtrl {
   return {
-    dimension,
     trans,
-    data: dimensionData,
-    set(t: Theme) {
-      const d = dimensionData();
-      d.current = t;
-      applyTheme(t, d.list);
-      $.post('/pref/theme' + (dimension() === 'd3' ? '3d' : ''), {
-        theme: t,
+    data,
+    set(key: ThemeKey) {
+      data.current = key;
+      applyTheme(key, data.list);
+      $.post('/pref/theme', {
+        theme: key,
       }).fail(() => window.lishogi.announce({ msg: 'Failed to save theme preference' }));
+      redraw();
+    },
+    setThickGrid(isThick: boolean) {
+      data.thickGrid = isThick;
+      applyThickGrid(isThick);
+      $.post('/pref/thickGrid', { thickGrid: isThick ? 1 : 0 }).fail(() =>
+        window.lishogi.announce({ msg: 'Failed to save preference' })
+      );
       redraw();
     },
     open,
@@ -53,28 +46,71 @@ export function ctrl(
 }
 
 export function view(ctrl: ThemeCtrl): VNode {
-  const d = ctrl.data();
-
-  return h('div.sub.theme.' + ctrl.dimension(), [
+  const lastIndex = ctrl.data.list.length - 1,
+    list: (Theme | 'thickGrid')[] = [...ctrl.data.list.slice(0, lastIndex), 'thickGrid', ctrl.data.list[lastIndex]];
+  return h('div.sub.theme', [
     header(ctrl.trans.noarg('boardTheme'), () => ctrl.open('links')),
-    h('div.list', d.list.map(themeView(d.current, ctrl.set))),
+    h(
+      'div.list',
+      list.map(i => themeView(ctrl, i))
+    ),
   ]);
 }
 
-function themeView(current: Theme, set: (t: Theme) => void) {
-  return (t: Theme) =>
-    h(
+function themeView(ctrl: ThemeCtrl, t: Theme | 'thickGrid') {
+  if (t === 'thickGrid') return thickGrid(ctrl);
+  else if (t.key === 'custom') return customThemeView(ctrl);
+  else
+    return h(
       'a',
       {
-        hook: bind('click', () => set(t)),
-        attrs: { title: t },
-        class: { active: current === t },
+        hook: bind('click', () => ctrl.set(t.key)),
+        attrs: { title: t.name },
+        class: { active: ctrl.data.current === t.key },
       },
-      [h('span.' + t)]
+      h('span.' + t.key)
     );
 }
 
-function applyTheme(t: Theme, list: Theme[]) {
-  $('body').removeClass(list.join(' ')).addClass(t);
-  changeColorHandle();
+function thickGrid(ctrl: ThemeCtrl): VNode {
+  const title = ctrl.trans.noarg('gridThick');
+  return h(`div.thick-switch${['blue', 'gray', 'doubutsu'].includes(ctrl.data.current) ? '.disabled' : ''}`, [
+    h('label', { attrs: { for: 'thickGrid' } }, title),
+    h('div.switch', [
+      h('input#thickGrid.cmn-toggle', {
+        attrs: {
+          type: 'checkbox',
+          title: title,
+          checked: ctrl.data.thickGrid,
+        },
+        hook: bind('change', (e: Event) => ctrl.setThickGrid((e.target as HTMLInputElement).checked)),
+      }),
+      h('label', { attrs: { for: 'thickGrid' } }),
+    ]),
+  ]);
+}
+
+function customThemeView(ctrl: ThemeCtrl): VNode {
+  return h(
+    'a.custom',
+    {
+      hook: bind('click', () => {
+        ctrl.set('custom');
+        ctrl.open('customTheme');
+      }),
+      attrs: { 'data-icon': 'H' },
+      class: { active: ctrl.data.current === 'custom' },
+    },
+    ctrl.trans('customTheme')
+  );
+}
+
+function applyThickGrid(isThick: boolean) {
+  $('body').toggleClass('thick-grid', isThick);
+}
+
+function applyTheme(key: ThemeKey, list: Theme[]) {
+  $('body')
+    .removeClass(list.map(t => t.key).join(' '))
+    .addClass(key);
 }

@@ -2,7 +2,6 @@ package views
 package html.puzzle
 
 import controllers.routes
-import play.api.i18n.Lang
 
 import lila.api.Context
 import lila.app.templating.Environment._
@@ -13,8 +12,9 @@ object theme {
 
   def list(themes: List[(lila.i18n.I18nKey, List[PuzzleTheme.WithCount])])(implicit ctx: Context) =
     views.html.base.layout(
-      title = "Puzzle themes",
-      moreCss = cssTag("puzzle.page")
+      title = trans.puzzle.puzzleThemes.txt(),
+      moreCss = cssTag("puzzle.page"),
+      withHrefLangs = lila.i18n.LangList.All.some
     )(
       main(cls := "page-menu")(
         bits.pageMenu("themes"),
@@ -34,7 +34,7 @@ object theme {
                     val url =
                       if (pt.theme == PuzzleTheme.mix) routes.Puzzle.home
                       else routes.Puzzle.show(pt.theme.key.value)
-                    a(cls := "puzzle-themes__link", href := (pt.count > 0).option(url.url))(
+                    a(cls := "puzzle-themes__link", href := (pt.count > 0).option(langHref(url)))(
                       span(
                         h3(
                           pt.theme.name(),

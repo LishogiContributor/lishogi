@@ -1,6 +1,6 @@
-import { MsgData, Contact, Convo, Msg, LastMsg, Search, SearchResult, Typing, Pane, Redraw } from './interfaces';
 import notify from 'common/notification';
 import throttle from 'common/throttle';
+import { Contact, Convo, LastMsg, Msg, MsgData, Pane, Redraw, Search, SearchResult, Typing } from './interfaces';
 import * as network from './network';
 import { scroller } from './view/scroller';
 
@@ -17,7 +17,11 @@ export default class MsgCtrl {
   typing?: Typing;
   textStore?: LishogiStorage;
 
-  constructor(data: MsgData, readonly trans: Trans, readonly redraw: Redraw) {
+  constructor(
+    data: MsgData,
+    readonly trans: Trans,
+    readonly redraw: Redraw
+  ) {
     this.data = data;
     this.pane = data.convo ? 'convo' : 'side';
     this.connected = network.websocketHandler(this);

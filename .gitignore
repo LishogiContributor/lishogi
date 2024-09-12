@@ -1,4 +1,9 @@
 .sbtopts
+.bloop/
+.metals/
+project/.bloop/
+.bsp
+
 conf/application.conf
 conf/version.conf
 .metals
@@ -11,9 +16,9 @@ public/compiled
 public/vendor/bar-rating
 public/vendor/highcharts-4.2.5
 public/vendor/hopscotch
-public/vendor/stockfish.wasm
-public/vendor/stockfish-mv.wasm
-public/vendor/stockfish.js
+public/vendor/fairy
+public/vendor/spectrum
+public/vendor/sliding-puzzles
 public/css/
 target
 data/

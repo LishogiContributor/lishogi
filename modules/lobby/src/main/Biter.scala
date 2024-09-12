@@ -59,7 +59,7 @@ final private class Biter(
   ): Fu[shogi.Color] =
     color match {
       case Color.Random =>
-        userRepo.firstGetsSente(creatorUser.map(_.id), joinerUser.map(_.id)) map shogi.Color.apply
+        userRepo.firstGetsSente(creatorUser.map(_.id), joinerUser.map(_.id)) map shogi.Color.fromSente
       case Color.Sente => fuccess(shogi.Sente)
       case Color.Gote  => fuccess(shogi.Gote)
     }
@@ -73,11 +73,12 @@ final private class Biter(
           situation = Situation(hook.realVariant),
           clock = clock.some
         ),
+        initialSfen = None,
         sentePlayer = Player.make(shogi.Sente, senteUser, perfPicker),
         gotePlayer = Player.make(shogi.Gote, goteUser, perfPicker),
         mode = hook.realMode,
         source = lila.game.Source.Lobby,
-        pgnImport = None
+        notationImport = None
       )
       .start
   }
@@ -90,18 +91,23 @@ final private class Biter(
           situation = Situation(seek.realVariant),
           clock = none
         ),
+        initialSfen = None,
         sentePlayer = Player.make(shogi.Sente, senteUser, perfPicker),
         gotePlayer = Player.make(shogi.Gote, goteUser, perfPicker),
         mode = seek.realMode,
         source = lila.game.Source.Lobby,
         daysPerTurn = seek.daysPerTurn,
-        pgnImport = None
+        notationImport = None
       )
       .start
   }
 
+  // do not auto join users with anons
+  def canAutoJoin(hook: Hook, user: Option[LobbyUser]): Boolean =
+    user.isDefined == hook.isAuth && canJoin(hook, user)
+
   def canJoin(hook: Hook, user: Option[LobbyUser]): Boolean =
-    hook.isAuth == user.isDefined && user.fold(true) { u =>
+    (user.isDefined || !hook.isAuth) && user.fold(true) { u =>
       u.lame == hook.lame &&
       !hook.userId.contains(u.id) &&
       !hook.userId.??(u.blocking.contains) &&

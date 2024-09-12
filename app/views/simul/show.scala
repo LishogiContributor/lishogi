@@ -1,13 +1,12 @@
 package views.html.simul
 
+import controllers.routes
 import play.api.libs.json.Json
 
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
 import lila.common.String.html.safeJsonValue
-
-import controllers.routes
 
 object show {
 
@@ -23,26 +22,32 @@ object show {
       moreCss = cssTag("simul.show"),
       title = sim.fullName,
       moreJs = frag(
-        jsAt(s"compiled/lishogi.simul${isProd ?? ".min"}.js"),
+        jsModule("simul"),
         embedJsUnsafe(s"""lishogi.simul=${safeJsonValue(
-          Json.obj(
-            "data"          -> data,
-            "i18n"          -> bits.jsI18n(),
-            "socketVersion" -> socketVersion.value,
-            "userId"        -> ctx.userId,
-            "chat" -> chatOption.map { c =>
-              views.html.chat.json(
-                c.chat,
-                name = trans.chatRoom.txt(),
-                timeout = c.timeout,
-                public = true,
-                resourceId = lila.chat.Chat.ResourceId(s"simul/${c.chat.id}")
-              )
-            }
-          )
-        )}""")
+            Json.obj(
+              "data"          -> data,
+              "i18n"          -> bits.jsI18n(),
+              "socketVersion" -> socketVersion.value,
+              "userId"        -> ctx.userId,
+              "chat" -> chatOption.map { c =>
+                views.html.chat.json(
+                  c.chat,
+                  name = trans.chatRoom.txt(),
+                  timeout = c.timeout,
+                  public = true,
+                  resourceId = lila.chat.Chat.ResourceId(s"simul/${c.chat.id}"),
+                  localMod = ctx.userId has sim.hostId
+                )
+              }
+            )
+          )}""")
       )
     ) {
+      val handicap = (for {
+        variant  <- sim.variants.headOption.ifFalse(sim.variantRich)
+        sfen     <- sim.position
+        handicap <- lila.tournament.Thematic.bySfen(sfen, variant)
+      } yield (handicap))
       main(
         cls := List(
           "simul"         -> true,
@@ -57,9 +62,13 @@ object show {
                 div(
                   span(cls := "clock")(sim.clock.config.show),
                   div(cls := "setup")(
-                    sim.variants.map(_.name).mkString(", "),
-                    " • ",
-                    trans.casual()
+                    sim.variants.map(v => variantName(v)).mkString(", "),
+                    " - ",
+                    trans.casual(),
+                    (isGranted(_.ManageSimul) || ctx.userId.has(sim.hostId)) && sim.isCreated option frag(
+                      " - ",
+                      a(href := routes.Simul.edit(sim.id), title := "Edit simul")(iconTag("%"))
+                    )
                   )
                 )
               ),
@@ -67,23 +76,28 @@ object show {
               ": ",
               pluralize("minute", sim.clock.hostExtraMinutes),
               br,
-              trans.hostColorX(sim.color match {
-                case Some("gote")  => trans.white.txt() + "/" + trans.uwate.txt()
-                case Some("sente") => trans.black.txt() + "/" + trans.shitate.txt()
-                case _             => trans.randomColor()
+              trans.hostColorX(sim.hostColor match {
+                case Some(color) => {
+                  if (handicap.isDefined) handicapColorName(color)
+                  else standardColorName(color)
+                }
+                case _ => trans.randomColor()
               }),
-              sim.position map { pos =>
+              handicap map { h =>
                 frag(
                   br,
-                  a(target := "_blank", rel := "noopener", href := pos.url)(
-                    strong(pos.eco),
-                    " ",
-                    pos.name
-                  ),
-                  " • ",
-                  a(href := routes.UserAnalysis.parseArg(pos.fen.replace(" ", "_")))(
-                    trans.analysis()
-                  )
+                  strong(h.japanese),
+                  " ",
+                  h.english,
+                  " - ",
+                  views.html.base.bits.sfenAnalysisLink(h.sfen)
+                )
+              } orElse sim.position.map { sfen =>
+                frag(
+                  br,
+                  trans.fromPosition(),
+                  " - ",
+                  views.html.base.bits.sfenAnalysisLink(sfen)
                 )
               }
             ),
@@ -92,6 +106,12 @@ object show {
               frag(
                 br,
                 trans.mustBeInTeam(a(href := routes.Team.show(t.id))(t.name))
+              )
+            },
+            sim.estimatedStartAt map { d =>
+              frag(
+                br,
+                absClientDateTime(d)
               )
             }
           ),

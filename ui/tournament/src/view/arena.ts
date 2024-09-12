@@ -1,11 +1,10 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { MaybeVNodes, bind, dataIcon } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import TournamentController from '../ctrl';
-import { player as renderPlayer, ratio2percent, bind, dataIcon, playerName } from './util';
-import { teamName } from './battle';
-import { MaybeVNodes } from '../interfaces';
-import * as button from './button';
 import * as pagination from '../pagination';
+import { teamName } from './battle';
+import * as button from './button';
+import { playerName, ratio2percent, player as renderPlayer } from './util';
 
 const scoreTagNames = ['score', 'streak', 'double'];
 

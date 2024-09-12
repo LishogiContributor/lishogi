@@ -22,40 +22,28 @@ object bits {
       main(cls := "page-small box box-pad")(
         h1(trans.noSimulFound()),
         p(trans.noSimulExplanation()),
-        p(a(href := routes.Simul.home())(trans.returnToSimulHomepage()))
+        p(a(href := routes.Simul.home)(trans.returnToSimulHomepage()))
       )
     }
 
   def homepageSpotlight(s: lila.simul.Simul)(implicit ctx: Context) =
-    a(href := routes.Simul.show(s.id), cls := "tour-spotlight little id_@s.id")(
-      img(cls := "img icon", src := staticUrl("images/fire-silhouette.svg")),
+    a(href             := routes.Simul.show(s.id), cls := "tour-spotlight little id_@s.id")(
+      iconTag("f")(cls := "img"),
       span(cls := "content")(
         span(cls := "name")(s.name, " simul"),
         span(cls := "more")(
           trans.nbPlayers.plural(s.applicants.size, s.applicants.size.localize),
-          " • ",
+          " - ",
           trans.join()
         )
       )
     )
 
-  def allCreated(simuls: List[lila.simul.Simul])(implicit lang: play.api.i18n.Lang) =
-    table(
-      simuls map { simul =>
-        tr(
-          td(cls := "name")(a(href := routes.Simul.show(simul.id))(simul.fullName)),
-          td(userIdLink(simul.hostId.some)),
-          td(cls := "text", dataIcon := "p")(simul.clock.config.show),
-          td(cls := "text", dataIcon := "r")(simul.applicants.size)
-        )
-      }
-    )
-
-  private[simul] def setup(sim: lila.simul.Simul) =
+  private[simul] def setup(sim: lila.simul.Simul)(implicit lang: play.api.i18n.Lang) =
     span(cls := List("setup" -> true, "rich" -> sim.variantRich))(
       sim.clock.config.show,
-      " • ",
-      sim.variants.map(_.name).mkString(", ")
+      " - ",
+      sim.variants.map(v => variantName(v)).mkString(", ")
     )
 
   private val baseTranslations = Vector(
@@ -70,6 +58,16 @@ object bits {
     trans.nbLosses,
     trans.by,
     trans.signIn,
-    trans.mustBeInTeam
+    trans.mustBeInTeam,
+    trans.host,
+    trans.xWon,
+    trans.xLost,
+    trans.draw,
+    trans.standard,
+    trans.minishogi,
+    trans.chushogi,
+    trans.annanshogi,
+    trans.kyotoshogi,
+    trans.checkshogi
   ).map(_.key)
 }

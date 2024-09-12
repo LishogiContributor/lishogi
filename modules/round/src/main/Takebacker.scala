@@ -2,15 +2,13 @@ package lila.round
 
 import shogi.Color
 import lila.common.Bus
-import lila.game.{ Event, Game, GameRepo, Pov, Progress, Rewind, UciMemo }
+import lila.game.{ Event, Game, Pov, Progress, Rewind }
 import lila.pref.{ Pref, PrefApi }
-import lila.i18n.{ I18nKeys => trans, defaultLang }
+import lila.i18n.{ defaultLang, I18nKeys => trans }
 import RoundDuct.TakebackSituation
 
 final private class Takebacker(
     messenger: Messenger,
-    gameRepo: GameRepo,
-    uciMemo: UciMemo,
     prefApi: PrefApi
 )(implicit ec: scala.concurrent.ExecutionContext) {
 
@@ -24,7 +22,7 @@ final private class Takebacker(
         case Pov(game, color) if pov.opponent.isProposingTakeback =>
           {
             if (
-              pov.opponent.proposeTakebackAt == pov.game.turns && color == Color
+              pov.opponent.proposeTakebackAt == pov.game.plies && color == Color
                 .fromPly(pov.opponent.proposeTakebackAt)
             ) single(game)
             else double(game)
@@ -35,7 +33,7 @@ final private class Takebacker(
           {
             messenger.system(game, trans.takebackPropositionSent.txt())
             val progress = Progress(game) map { g =>
-              g.updatePlayer(color, _ proposeTakeback g.turns)
+              g.updatePlayer(color, _ proposeTakeback g.plies)
             }
             proxy.save(progress) >>- publishTakebackOffer(pov) inject
               List(Event.TakebackOffers(color.sente, color.gote))
@@ -90,7 +88,7 @@ final private class Takebacker(
       )
 
   private def IfAllowed[A](game: Game)(f: => Fu[A]): Fu[A] =
-    if (!game.playable) fufail(ClientError("[takebacker] game is over " + game.id))
+    if (!game.playable) fufail(ClientError("[takebacker] game is over or paused" + game.id))
     else if (game.isMandatory) fufail(ClientError("[takebacker] game disallows it " + game.id))
     else
       isAllowedByPrefs(game) flatMap {
@@ -100,20 +98,16 @@ final private class Takebacker(
 
   private def single(game: Game)(implicit proxy: GameProxy): Fu[Events] =
     for {
-      fen      <- gameRepo initialFen game
-      progress <- Rewind(game, fen).future
-      _        <- fuccess { uciMemo.drop(game, 1) }
+      progress <- Rewind(game).toFuture
       events   <- saveAndNotify(progress)
     } yield events
 
   private def double(game: Game)(implicit proxy: GameProxy): Fu[Events] =
     for {
-      fen   <- gameRepo initialFen game
-      prog1 <- Rewind(game, fen).future
-      prog2 <- Rewind(prog1.game, fen).future dmap { progress =>
+      prog1 <- Rewind(game).toFuture
+      prog2 <- Rewind(prog1.game).toFuture dmap { progress =>
         prog1 withGame progress.game
       }
-      _      <- fuccess { uciMemo.drop(game, 2) }
       events <- saveAndNotify(prog2)
     } yield events
 

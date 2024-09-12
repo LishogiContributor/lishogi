@@ -2,21 +2,19 @@ package views
 package html.puzzle
 
 import controllers.routes
-import play.api.i18n.Lang
 
 import lila.api.Context
 import lila.app.templating.Environment._
 import lila.app.ui.ScalatagsTemplate._
 import lila.common.paginator.Paginator
 import lila.puzzle.Puzzle
-import lila.puzzle.PuzzleTheme
 import lila.user.User
 
 object ofPlayer {
 
   def apply(query: String, user: Option[User], puzzles: Option[Paginator[Puzzle]])(implicit ctx: Context) =
     views.html.base.layout(
-      title = user.fold("Lookup puzzles from a player's games")(u => s"Puzzles from ${u.username}' games"),
+      title = user.fold(trans.puzzle.lookupOfPlayer.txt())(u => trans.puzzle.fromXGames.txt(u.username)),
       moreCss = cssTag("puzzle.page"),
       moreJs = infiniteScrollTag
     )(
@@ -26,45 +24,43 @@ object ofPlayer {
           form(
             action := routes.Puzzle.ofPlayer(),
             method := "get",
-            cls := "form3 puzzle-of-player__form complete-parent"
+            cls    := "form3 puzzle-of-player__form complete-parent"
           )(
             st.input(
-              name := "name",
-              value := query,
-              cls := "form-control user-autocomplete",
-              placeholder := "Lishogi username",
+              name         := "name",
+              value        := query,
+              cls          := "form-control user-autocomplete",
+              placeholder  := trans.clas.lishogiUsername.txt(),
               autocomplete := "off",
-              dataTag := "span",
+              dataTag      := "span",
               autofocus
             ),
-            submitButton(cls := "button")("Search puzzles")
+            submitButton(cls := "button")(trans.puzzle.searchPuzzles.txt())
           ),
           div(cls := "puzzle-of-player__results")(
             (user, puzzles) match {
               case (Some(u), Some(pager)) =>
                 if (pager.nbResults == 0 && ctx.is(u))
                   p(
-                    "You have no puzzles in the database, but Lishogi still loves you very much.",
-                    br,
-                    "Play rapid and classical games to increase your chances of having a puzzle of yours added!"
+                    "You have no puzzles in the database, but Lishogi still loves you very much."
                   )
                 else
                   frag(
-                    p(strong(pager.nbResults), " puzzles found in ", userLink(u), " games."),
+                    p(strong(trans.puzzle.fromXGamesFound((pager.nbResults), userLink(u)))),
                     div(cls := "puzzle-of-player__pager infinite-scroll")(
                       pager.currentPageResults.map { puzzle =>
                         div(cls := "puzzle-of-player__puzzle")(
-                          views.html.game.bits.miniTag(
-                            fen = puzzle.fenAfterInitialMove,
+                          views.html.puzzle.bits.miniTag(
+                            sfen = puzzle.sfenAfterInitialMove,
                             color = puzzle.color,
-                            lastMove = puzzle.lastMove
+                            lastUsi = puzzle.lastUsi
                           )(
                             a(
-                              cls := s"puzzle-of-player__puzzle__board",
+                              cls  := s"puzzle-of-player__puzzle__board",
                               href := routes.Puzzle.show(puzzle.id.value)
                             )
                           ),
-                          span(cls := "puzzle-of-player__puzzle__meta")(
+                          span(cls   := "puzzle-of-player__puzzle__meta")(
                             span(cls := "puzzle-of-player__puzzle__id", s"#${puzzle.id}"),
                             span(cls := "puzzle-of-player__puzzle__rating", puzzle.glicko.intRating)
                           )

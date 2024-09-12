@@ -1,4 +1,4 @@
-import { Tab, Mode, Sort } from './interfaces';
+import { Mode, Sort, Tab } from './interfaces';
 
 interface Store<A> {
   set(v: string): A;
@@ -20,7 +20,7 @@ const tab: Config<Tab> = {
   key: 'lobby.tab',
   fix(t: string | null): Tab {
     if (<Tab>t) return t as Tab;
-    return 'real_time';
+    return 'presets';
   },
 };
 const mode: Config<Mode> = {

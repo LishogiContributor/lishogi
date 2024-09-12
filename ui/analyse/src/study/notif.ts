@@ -1,5 +1,4 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
+import { VNode, h } from 'snabbdom';
 
 interface Notif {
   duration: number;

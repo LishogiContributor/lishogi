@@ -1,10 +1,9 @@
-import { h } from 'snabbdom';
-import { VNode } from 'snabbdom/vnode';
-import * as modal from '../modal';
-import { bind, bindSubmit, onInsert } from '../util';
-import { prop, Prop } from 'common';
-import { StudyCtrl, Topic } from './interfaces';
+import { Prop, prop } from 'common/common';
+import * as modal from 'common/modal';
+import { bind, bindSubmit, onInsert } from 'common/snabbdom';
+import { VNode, h } from 'snabbdom';
 import { Redraw } from '../interfaces';
+import { StudyCtrl, Topic } from './interfaces';
 
 export interface TopicsCtrl {
   open: Prop<boolean>;
@@ -46,7 +45,7 @@ export function view(ctrl: StudyCtrl): VNode {
           {
             hook: bind('click', () => ctrl.topics.open(true), ctrl.redraw),
           },
-          ['Manage topics']
+          [ctrl.trans.noarg('manageTopics')]
         )
       : null,
   ]);
@@ -56,7 +55,7 @@ let tagify: any | undefined;
 
 export function formView(ctrl: TopicsCtrl, userId?: string): VNode {
   return modal.modal({
-    class: 'study-topics',
+    class: 'study__modal.study-topics',
     onClose() {
       ctrl.open(false);
       ctrl.redraw();

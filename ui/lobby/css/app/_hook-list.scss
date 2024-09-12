@@ -10,10 +10,10 @@
       }
     }
     &.cancel td {
-      background: fade-out($c-secondary, .6);
+      background: fade-out($c-secondary, 0.6);
     }
     &.join:hover td {
-      background: fade-out($c-accent, .5);
+      background: fade-out($c-accent, 0.5);
       color: #fff;
     }
 
@@ -22,7 +22,7 @@
     }
     &.variants td {
       text-align: center;
-      padding: 3px 0;
+      padding: 4px 0;
       background: none;
       text-transform: uppercase;
       letter-spacing: 3px;
@@ -34,15 +34,22 @@
     padding: 1em;
     &.sortable {
       cursor: pointer;
+      padding-left: 0;
     }
     &.sortable:hover,
     &.sort {
       font-weight: normal;
     }
+    &.sortable .is:before {
+      opacity: 0;
+      margin-right: 3px;
+      content: 'R';
+    }
+    &.sortable.reverse .is:before {
+      content: 'S';
+    }
     &.sort .is:before {
       opacity: 0.7;
-      margin-right: 3px;
-      content: "R";
     }
     &.player {
       width: 110px;
@@ -51,10 +58,10 @@
   td {
     word-break: break-all;
     overflow: hidden;
-    padding: .5em .7em;
+    padding: 0.5em 0.7em;
     border-bottom: $border;
     cursor: pointer;
-    background: fade-out($c-bg-box, .5);
+    background: fade-out($c-bg-box, 0.5);
     &:first-child {
       width: 16px;
     }
@@ -76,6 +83,12 @@
   }
 }
 .lseeks .create {
-  margin-top: 20px;
+  margin: 20px 0;
   text-align: center;
+  a.accent {
+    background: $c-accent;
+    &:hover {
+      background: $c-accent;
+    }
+  }
 }

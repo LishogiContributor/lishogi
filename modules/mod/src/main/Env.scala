@@ -39,8 +39,7 @@ final class Env(
     historyApi: lila.history.HistoryApi,
     rankingApi: lila.user.RankingApi,
     noteApi: lila.user.NoteApi,
-    cacheApi: lila.memo.CacheApi,
-    slackApi: lila.slack.SlackApi
+    cacheApi: lila.memo.CacheApi
 )(implicit
     ec: scala.concurrent.ExecutionContext,
     system: ActorSystem
@@ -89,28 +88,31 @@ final class Env(
       Props(new Actor {
         def receive = {
           case lila.analyse.actorApi.AnalysisReady(game, analysis) =>
-            assessApi.onAnalysisReady(game, analysis)
+            assessApi.onAnalysisReady(game, analysis).unit
           case lila.game.actorApi.FinishGame(game, senteUserOption, goteUserOption) if !game.aborted =>
-            (senteUserOption |@| goteUserOption) apply { case (senteUser, goteUser) =>
+            import cats.implicits._
+            (senteUserOption, goteUserOption) mapN { (senteUser, goteUser) =>
               boosting.check(game, senteUser, goteUser) >>
                 assessApi.onGameReady(game, senteUser, goteUser)
             }
             if (game.status == shogi.Status.Cheat)
               game.loserUserId foreach { logApi.cheatDetected(_, game.id) }
           case lila.hub.actorApi.mod.ChatTimeout(mod, user, reason, text) =>
-            logApi.chatTimeout(mod, user, reason, text)
+            logApi.chatTimeout(mod, user, reason, text).unit
           case lila.hub.actorApi.security.GCImmediateSb(userId) =>
-            reportApi getSuspect userId orFail s"No such suspect $userId" flatMap { sus =>
-              reportApi.getLishogiMod map { mod =>
+            reportApi getSuspect userId orFail s"No such suspect $userId" foreach { sus =>
+              reportApi.getLishogiMod foreach { mod =>
                 api.setTroll(mod, sus, true)
               }
             }
           case lila.hub.actorApi.security.GarbageCollect(userId) =>
-            reportApi getSuspect userId orFail s"No such suspect $userId" flatMap { sus =>
+            reportApi getSuspect userId orFail s"No such suspect $userId" foreach { sus =>
               api.garbageCollect(sus) >> publicChat.delete(sus)
             }
           case lila.hub.actorApi.mod.AutoWarning(userId, subject) =>
-            logApi.modMessage(User.lishogiId, userId, subject)
+            logApi.modMessage(User.lishogiId, userId, subject).unit
+          case lila.hub.actorApi.mod.Alert(msg) =>
+            logApi.alert(msg).unit
         }
       }),
       name = config.actorName
@@ -119,6 +121,7 @@ final class Env(
     "analysisReady",
     "garbageCollect",
     "playban",
-    "autoWarning"
+    "autoWarning",
+    "alert"
   )
 }

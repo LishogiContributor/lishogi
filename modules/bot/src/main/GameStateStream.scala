@@ -29,17 +29,17 @@ final class GameStateStream(
   private val blueprint =
     Source.queue[Option[JsObject]](32, akka.stream.OverflowStrategy.dropHead)
 
-  def apply(init: Game.WithInitialFen, as: shogi.Color, u: lila.user.User)(implicit
+  def apply(game: Game, as: shogi.Color, u: lila.user.User)(implicit
       lang: Lang
   ): Source[Option[JsObject], _] = {
 
     // kill previous one if any
-    Bus.publish(PoisonPill, uniqChan(init.game pov as))
+    Bus.publish(PoisonPill, uniqChan(game pov as))
 
     blueprint mapMaterializedValue { queue =>
       val actor = system.actorOf(
-        Props(mkActor(init, as, User(u.id, u.isBot), queue)),
-        name = s"GameStateStream:${init.game.id}:${lila.common.ThreadLocalRandom nextString 8}"
+        Props(mkActor(game, as, User(u.id, u.isBot), queue)),
+        name = s"GameStateStream:${game.id}:${lila.common.ThreadLocalRandom nextString 8}"
       )
       queue.watchCompletion().foreach { _ =>
         actor ! PoisonPill
@@ -50,14 +50,14 @@ final class GameStateStream(
   private def uniqChan(pov: Pov) = s"gameStreamFor:${pov.fullId}"
 
   private def mkActor(
-      init: Game.WithInitialFen,
+      game: Game,
       as: shogi.Color,
       user: User,
       queue: SourceQueueWithComplete[Option[JsObject]]
   )(implicit lang: Lang) =
     new Actor {
 
-      val id = init.game.id
+      val id = game.id
 
       var gameOver = false
 
@@ -66,7 +66,7 @@ final class GameStateStream(
         s"boardDrawOffer:${id}",
         "finishGame",
         "abortGame",
-        uniqChan(init.game pov as),
+        uniqChan(game pov as),
         Chat chanOf Chat.Id(id)
       ) :::
         user.isBot.option(Chat chanOf Chat.Id(s"$id/w")).toList
@@ -74,15 +74,13 @@ final class GameStateStream(
       override def preStart(): Unit = {
         super.preStart()
         Bus.subscribe(self, classifiers)
-        jsonView gameFull init foreach { json =>
-          // prepend the full game JSON at the start of the stream
-          queue offer json.some
-          // close stream if game is over
-          if (init.game.finished) onGameOver(none)
-          else self ! SetOnline
-        }
+        // prepend the full game JSON at the start of the stream
+        queue offer (jsonView gameFull game).some
+        // close stream if game is over
+        if (game.finished) onGameOver(none)
+        else self ! SetOnline
         lila.mon.bot.gameStream("start").increment()
-        Bus.publish(Tell(init.game.id, BotConnected(as, true)), "roundSocket")
+        Bus.publish(Tell(game.id, BotConnected(as, true)), "roundSocket")
       }
 
       override def postStop(): Unit = {
@@ -91,31 +89,33 @@ final class GameStateStream(
         // hang around if game is over
         // so the opponent has a chance to rematch
         context.system.scheduler.scheduleOnce(if (gameOver) 10 second else 1 second) {
-          Bus.publish(Tell(init.game.id, BotConnected(as, false)), "roundSocket")
+          Bus.publish(Tell(game.id, BotConnected(as, false)), "roundSocket")
         }
         queue.complete()
-        lila.mon.bot.gameStream("stop").increment()
+        lila.mon.bot.gameStream("stop").increment().unit
       }
 
       def receive = {
-        case MoveGameEvent(g, _, _) if g.id == id => pushState(g)
+        case MoveGameEvent(g, _, _) if g.id == id => pushState(g).unit
         case lila.chat.actorApi.ChatLine(chatId, UserLine(username, _, text, false, false)) =>
-          pushChatLine(username, text, chatId.value.size == Game.gameIdSize)
-        case FinishGame(g, _, _) if g.id == id                          => onGameOver(g.some)
-        case AbortedBy(pov) if pov.gameId == id                         => onGameOver(pov.game.some)
-        case lila.game.actorApi.BoardDrawOffer(pov) if pov.gameId == id => pushState(pov.game)
+          pushChatLine(username, text, chatId.value.sizeIs == Game.gameIdSize).unit
+        case FinishGame(g, _, _) if g.id == id                          => onGameOver(g.some).unit
+        case AbortedBy(pov) if pov.gameId == id                         => onGameOver(pov.game.some).unit
+        case lila.game.actorApi.BoardDrawOffer(pov) if pov.gameId == id => pushState(pov.game).unit
         case SetOnline =>
           onlineApiUsers.setOnline(user.id)
-          context.system.scheduler.scheduleOnce(6 second) {
-            // gotta send a message to check if the client has disconnected
-            queue offer None
-            self ! SetOnline
-            Bus.publish(Tell(id, QuietFlag), "roundSocket")
-          }
+          context.system.scheduler
+            .scheduleOnce(6 second) {
+              // gotta send a message to check if the client has disconnected
+              queue offer None
+              self ! SetOnline
+              Bus.publish(Tell(id, QuietFlag), "roundSocket")
+            }
+            .unit
       }
 
       def pushState(g: Game): Funit =
-        jsonView gameState Game.WithInitialFen(g, init.fen) dmap some flatMap queue.offer void
+        queue offer jsonView.gameState(g).some void
 
       def pushChatLine(username: String, text: String, player: Boolean): Funit =
         queue offer jsonView.chatLine(username, text, player).some void

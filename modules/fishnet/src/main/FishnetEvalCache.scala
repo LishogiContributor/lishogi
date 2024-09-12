@@ -1,7 +1,5 @@
 package lila.fishnet
 
-import shogi.format.{ FEN, Forsyth }
-
 import JsonApi.Request.Evaluation
 
 final private class FishnetEvalCache(
@@ -36,21 +34,16 @@ final private class FishnetEvalCache(
 
   private def rawEvals(game: Work.Game): Fu[List[(Int, lila.evalCache.EvalCacheEntry.Eval)]] =
     shogi.Replay
-      .situationsFromUci(
-        game.uciList.take(maxPlies - 1),
-        game.initialFen,
+      .situations(
+        game.usiList.take(maxPlies - 1),
+        game.initialSfen,
         game.variant
       )
       .fold(
         _ => fuccess(Nil),
-        _.zipWithIndex
+        _.toList.zipWithIndex
           .map { case (sit, index) =>
-            evalCacheApi.getSinglePvEval(
-              game.variant,
-              FEN(Forsyth >> sit)
-            ) dmap2 { (eval: lila.evalCache.EvalCacheEntry.Eval) =>
-              index -> eval
-            }
+            evalCacheApi.getSinglePvEval(game.variant, sit.toSfen) dmap2 { index -> _ }
           }
           .sequenceFu
           .map(_.flatten)

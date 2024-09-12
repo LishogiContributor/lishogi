@@ -1,10 +1,9 @@
 package lila.setup
 
-import shogi.{ Game => ShogiGame, Situation, Clock, Speed }
-import shogi.variant.{ FromPosition, Variant }
-import shogi.format.FEN
+import shogi.{ Clock, Game => ShogiGame, Speed }
+import shogi.variant.Variant
+import shogi.format.forsyth.Sfen
 
-import lila.game.Game
 import lila.lobby.Color
 
 private[setup] trait Config {
@@ -37,23 +36,16 @@ private[setup] trait Config {
 
   lazy val creatorColor = color.resolve
 
-  def makeGame(v: Variant): ShogiGame =
-    ShogiGame(situation = Situation(v), clock = makeClock.map(_.toClock))
+  def validClock = !hasClock || clockHasTime
 
-  def makeGame: ShogiGame = makeGame(variant)
-
-  def validClock = !hasClock || clockHasTimeInc || clockHasTimeByo
-
-  def clockHasTimeInc = time + increment > 0
-
-  def clockHasTimeByo = time + byoyomi > 0
+  def clockHasTime = time + increment + byoyomi > 0
 
   def makeClock = hasClock option justMakeClock
 
   protected def justMakeClock = Clock.Config(
     (time * 60).toInt,
-    if (clockHasTimeInc) increment else 0,
-    if (clockHasTimeByo) byoyomi else 0,
+    if (clockHasTime) increment else 0,
+    if (clockHasTime) byoyomi else 10,
     periods
   )
   def makeDaysPerTurn: Option[Int] = (timeMode == TimeMode.Correspondence) option days
@@ -61,68 +53,33 @@ private[setup] trait Config {
 
 trait Positional { self: Config =>
 
-  import shogi.format.Forsyth, Forsyth.SituationPlus
+  def sfen: Option[Sfen]
 
-  def fen: Option[FEN]
+  def strictSfen: Boolean
 
-  def strictFen: Boolean
+  lazy val validSfen =
+    sfen.fold(true) { sf =>
+      sf.toSituationPlus(variant).exists(_.situation.playable(strict = strictSfen, withImpasse = true))
+    }
 
-  lazy val validFen = variant != FromPosition || {
-    fen ?? { f =>
-      ~(Forsyth <<< f.value).map(_.situation playable strictFen)
-    }
-  }
+  def makeGame = ShogiGame(sfen, variant).withClock(makeClock.map(_.toClock))
 
-  def fenGame(builder: ShogiGame => Game): Game = {
-    val baseState = fen ifTrue (variant.fromPosition) flatMap { f =>
-      Forsyth.<<<@(FromPosition, f.value)
-    }
-    val (shogiGame, state) = baseState.fold(makeGame -> none[SituationPlus]) {
-      case sit @ SituationPlus(s, _) =>
-        val game = ShogiGame(
-          situation = s,
-          turns = sit.turns,
-          startedAtTurn = sit.turns,
-          clock = makeClock.map(_.toClock)
-        )
-        if (Forsyth.>>(game) == Forsyth.initial) makeGame(shogi.variant.Standard) -> none
-        else game                                                                 -> baseState
-    }
-    val game = builder(shogiGame)
-    state.fold(game) {
-      case sit @ SituationPlus(Situation(board, _), _) => {
-        game.copy(
-          shogi = game.shogi.copy(
-            situation = game.situation.copy(
-              board = game.board.copy(
-                history = board.history,
-                variant = FromPosition,
-                crazyData = board.crazyData
-              )
-            ),
-            turns = sit.turns
-          )
-        )
-      }
-    }
-  }
 }
 
 object Config extends BaseConfig
 
 trait BaseConfig {
-  val variants       = List(shogi.variant.Standard.id)
   val variantDefault = shogi.variant.Standard
-
-  val variantsWithFen = variants :+ FromPosition.id
-  val aiVariants = variants :+
-  //  shogi.variant.MiniShogi.id :+
-    shogi.variant.FromPosition.id
-  val variantsWithVariants =
-    variants
-//      :+ shogi.variant.MiniShogi.id
-  val variantsWithFenAndVariants =
-    variantsWithVariants :+ FromPosition.id
+  val variants = List(
+    shogi.variant.Standard.id,
+    shogi.variant.Minishogi.id,
+    shogi.variant.Chushogi.id,
+    shogi.variant.Annanshogi.id,
+    shogi.variant.Kyotoshogi.id,
+    shogi.variant.Checkshogi.id
+  )
+  val aiVariants =
+    List(shogi.variant.Standard.id, shogi.variant.Minishogi.id, shogi.variant.Kyotoshogi.id)
 
   val speeds = Speed.all.map(_.id)
 
@@ -140,7 +97,7 @@ trait BaseConfig {
   private val byoyomiMax      = 180
   def validateByoyomi(i: Int) = i >= byoyomiMin && i <= byoyomiMax
 
-  private val periodsMin      = 0 // todo 1
+  private val periodsMin      = 0
   private val periodsMax      = 5
   def validatePeriods(i: Int) = i >= periodsMin && i <= periodsMax
 }

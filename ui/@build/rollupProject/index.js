@@ -1,7 +1,7 @@
 const resolve = require('@rollup/plugin-node-resolve').default;
 const commonjs = require('@rollup/plugin-commonjs');
 const typescript = require('@rollup/plugin-typescript');
-const terser = require('rollup-plugin-terser').terser;
+const terser = require('@rollup/plugin-terser');
 
 exports.rollupProject = targets => {
   return args => {
@@ -32,7 +32,7 @@ exports.rollupProject = targets => {
       ],
       plugins: [
         resolve(),
-        ...(target.js ? [] : [typescript()]),
+        ...(target.js ? [] : [typescript(args.watch ? { noEmitOnError: false } : {})]),
         commonjs({
           extensions: ['.js', '.ts'],
         }),

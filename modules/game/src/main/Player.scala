@@ -1,5 +1,7 @@
 package lila.game
 
+import cats.implicits._
+
 import shogi.Color
 import scala.util.chaining._
 
@@ -10,11 +12,13 @@ case class PlayerUser(id: String, rating: Int, ratingDiff: Option[Int])
 case class Player(
     id: Player.ID,
     color: Color,
-    aiLevel: Option[Int],
+    engineConfig: Option[EngineConfig] = None,
+    isBot: Boolean = false,
     isWinner: Option[Boolean] = None,
     isOfferingDraw: Boolean = false,
     lastDrawOffer: Option[Int] = None,
     proposeTakebackAt: Int = 0, // ply when takeback was proposed
+    isOfferingPause: Boolean = false,
     userId: Player.UserId = None,
     rating: Option[Int] = None,
     ratingDiff: Option[Int] = None,
@@ -29,16 +33,19 @@ case class Player(
       rating map { PlayerUser(uid, _, ratingDiff) }
     }
 
-  def isAi = aiLevel.isDefined
+  def isAi     = engineConfig.isDefined
+  def aiLevel  = engineConfig.map(_.level)
+  def aiEngine = engineConfig.map(_.engine)
+  def aiCode   = engineConfig.map(_.engine.code)
 
-  def isHuman = !isAi
+  def isHuman = !isAi && !isBot
 
   def hasUser = userId.isDefined
 
   def isUser(u: User) = userId.fold(false)(_ == u.id)
 
   def userInfos: Option[Player.UserInfo] =
-    (userId |@| rating) { case (id, ra) =>
+    (userId, rating) mapN { (id, ra) =>
       Player.UserInfo(id, ra, provisional)
     }
 
@@ -55,10 +62,12 @@ case class Player(
       isOfferingDraw = true,
       lastDrawOffer = Some(turn)
     )
-
   def removeDrawOffer = copy(isOfferingDraw = false)
 
   def proposeTakeback(ply: Int) = copy(proposeTakebackAt = ply)
+
+  def offerPause       = copy(isOfferingPause = true)
+  def removePauseOffer = copy(isOfferingPause = false)
 
   def removeTakebackProposition = copy(proposeTakebackAt = 0)
 
@@ -85,6 +94,10 @@ case class Player(
   def stableRating = rating ifFalse provisional
 
   def stableRatingAfter = stableRating map (_ + ~ratingDiff)
+
+  def addBlurs(move: Int) = copy(
+    blurs = blurs.add(move)
+  )
 }
 
 object Player {
@@ -93,38 +106,29 @@ object Player {
 
   def make(
       color: Color,
-      aiLevel: Option[Int] = None
+      engineConfig: Option[EngineConfig] = none
   ): Player =
     Player(
       id = IdGenerator.player(color),
       color = color,
-      aiLevel = aiLevel
-    )
-
-  def make(
-      color: Color,
-      userPerf: (User.ID, lila.rating.Perf)
-  ): Player =
-    make(
-      color = color,
-      userId = userPerf._1,
-      rating = userPerf._2.intRating,
-      provisional = userPerf._2.glicko.provisional
+      engineConfig = engineConfig
     )
 
   def make(
       color: Color,
       userId: User.ID,
       rating: Int,
-      provisional: Boolean
+      provisional: Boolean,
+      isBot: Boolean
   ): Player =
     Player(
       id = IdGenerator.player(color),
       color = color,
-      aiLevel = none,
+      engineConfig = none,
       userId = userId.some,
       rating = rating.some,
-      provisional = provisional
+      provisional = provisional,
+      isBot = isBot
     )
 
   def make(
@@ -133,7 +137,14 @@ object Player {
       perfPicker: lila.user.Perfs => lila.rating.Perf
   ): Player =
     user.fold(make(color)) { u =>
-      make(color, (u.id, perfPicker(u.perfs)))
+      val perf = perfPicker(u.perfs)
+      make(
+        color,
+        userId = u.id,
+        rating = perf.intRating,
+        provisional = perf.glicko.provisional,
+        isBot = u.isBot
+      )
     }
 
   case class HoldAlert(ply: Int, mean: Int, sd: Int) {
@@ -154,9 +165,12 @@ object Player {
   object BSONFields {
 
     val aiLevel           = "ai"
+    val aiEngine          = "a"
+    val isBot             = "b"
     val isOfferingDraw    = "od"
     val lastDrawOffer     = "ld"
     val proposeTakebackAt = "ta"
+    val isOfferingPause   = "po"
     val rating            = "e"
     val ratingDiff        = "d"
     val provisional       = "p"
@@ -197,11 +211,22 @@ object Player {
               Player(
                 id = id,
                 color = color,
-                aiLevel = r intO aiLevel,
+                engineConfig = r
+                  .intO(aiLevel)
+                  .map(
+                    EngineConfig(
+                      _,
+                      r.strO(aiEngine)
+                        .flatMap(EngineConfig.Engine.getByCode)
+                        .getOrElse(EngineConfig.Engine.default)
+                    )
+                  ),
+                isBot = r boolD isBot,
                 isWinner = win,
                 isOfferingDraw = r boolD isOfferingDraw,
                 lastDrawOffer = r intO lastDrawOffer,
                 proposeTakebackAt = r intD proposeTakebackAt,
+                isOfferingPause = r boolD isOfferingPause,
                 userId = userId,
                 rating = r intO rating flatMap ratingRange(userId),
                 ratingDiff = r intO ratingDiff flatMap ratingDiffRange(userId),
@@ -215,8 +240,11 @@ object Player {
       o(shogi.Sente)("0000")(none)(none) pipe { p =>
         BSONDocument(
           aiLevel           -> p.aiLevel,
+          aiEngine          -> p.aiEngine.map(_.code),
+          isBot             -> w.boolO(p.isBot),
           isOfferingDraw    -> w.boolO(p.isOfferingDraw),
           lastDrawOffer     -> p.lastDrawOffer,
+          isOfferingPause   -> w.boolO(p.isOfferingPause),
           proposeTakebackAt -> w.intO(p.proposeTakebackAt),
           rating            -> p.rating,
           ratingDiff        -> p.ratingDiff,

@@ -1,38 +1,31 @@
-import { Role } from 'shogiground/types';
+import { Role, Rules } from 'shogiops/types';
 
-export interface OpeningPosition {
-  eco?: string;
-  name: string;
-  fen: string;
-  epd?: string;
-}
-
-export interface EditorConfig {
+export interface EditorData {
   baseUrl: string;
-  fen: string;
-  options?: EditorOptions;
-  is3d: boolean;
-  pieceNotation: number;
-  animation: {
-    duration: number;
-  };
+  sfen: string;
+  variant: Rules;
+  options: EditorOptions;
+  pref: any;
   embed: boolean;
-  positions?: OpeningPosition[];
   i18n: any;
 }
 
 export interface EditorOptions {
   orientation?: Color;
-  onChange?: (fen: string) => void;
-  inlineCastling?: boolean;
+  onChange?: (sfen: string, variant: VariantKey, orientation: Color) => void;
 }
 
 export interface EditorState {
-  fen: string;
-  legalFen: string | undefined;
+  sfen: string;
+  legalSfen: string | undefined;
   playable: boolean;
 }
 
 export type Redraw = () => void;
 
-export type Selected = 'pointer' | 'trash' | [Color, Role];
+export type SpecialSelected = 'pointer' | 'trash';
+export function isSpecialSelected(s: string): s is SpecialSelected {
+  return ['pointer', 'trash'].includes(s);
+}
+
+export type Selected = SpecialSelected | [Color, Role];
